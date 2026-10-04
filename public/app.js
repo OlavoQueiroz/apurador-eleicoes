@@ -51,6 +51,7 @@ const estado = {
   visao: 'apuracao', // 'apuracao' (dados do TSE) ou 'projecao' (estimativa do painel)
   modelo: 'ingenuo',
   projecao: undefined, // mesmo contrato de `detalhe`
+  mapaProj: undefined, // projeção de cada UF para pintar o mapa: { chave, porUf: Map uf → { lider, margem } }
   historico: undefined, // histórico gravado da UF aberta: { chave, dados }; undefined = sem gráfico
   mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
   busca: '',
@@ -143,6 +144,41 @@ async function carregarDetalhe() {
   }
 }
 let recarga = null;
+
+// Mapa da projeção: o vencedor projetado de cada UF, pelo modelo escolhido. Só nos majoritários, que têm um vencedor por UF.
+const querMapaProjecao = () => estado.visao === 'projecao' && ehMajoritario(estado.cargo) && cargoMeta().abrangencias.length > 1;
+// Modelos que servem ao cargo aberto e estão disponíveis; os outros ficam fora do seletor.
+const modelosDoCargo = (cargo = estado.cargo) => estado.meta.modelos.filter((m) => m.disponivel && (!m.cargos || m.cargos.includes(cargo)));
+const chaveMapaProj = () => `${estado.cargo}:${estado.modelo}`;
+let recargaMapaProj = null;
+async function carregarMapaProjecao() {
+  clearTimeout(recargaMapaProj);
+  if (!querMapaProjecao()) {
+    estado.mapaProj = undefined;
+    return;
+  }
+  const chave = chaveMapaProj();
+  const ufs = cargoMeta().abrangencias.filter((uf) => uf !== 'br' || temArquivoNacional(estado.cargo));
+  const porUf = new Map();
+  let pendente = false;
+  await Promise.all(ufs.map(async (uf) => {
+    try {
+      const p = await getJson(`/api/projecao/${estado.modelo}/${estado.cargo}/${uf}`);
+      if (p.carregando && !p.disponivel) pendente = true;
+      if (!p.disponivel || !p.candidatos?.length) return;
+      const [a, b] = [...p.candidatos].sort((x, y) => y.pctProjetado - x.pctProjetado);
+      porUf.set(uf, { lider: a, margem: a.pctProjetado - (b?.pctProjetado ?? 0), fracao: p.fracaoApurada ?? 1 });
+    } catch { /* UF sem projeção fica cinza */ }
+  }));
+  if (chave !== chaveMapaProj() || !querMapaProjecao()) return; // a seleção mudou enquanto carregava
+  estado.mapaProj = { chave, porUf };
+  if (pendente) {
+    recargaMapaProj = setTimeout(async () => {
+      await carregarMapaProjecao();
+      renderGrade();
+    }, 2000);
+  }
+}
 
 // Nomes dos eleitos de cada UF, para o hover do mapa de cadeiras. Só no Brasil de senador e deputado federal.
 let chaveEleitos = '';
@@ -271,7 +307,7 @@ async function atualizar() {
   try {
     do {
       atualizarDeNovo = false;
-      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico()]);
+      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico(), carregarMapaProjecao()]);
       await carregarEleitos();
       render();
     } while (atualizarDeNovo);
@@ -293,10 +329,11 @@ function lerHash() {
   const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao)(?:\/([a-z]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
   estado.visao = m?.[3] === 'projecao' ? 'projecao' : 'apuracao';
   const modeloPedido = m?.[4];
-  estado.modelo = estado.meta.modelos.some((x) => x.id === modeloPedido && x.disponivel) ? modeloPedido : 'ingenuo';
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
+  // Modelo que não vale para o cargo aberto (ex.: swing em governador) volta para o simples.
+  estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : 'ingenuo';
   const ufPedida = m?.[2];
   const valida = ufPedida && (meta.abrangencias.includes(ufPedida) || (ufPedida === 'br' && meta.codigo !== 1));
   estado.uf = valida ? ufPedida : ufPadrao(meta.codigo);
@@ -310,6 +347,7 @@ async function aplicarHash() {
   lerHash();
   estado.detalhe = undefined;
   estado.projecao = undefined;
+  estado.mapaProj = undefined;
   estado.mun = undefined;
   estado.eleitos = null;
   estado.lideres = null;
@@ -370,8 +408,19 @@ function renderAbas() {
   const itens = estado.meta.cargos
     .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
-  $('#abas').innerHTML = `<div class="seg">${itens}</div>`;
+  $('#abas').innerHTML = `<div class="seg">${itens}</div>${seletorModeloHtml()}`;
 }
+
+// Seletor global Apuração | Projeção: vale para a página toda e acompanha a troca de cargo e de UF.
+function renderModo() {
+  const aba = (visao, rotulo) =>
+    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, visao)}" ${estado.visao === visao ? 'aria-current="page"' : ''}>${rotulo}</a>`;
+  $('#modo').innerHTML = `<div class="seg">${aba('apuracao', 'Apuração')}${aba('projecao', 'Projeção')}</div>`;
+}
+
+// No mapa da projeção a UF ganha a cor do vencedor projetado, mais forte quanto maior a margem sobre o 2º.
+const projecaoNoMapa = (uf) => estado.visao === 'projecao' && estado.mapaProj?.chave === chaveMapaProj() && !(uf === 'br' && !temArquivoNacional(estado.cargo));
+const forcaMargem = (margem) => Math.round(Math.min(100, 30 + (margem / 20) * 70));
 
 function conteudoTile(item) {
   if (!item || !item.secoes) return { sub: '', sub2: '—', pct: 0, cor: null, vazio: true };
@@ -389,6 +438,12 @@ function conteudoTile(item) {
 // Dados de uma "unidade" (UF, Brasil ou exterior) para o mapa, os chips e a dica.
 function dadoUnidade(uf) {
   // "Brasil" nos cargos sem arquivo nacional é a soma das UFs; nos demais casos é um arquivo comum.
+  if (projecaoNoMapa(uf)) {
+    const proj = estado.mapaProj.porUf.get(uf);
+    return proj
+      ? { sub: esc(proj.lider.partido), sub2: fmtPct(proj.lider.pctProjetado, 0), pct: forcaMargem(proj.margem), cor: corPartido(proj.lider.partido), vazio: false }
+      : { sub: '', sub2: '—', pct: 0, cor: null, vazio: true };
+  }
   return uf === 'br' && !temArquivoNacional(estado.cargo)
     ? { sub: 'Visão geral', sub2: fmtPct(agregadoSecoes().pct, 0), pct: agregadoSecoes().pct, cor: null, vazio: false }
     : conteudoTile(itemResumo(estado.cargo, uf));
@@ -457,6 +512,12 @@ function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
   if (ehMajoritario(estado.cargo)) {
     const partidos = [...new Set(lideres ?? itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
     const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    if (unidade === 'UF' && estado.visao === 'projecao') {
+      const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
+      const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+      return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado</span>${itens || '<span class="muted">calculando…</span>'}</div>
+        <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
+    }
     return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
       <div class="leg-linha"><span class="leg-titulo">Apuração</span><span class="muted">pouca</span>${gradiente('var(--text)')}<span class="muted">toda</span></div>`;
   }
@@ -485,6 +546,7 @@ function renderGrade() {
   destacarMunicipio();
   $('#legenda').innerHTML = municipal
     ? legendaHtml({ lideres: estado.mun.resultados.municipios.map((m) => m.lider?.partido).filter(Boolean), unidade: 'município' })
+      + (estado.visao === 'projecao' ? '<p class="muted pequeno leg-nota">Municípios: apuração atual. A projeção é por UF.</p>' : '')
     : legendaHtml();
 }
 
@@ -510,7 +572,16 @@ const nomeProprio = (nome) =>
 
 // ---------- dica ao passar o mouse sobre uma UF ----------
 
+function dicaProjecaoHtml(uf) {
+  const proj = estado.mapaProj.porUf.get(uf);
+  if (!proj) return `<strong>${esc(nomeUf(uf))}</strong><span class="muted">Sem projeção ainda</span>`;
+  const l = proj.lider;
+  return `<strong>${esc(nomeUf(uf))}</strong><span class="dica-lider" style="--cor:${corPartido(l.partido)}"><i></i><span>${esc(l.nomeUrna)}<small>${esc(l.partido)} · ${fmtPct(l.pctProjetado)} projetado</small></span></span>
+    <span class="muted">Margem projetada: ${fmtPct(proj.margem, 1)} sobre o 2º</span>`;
+}
+
 function dicaHtml(uf) {
+  if (projecaoNoMapa(uf)) return dicaProjecaoHtml(uf);
   const item = itemResumo(estado.cargo, uf);
   const dado = conteudoTile(item);
   const linhas = [];
@@ -761,7 +832,6 @@ function detalheAgregadoHtml() {
   const vagas = itens.reduce((s, { item }) => s + item.vagas, 0);
   const eleitos = itens.reduce((s, { item }) => s + item.eleitos, 0);
   const concluidas = itens.filter(({ item }) => item.totalizacaoFinal).length;
-  const emSegundoTurno = itens.filter(({ item }) => item.segundoTurno > 0).length;
 
   const porPartido = {};
   for (const { item } of itens) {
@@ -775,7 +845,6 @@ function detalheAgregadoHtml() {
     ${caixa('Vagas em disputa', fmtInt(vagas))}
     ${caixa('Eleitos até agora', fmtInt(eleitos))}
     ${caixa('UFs com totalização final', `${concluidas} de ${itens.length}`)}
-    ${meta.codigo === 3 ? caixa('UFs indo para 2º turno', emSegundoTurno) : ''}
   </div>`;
 
   const barras = partidos.length
@@ -811,27 +880,32 @@ function detalheAgregadoHtml() {
     ${secoes.totalizadas === 0 ? '<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>' : ''}
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
-    ${numeros}${barras}${tabela}`;
+    ${meta.codigo === 3 ? '' : numeros}${barras}${tabela}`;
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
 
-function alternadorVisaoHtml() {
-  const aba = (visao, rotulo) =>
-    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, visao)}" ${estado.visao === visao ? 'aria-current="page"' : ''}>${rotulo}</a>`;
-  return `<nav class="abas visoes" aria-label="Visão">${aba('apuracao', 'Apuração (TSE)')}${aba('projecao', 'Projeção (estimativa)')}${voltarHtml()}</nav>`;
+// Seletor de modelo: mesmo controle segmentado das abas de cargo, na linha delas (o modelo também pinta o mapa).
+function seletorModeloHtml() {
+  const lista = modelosDoCargo();
+  if (estado.visao !== 'projecao' || lista.length < 2) return '';
+  const itens = lista.map((m) =>
+    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, 'projecao', m.id)}" ${m.id === estado.modelo ? 'aria-current="page"' : ''}>${esc(m.curto ?? m.nome)}</a>`).join('');
+  return `<div class="seg seg-modelo" role="group" aria-label="Modelo de projeção">${itens}</div>`;
 }
 
-function seletorModeloHtml() {
-  const opcoes = estado.meta.modelos
-    .map((m) => `<option value="${m.id}" ${m.id === estado.modelo ? 'selected' : ''} ${m.disponivel ? '' : 'disabled'}>${esc(m.nome)}${m.disponivel ? '' : ' (indisponível)'}</option>`)
-    .join('');
+// Uma linha sob o título do painel dizendo o que o modelo escolhido faz.
+function resumoModeloHtml() {
+  const resumo = estado.meta.modelos.find((m) => m.id === estado.modelo)?.resumo;
+  return resumo ? `<p class="muted pequeno resumo-modelo">${esc(resumo)}</p>` : '';
+}
+
+// Detalhe completo dos modelos, recolhido no rodapé: descrição do escolhido e os que ainda não existem.
+function sobreModelosHtml() {
   const atual = estado.meta.modelos.find((m) => m.id === estado.modelo);
   const pendentes = estado.meta.modelos.filter((m) => !m.disponivel)
-    .map((m) => `<li><b>${esc(m.nome)}:</b> ${esc(m.motivo)}</li>`).join('');
-  return `<div class="ferramentas"><label class="muted pequeno" for="modelo">Modelo</label>
-      <select id="modelo" class="botao">${opcoes}</select></div>
-    <p class="muted pequeno">${esc(atual.descricao)}</p>
+    .map((m) => `<li><b>${esc(m.nome)} (em breve):</b> ${esc(m.motivo)}</li>`).join('');
+  return `<p class="muted pequeno">${esc(atual.descricao)}</p>
     ${pendentes ? `<ul class="muted pequeno lista-pendentes">${pendentes}</ul>` : ''}`;
 }
 
@@ -884,26 +958,47 @@ function municipiosHtml(p) {
 function detalheProjecaoHtml() {
   const titulo = `${cargoMeta().nome} · ${nomeUf(estado.uf)}`;
   const topo = `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
-      <p class="muted pequeno">Projeção do resultado final</p></div>
+      <p class="muted pequeno">Projeção do resultado final · <b>não é resultado do TSE</b></p></div>
       <div class="selos"><span class="selo aviso">Estimativa do painel</span></div></div>
-    <p class="aviso-bloco">Isto <b>não é resultado do TSE</b>: é uma extrapolação feita por este painel a partir de uma apuração parcial, com limitações. Só o resultado oficial vale.</p>
-    ${seletorModeloHtml()}`;
+    ${resumoModeloHtml()}`;
+  // Modelo e explicações ficam recolhidos: o que importa primeiro é a tabela.
+  const comoCalcula = `<details class="como-calcula"${estado.comoAberto ? ' open' : ''}><summary>Como é calculado · ${esc(estado.meta.modelos.find((m) => m.id === estado.modelo)?.nome ?? '')}</summary>
+      <p class="aviso-bloco">Isto <b>não é resultado do TSE</b>: é uma extrapolação feita por este painel a partir de uma apuração parcial, com limitações. Só o resultado oficial vale.</p>
+      ${sobreModelosHtml()}</details>`;
   const p = estado.projecao;
-  if (p === undefined) return `${topo}<p class="vazio-msg">Carregando…</p>`;
+  if (p === undefined) return `${topo}<p class="vazio-msg">Carregando…</p>${comoCalcula}`;
   if (!p || !p.disponivel) {
     const { feitos, total, unidade = 'municípios' } = p?.progresso ?? {};
     const andamento = p?.carregando && total ? ` (${fmtInt(feitos)} de ${fmtInt(total)} ${unidade})` : '';
-    return `${topo}<p class="aviso-bloco espera">${esc(p?.motivo ?? 'Projeção indisponível.')}${andamento}</p>`;
+    const frac = (p?.fracaoApurada ?? 0) * 100;
+    return `${topo}<div class="vazio-proj"><div class="ic" aria-hidden="true">◷</div>
+      <b>${p?.carregando ? 'Calculando a projeção…' : 'Aguardando os primeiros votos'}</b>
+      <span class="muted pequeno">${esc(p?.motivo ?? 'Projeção indisponível.')}${andamento}</span>
+      ${p?.carregando ? '' : `<div class="trilho"><i style="width:${frac}%"></i></div>
+      <span class="muted pequeno">${fmtPct(frac, 0)} das seções totalizadas</span>`}</div>${comoCalcula}`;
   }
 
-  const linhas = p.candidatos.map((c) => `<tr>
-      <td><b>${esc(c.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></td>
-      <td class="num">${fmtPct(c.pctAtual)}</td>
-      <td class="num"><b>${fmtPct(c.pctProjetado)}</b></td>
-      <td class="num">${fmtInt(c.votosProjetados)}</td>
-      <td class="num">${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}</td>
-    </tr>`).join('');
+  // Barras na mesma escala: a do maior valor possível entre os candidatos.
+  const escala = Math.min(100, Math.max(1, ...p.candidatos.map((c) => c.pctMaximo)));
+  const x = (pct) => Math.min(100, (pct / escala) * 100);
+  const [lider, segundo] = p.candidatos;
+  const margem = lider.pctProjetado - (segundo?.pctProjetado ?? 0);
+  const heroi = `<div class="heroi" style="--cor:${corPartido(lider.partido)}">
+      <div><span class="muted pequeno">Lidera a projeção</span>
+        <div class="heroi-nome"><b>${esc(lider.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(lider.partido)}">${esc(lider.partido)}</span></div></div>
+      <div class="heroi-num"><b>${fmtPct(lider.pctProjetado, 1)}</b>${segundo ? `<span class="muted pequeno">+${fmtPct(margem, 1).replace('%', '')} pp sobre o 2º</span>` : ''}</div></div>`;
+  const linhas = p.candidatos.map((c) => `<li class="proj-cand" style="--cor:${corPartido(c.partido)}">
+      <div class="proj-topo"><span><b>${esc(c.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></span><b>${fmtPct(c.pctProjetado)}</b></div>
+      <div class="proj-barra" role="img" aria-label="Projetado ${fmtPct(c.pctProjetado)}, atual ${fmtPct(c.pctAtual)}, faixa possível de ${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}">
+        <i class="proj-faixa" style="left:${x(c.pctMinimo)}%;width:${Math.max(0.8, x(c.pctMaximo) - x(c.pctMinimo))}%"></i>
+        <i class="proj-valor" style="width:${x(c.pctProjetado)}%"></i>
+        <i class="proj-atual" style="left:${x(c.pctAtual)}%"></i></div>
+      <span class="muted pequeno">atual ${fmtPct(c.pctAtual)} · ${fmtInt(c.votosProjetados)} votos · faixa ${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}</span>
+    </li>`).join('');
   return `${topo}
+    ${heroi}
+    <ul class="proj-lista">${linhas}</ul>
+    <p class="muted pequeno proj-legenda"><span class="lg-valor"></span>projetado <span class="lg-atual"></span>atual <span class="lg-faixa"></span>faixa possível: extremos matemáticos, não é probabilidade; é larga no começo da apuração.</p>
     <div class="progresso">
       <div class="progresso-linha"><span>Seções totalizadas usadas como base</span><span><b>${fmtPct(p.fracaoApurada * 100)}</b></span></div>
       <div class="trilho"><i style="width:${p.fracaoApurada * 100}%"></i></div>
@@ -912,12 +1007,16 @@ function detalheProjecaoHtml() {
       <div class="numero"><b>${fmtInt(p.validosProjetados)}</b><span>Votos válidos projetados</span></div>
       <div class="numero"><b>${fmtInt(p.votosFaltantes)}</b><span>Votos válidos ainda a apurar</span></div>
     </div>
-    ${municipiosHtml(p)}
-    <h3 class="secao">Candidatos</h3>
-    <div class="tabela-rolagem"><table class="tabela">
-      <thead><tr><th>Candidato</th><th class="num">% atual</th><th class="num">% projetado</th><th class="num">Votos projetados</th><th class="num" title="Extremos matemáticos: nenhum ou todos os votos faltantes para o candidato. Não é intervalo de confiança.">Faixa possível</th></tr></thead>
-      <tbody>${linhas}</tbody></table></div>
-    <p class="muted pequeno">A faixa possível só mostra o que ainda está matematicamente em aberto; é larga no começo da apuração e não indica probabilidade.</p>`;
+    ${comoCalcula}
+    ${municipiosHtml(p)}`;
+}
+
+// Brasil dos cargos sem arquivo nacional: a projeção é por UF, escolhida no mapa.
+function projecaoAgregadoHtml() {
+  return `<div class="detalhe-topo"><div><h2>${esc(cargoMeta().nome)} · Brasil</h2>
+      <p class="muted pequeno">Projeção do resultado final · <b>não é resultado do TSE</b></p></div>
+      <div class="selos"><span class="selo aviso">Estimativa do painel</span></div></div>
+    <p class="vazio-msg">Escolha uma UF no mapa para ver a projeção dela. O mapa mostra o vencedor projetado em cada UF.</p>`;
 }
 
 // ---------- desenho: orquestração ----------
@@ -928,12 +1027,20 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  if (ehAgregado()) raiz.innerHTML = detalheAgregadoHtml();
-  else raiz.innerHTML = alternadorVisaoHtml() + (estado.visao === 'projecao' ? '' : municipioSelecionadoHtml()) + (estado.visao === 'projecao' ? detalheProjecaoHtml() : detalheArquivoHtml());
+  if (ehAgregado()) raiz.innerHTML = estado.visao === 'projecao' ? projecaoAgregadoHtml() : detalheAgregadoHtml();
+  else raiz.innerHTML = (estado.visao === 'projecao' ? detalheProjecaoHtml() : municipioSelecionadoHtml() + detalheArquivoHtml());
 
-  $('#modelo', raiz)?.addEventListener('change', (evento) => {
-    location.hash = hashPara(estado.cargo, estado.uf, 'projecao', evento.target.value);
-  });
+  // "Voltar ao Brasil" vai para o canto do cabeçalho do painel, ao lado dos selos, sem empurrar o título.
+  const topoDetalhe = $('.detalhe-topo', raiz);
+  if (topoDetalhe && voltarHtml()) {
+    const acoes = document.createElement('div');
+    acoes.className = 'topo-acoes';
+    acoes.innerHTML = voltarHtml();
+    const selos = $('.selos', topoDetalhe);
+    if (selos) acoes.append(selos);
+    topoDetalhe.append(acoes);
+  }
+  $('.como-calcula', raiz)?.addEventListener('toggle', (e) => { estado.comoAberto = e.target.open; });
 
   const busca = $('#busca', raiz);
   if (busca) {
@@ -967,6 +1074,7 @@ function renderDetalhe() {
 }
 
 function render() {
+  renderModo();
   renderAbas();
   renderGrade();
   renderDetalhe();

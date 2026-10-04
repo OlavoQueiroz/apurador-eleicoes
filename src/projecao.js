@@ -9,6 +9,8 @@ export const MODELOS = [
   {
     id: 'ingenuo',
     nome: 'Extrapolação simples',
+    curto: 'Simples',
+    resumo: 'Mantém o % atual de cada candidato e projeta pelo total de seções.',
     disponivel: true,
     descricao:
       'Mantém o percentual atual de cada candidato e projeta o total de votos válidos pela fração de seções '
@@ -17,6 +19,9 @@ export const MODELOS = [
   {
     id: 'estratificado',
     nome: 'Estratificação por município',
+    curto: 'Por município',
+    resumo: 'Projeta os grandes municípios um a um e o resto do estado em bloco. Corrige o efeito capital × interior.',
+    cargos: [1, 3, 5],
     disponivel: true,
     descricao:
       'Projeta os municípios grandes um a um e o resto do estado em bloco (arquivo da UF menos os grandes), '
@@ -26,6 +31,9 @@ export const MODELOS = [
   {
     id: 'swing',
     nome: 'Swing histórico (2022)',
+    curto: 'Swing 2022',
+    resumo: 'Compara cada candidato com o que o campo dele teve em 2022 onde já apurou e aplica a diferença ao que falta.',
+    cargos: [1],
     disponivel: true,
     descricao:
       'Mede quanto cada candidato está acima ou abaixo do que o campo político dele teve em 2022 nos lugares já '
@@ -36,6 +44,8 @@ export const MODELOS = [
   {
     id: 'bayesiano',
     nome: 'Bayesiano com pesquisas',
+    curto: 'Pesquisas',
+    resumo: 'Mistura pesquisas de intenção de voto com a apuração.',
     disponivel: false,
     descricao: 'Mistura pesquisas de intenção de voto com a apuração conforme as urnas abrem.',
     motivo: 'Depende de pesquisas de intenção de voto em formato estruturado, que o painel ainda não tem.',
