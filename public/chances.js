@@ -70,3 +70,14 @@ export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, e
   const pratico = fora(eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesSecoes);
   return votos.map((_, i) => (estrito[i] ? 'matematica' : pratico[i] ? 'pratica' : null));
 }
+
+// Quem já está garantido entre os `k` primeiros (Senado: os eleitos): mesmo que ele não receba mais nenhum voto e cada
+// adversário que pode alcançá-lo receba todos os votos que faltam, menos de `k` terminam à frente dele. 'matematica' (teto) ou
+// 'pratica' (abstenção medida, com margem). Conta do painel, não o resultado: quem declara o eleito é o TSE.
+export function garantidosNoTopo({ votos, k, validos = 0, eleitorado = null, pctSecoes = null }) {
+  const estrito = eleitorado ? votosRestantes(eleitorado) : null;
+  const pratico = eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes(validos, pctSecoes);
+  const seguro = (restantes, i) => restantes != null && i < k && votos[i] > 0
+    && i + votos.slice(i + 1).filter((v) => v + restantes > votos[i]).length < k;
+  return votos.map((_, i) => (seguro(estrito, i) ? 'matematica' : seguro(pratico, i) ? 'pratica' : null));
+}
