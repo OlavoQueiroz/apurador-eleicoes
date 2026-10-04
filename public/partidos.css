@@ -99,3 +99,9 @@
 .par-chave .k-cheio { background: var(--muted); }
 .par-chave .k-frente { border: 2px solid var(--muted); }
 .par-chave .k-vazia { background: var(--vazio); }
+
+/* Aba "Um partido": ranking das listas perto do corte. */
+.par-rank { border-top: 1px solid var(--line); padding: 4px 0; }
+.par-rank summary { cursor: pointer; padding: 6px 2px; font-size: 13.5px; font-weight: 600; }
+.par-rank .par-meu td { font-weight: 650; background: var(--surface-2); }
+.par-rank .par-corte td { border-top: 2px solid var(--muted); }

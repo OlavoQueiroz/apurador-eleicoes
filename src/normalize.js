@@ -110,7 +110,7 @@ export function normalizar(bruto) {
   const tf = String(bruto.tf ?? '').toLowerCase();
   const md = String(bruto.md ?? '').toLowerCase();
 
-  return {
+  const saida = {
     geracao: String(bruto.idg ?? ''),
     geradoEm: paraIso(bruto.dg, bruto.hg),
     eleicao: String(bruto.ele ?? ''),
@@ -144,6 +144,46 @@ export function normalizar(bruto) {
     candidatos,
     agrupamentos,
   };
+  if ([6, 7].includes(saida.cargo.codigo)) anotarVagasPrevistas(saida);
+  return saida;
+}
+
+// Menor número de votos a mais (positivo) ou a menos (negativo) para a lista `i` mudar de vagas, pelo mesmo método de
+// `distribuirVagas`. Soma só na lista (o total muda junto), como se os votos que faltam fossem todos dela. `null` se não muda
+// dentro de um teto razoável. Aproximação: não considera que as outras listas também recebem votos até o fim.
+function votosParaMudarDeVaga(votos, vagas, i, sentido) {
+  const base = distribuirVagas(votos, vagas)[i];
+  const muda = (x) => {
+    const v = votos.slice();
+    v[i] = Math.max(0, v[i] + sentido * x);
+    const n = distribuirVagas(v, vagas)[i];
+    return sentido > 0 ? n > base : n < base;
+  };
+  const teto = sentido > 0 ? Math.max(1, votos.reduce((s, n) => s + n, 0)) : votos[i];
+  if (!muda(teto)) return null;
+  let [baixo, alto] = [0, teto]; // `muda(baixo)` é falso; `muda(alto)` é verdadeiro
+  while (alto - baixo > 1) {
+    const meio = Math.floor((baixo + alto) / 2);
+    if (muda(meio)) alto = meio; else baixo = meio;
+  }
+  return alto;
+}
+
+// Câmara e Assembleia: para cada lista, as vagas previstas (as do TSE ou, se ele ainda não distribuiu, as estimadas pelo
+// quociente) e a distância até ganhar uma vaga a mais (`faltamParaVaga`) ou perder uma (`folgaDaVaga`, os votos que ainda
+// pode perder sem perdê-la). Alimenta a aba "Um partido".
+export function anotarVagasPrevistas(dados) {
+  const lista = dados.agrupamentos;
+  const votos = lista.map((a) => a.votos ?? 0);
+  const { vagas, estimativa } = previsaoPorLista(dados);
+  const apurado = votos.some((v) => v > 0);
+  lista.forEach((agr, i) => {
+    agr.vagasPrevistas = vagas[i];
+    agr.faltamParaVaga = apurado ? votosParaMudarDeVaga(votos, dados.cargo.vagas, i, 1) : null;
+    const perde = apurado && votos[i] > 0 ? votosParaMudarDeVaga(votos, dados.cargo.vagas, i, -1) : null;
+    agr.folgaDaVaga = perde === null ? null : perde - 1;
+  });
+  dados.vagasEstimadas = estimativa;
 }
 
 // Distribuição das vagas de um cargo proporcional entre as listas (partidos ou federações), pelo método do TSE: quociente
@@ -185,18 +225,30 @@ export function distribuirVagas(votos, vagas) {
 // pelo quociente eleitoral (distribuirVagas) e marca `estimativa`, porque ela muda até o fim da apuração. Dentro de cada
 // lista as vagas vão para os mais votados (os candidatos já vêm em ordem de votos); os eleitos que o TSE já marcou contam
 // sempre.
-function cadeirasPorPartido(dados) {
+// Vagas de cada lista (na ordem de `dados.agrupamentos`): as do TSE se ele já distribuiu todas; senão, as estimadas pelo
+// quociente com os votos já apurados (`estimativa`). Os eleitos que o TSE já marcou contam sempre.
+function previsaoPorLista(dados) {
   const lista = dados.agrupamentos;
   const votos = lista.map((a) => a.votos ?? 0);
   const tseCompleto = lista.reduce((s, a) => s + a.vagas, 0) >= dados.cargo.vagas;
   const estimativa = !tseCompleto && votos.some((v) => v > 0);
   const vagasEstimadas = estimativa ? distribuirVagas(votos, dados.cargo.vagas) : null;
+  const vagas = lista.map((agr, i) => {
+    if (!estimativa) return agr.vagas;
+    const eleitos = dados.candidatos.filter((c) => c.agrupamentoId === agr.id && c.situacao === 'eleito').length;
+    return Math.max(vagasEstimadas[i], eleitos);
+  });
+  return { vagas, estimativa };
+}
+
+function cadeirasPorPartido(dados) {
+  const lista = dados.agrupamentos;
+  const { vagas, estimativa } = previsaoPorLista(dados);
   const porPartido = {};
   lista.forEach((agr, i) => {
     const candidatos = dados.candidatos.filter((c) => c.agrupamentoId === agr.id);
     const eleitos = candidatos.filter((c) => c.situacao === 'eleito');
-    const vagasDaLista = estimativa ? Math.max(vagasEstimadas[i], eleitos.length) : agr.vagas;
-    const faltam = Math.max(0, vagasDaLista - eleitos.length);
+    const faltam = Math.max(0, vagas[i] - eleitos.length);
     for (const c of [...eleitos, ...candidatos.filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, faltam)]) {
       porPartido[c.partido] = (porPartido[c.partido] ?? 0) + 1;
     }

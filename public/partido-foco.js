@@ -38,6 +38,18 @@ export function analisePartido({ alvo, detalhes, resumos }) {
     const confirmadas = sigla ? (resumo?.eleitosPorPartido?.[sigla] ?? 0) : 0;
     const total = Math.max(confirmadas, sigla ? (resumo?.cadeirasPorPartido?.[sigla] ?? confirmadas) : 0);
     const validos = dados.votos.validos;
+    const vagasLista = lista ? (lista.vagasPrevistas ?? lista.vagas) : 0;
+    const ranking = lista
+      ? dados.candidatos.filter((c) => c.agrupamentoId === lista.id && c.votos > 0).map((c, i) => ({
+        pos: i + 1, nomeUrna: c.nomeUrna, partido: c.partido, votos: c.votos, meu: normaPartido(c.partido) === id,
+        dentro: i < vagasLista || c.situacao === 'eleito',
+      }))
+      : [];
+    const ultimoDentro = ranking.filter((c) => c.pos <= vagasLista).at(-1) ?? null; // o último que entra pela lista
+    const primeiroFora = ranking.find((c) => c.pos > vagasLista) ?? null; // o primeiro que fica de fora
+    const meus = ranking.filter((c) => c.meu);
+    const meuUltimoDentro = meus.filter((c) => c.dentro).at(-1) ?? null;
+    const meuPrimeiroFora = meus.find((c) => !c.dentro) ?? null;
     linhas.push({
       uf,
       vagasUf: dados.cargo.vagas,
@@ -51,6 +63,14 @@ export function analisePartido({ alvo, detalhes, resumos }) {
       confirmadas,
       naFrente: total - confirmadas,
       estimada: Boolean(resumo?.cadeirasEstimadas),
+      vagasLista,
+      faltamParaVaga: lista?.faltamParaVaga ?? null, // votos a mais que a lista precisa para ganhar outra vaga (aproximado)
+      folgaDaVaga: lista?.folgaDaVaga ?? null, // votos que a lista pode perder sem perder uma vaga (aproximado)
+      ranking,
+      // Quanto falta para o primeiro candidato do partido que está fora entrar, e a folga do último que está dentro
+      // (em votos sobre o primeiro de fora). Valem se a lista mantiver as vagas que tem hoje.
+      distFora: meuPrimeiroFora && ultimoDentro ? { ...meuPrimeiroFora, faltam: ultimoDentro.votos - meuPrimeiroFora.votos } : null,
+      folgaDentro: meuUltimoDentro && primeiroFora ? { ...meuUltimoDentro, folga: meuUltimoDentro.votos - primeiroFora.votos } : null,
       principais: dele.filter((c) => c.votos > 0).slice(0, 15).map((c) => ({ nomeUrna: c.nomeUrna, votos: c.votos, situacao: c.situacao })),
     });
   }
@@ -128,10 +148,12 @@ export function focoHtml(modelo, ui, ajuda) {
       <td class="num">${l.comVotos && l.lista ? pct(l.pctValidos, 2) : '—'}</td>
       <td class="num">${l.confirmadas || '—'}</td>
       <td class="num">${l.naFrente || '—'}</td>
+      <td class="num" title="Votos a mais que a lista precisa para ganhar mais uma vaga (aproximado)">${l.comVotos && l.faltamParaVaga != null ? `+${fmtInt(l.faltamParaVaga)}` : '—'}</td>
+      <td class="num" title="Votos que a lista pode perder sem perder uma vaga (aproximado)">${l.comVotos && l.folgaDaVaga != null ? `−${fmtInt(l.folgaDaVaga)}` : '—'}</td>
       <td class="muted pequeno">${l.principais.slice(0, estadual ? 0 : 3).map((c) => `${esc(c.nomeUrna)} (${fmtInt(c.votos)}${c.situacao === 'eleito' ? ', eleito' : ''})`).join(' · ') || (l.candidatos ? '' : 'sem candidatos')}</td></tr>`).join('');
   const tabela = `<h3 class="par-h">${estadual ? 'Resultado do partido' : 'Por UF'}</h3>
     <div class="tabela-rolagem"><table class="tabela tabela-foco">
-      <thead><tr><th>UF</th><th class="num">Vagas</th><th class="num">Apurado</th><th class="num">Votos da lista</th><th class="num">% válidos</th><th class="num">Confirmadas</th><th class="num">${a.estimada ? 'Na frente*' : 'Na frente'}</th>${estadual ? '' : '<th>Mais votados do partido</th>'}</tr></thead>
+      <thead><tr><th>UF</th><th class="num">Vagas</th><th class="num">Apurado</th><th class="num">Votos da lista</th><th class="num">% válidos</th><th class="num">Confirmadas</th><th class="num">${a.estimada ? 'Na frente*' : 'Na frente'}</th><th class="num" title="Votos a mais que a lista precisa para ganhar mais uma vaga (aproximado)">Falta p/ +1 vaga</th><th class="num" title="Votos que a lista pode perder sem perder uma vaga (aproximado)">Folga da vaga</th>${estadual ? '' : '<th>Mais votados do partido</th>'}</tr></thead>
       <tbody>${linhasUf}</tbody></table></div>
     ${a.estimada ? '<p class="par-nota">* Estimativa pelo quociente eleitoral com os votos já apurados; muda até o fim da apuração.</p>' : ''}`;
 
@@ -143,5 +165,32 @@ export function focoHtml(modelo, ui, ajuda) {
         <div class="cand-votos"><b>${fmtInt(c.votos)}</b></div></div></li>`).join('')}</ol>`
     : '';
 
-  return `<div class="par-topo">${seletor}</div>${cartoes}${clausula}<div class="par-caixa">${tabela}${lista}</div>`;
+  // Quem está perto e quem está longe: pelo corte de cada lista (as vagas da lista vão para os mais votados dela).
+  const nomeLinha = (l) => esc(nomeUf(l.uf));
+  const perto = a.linhas.filter((l) => l.comVotos && l.faltamParaVaga != null && l.lista).sort((x, y) => x.faltamParaVaga / x.validos - y.faltamParaVaga / y.validos).slice(0, 6);
+  const risco = a.linhas.filter((l) => l.comVotos && l.confirmadas + l.naFrente > 0 && l.folgaDaVaga != null).sort((x, y) => x.folgaDaVaga / x.validos - y.folgaDaVaga / y.validos).slice(0, 6);
+  const itemPerto = (l) => `<tr><td>${nomeLinha(l)}</td><td class="num">+${fmtInt(l.faltamParaVaga)}</td><td class="muted pequeno">${pct((100 * l.faltamParaVaga) / l.validos, 2)} dos válidos${l.distFora ? ` · ${esc(l.distFora.nomeUrna)} é o ${l.distFora.pos}º da lista, ${fmtInt(Math.max(0, l.distFora.faltam))} votos atrás do corte` : ''}</td></tr>`;
+  const itemRisco = (l) => `<tr><td>${nomeLinha(l)}</td><td class="num">−${fmtInt(l.folgaDaVaga)}</td><td class="muted pequeno">${pct((100 * l.folgaDaVaga) / l.validos, 2)} dos válidos${l.folgaDentro ? ` · ${esc(l.folgaDentro.nomeUrna)} (${l.folgaDentro.pos}º) tem ${fmtInt(Math.max(0, l.folgaDentro.folga))} votos sobre o primeiro de fora` : ''}</td></tr>`;
+  const proximidade = perto.length || risco.length ? `<div class="par-duas">
+    <div class="par-caixa"><h3 class="par-h">Mais perto de uma vaga extra</h3><div class="tabela-rolagem"><table class="tabela"><tbody>${perto.map(itemPerto).join('') || '<tr><td class="muted">—</td></tr>'}</tbody></table></div></div>
+    <div class="par-caixa"><h3 class="par-h">Vagas mais em risco</h3><div class="tabela-rolagem"><table class="tabela"><tbody>${risco.map(itemRisco).join('') || '<tr><td class="muted">Nenhuma vaga ainda.</td></tr>'}</tbody></table></div></div></div>
+    <p class="par-nota">Distâncias em votos <b>da lista inteira</b> (o partido, ou a federação), pelo mesmo cálculo de quociente e sobras. São aproximadas: supõem que só a lista do partido recebe os votos que faltam, e as outras listas também crescem até o fim. Ordenadas pela distância em % dos votos válidos da UF.</p>` : '';
+
+  // Ranking de cada lista perto do corte: os que entram, os primeiros de fora e todos os candidatos do partido.
+  const janela = (l) => {
+    const corte = l.vagasLista;
+    const vistos = l.ranking.filter((c) => (c.pos > corte - 3 && c.pos <= corte + 4) || (c.meu && c.pos <= corte + 30));
+    return vistos;
+  };
+  const rankings = a.linhas.filter((l) => l.comVotos && l.ranking.some((c) => c.meu)).sort((x, y) => (y.confirmadas + y.naFrente) - (x.confirmadas + x.naFrente) || x.uf.localeCompare(y.uf)).map((l) => {
+    const corte = l.vagasLista;
+    const linhasRank = janela(l).map((c, i, todos) => `${i > 0 && c.pos > todos[i - 1].pos + 1 ? '<tr><td colspan="4" class="muted pequeno">…</td></tr>' : ''}
+      <tr class="${c.meu ? 'par-meu' : ''}${c.pos === corte + 1 ? ' par-corte' : ''}"><td class="num">${c.pos}º</td><td>${esc(c.nomeUrna)} <span class="muted pequeno">${esc(c.partido)}</span></td><td class="num">${fmtInt(c.votos)}</td><td>${c.dentro ? '<span class="pill eleito">dentro</span>' : `<span class="muted pequeno">fora${corte ? ` · ${fmtInt(Math.max(0, (l.ranking[corte - 1]?.votos ?? 0) - c.votos))} atrás do corte` : ''}</span>`}</td></tr>`).join('');
+    return `<details class="par-rank"><summary>${nomeLinha(l)} · lista com ${l.vagasLista} ${l.vagasLista === 1 ? 'vaga' : 'vagas'}${l.lista?.federada ? ` (federação ${esc(l.lista.sigla)})` : ''}</summary>
+      <div class="tabela-rolagem"><table class="tabela"><tbody>${linhasRank}</tbody></table></div></details>`;
+  }).join('');
+  const blocoRankings = rankings ? `<div class="par-caixa"><h3 class="par-h">Ranking das listas perto do corte</h3>${rankings}
+    <p class="par-nota">As vagas de cada lista vão para os mais votados dela, e os votos de qualquer candidato (como um puxador) contam para a lista inteira. Não considera a regra de que o candidato precisa de 10% do quociente eleitoral em votos próprios.</p></div>` : '';
+
+  return `<div class="par-topo">${seletor}</div>${cartoes}${clausula}<div class="par-caixa">${tabela}${lista}</div>${proximidade}${blocoRankings}`;
 }
