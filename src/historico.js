@@ -154,7 +154,7 @@ export async function registrarCiclo({ chaves, apuracao, municipios, historico, 
 }
 
 // Formato de leitura para o gráfico.
-export function lerSerie(historico, chave, modelo = 'ingenuo') {
+export function lerSerie(historico, chave, modelo = 'estratificado') {
   const pontos = historico.pontos(chave);
   if (!pontos.length) return null;
   return {

@@ -32,7 +32,7 @@ const pp = (n) => n.toFixed(2).padStart(6);
 console.log(`Arquivo: ${arquivo}\nPulo = mudança de ${limiar} pp ou mais na diferença projetada entre os dois primeiros, de uma atualização para a seguinte.\n`);
 for (const chave of [...porChave.keys()].sort()) {
   if (soChave && chave !== soChave) continue;
-  for (const modelo of ['ingenuo', 'estratificado', 'swing']) {
+  for (const modelo of ['estratificado', 'swing', 'ingenuo']) { // 'ingenuo': só aparece nas gravações que o têm (comparação)
     if (soModelo && modelo !== soModelo) continue;
     const serie = lerSerie(historico, chave, modelo);
     const a = serie ? analisarSerie(serie.pontos, { limiar }) : null;

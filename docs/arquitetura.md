@@ -111,7 +111,10 @@ mapa de cadeiras do Senado e da Câmara. Os contornos vêm do IBGE e estão em `
 
 Todas as projeções usam **votos válidos** e a fração de **seções totalizadas** como medida de avanço.
 
-### Extrapolação simples (`projetarIngenuo`)
+### Extrapolação simples (`projetarIngenuo`): não é mais um modelo da interface
+
+Foi retirada do seletor e da API (`/api/projecao/ingenuo/...` responde 404) por errar de 3 a 5 pontos percentuais nos ensaios. A função
+continua como plano B dos outros dois modelos, como base de comparação no ensaio e como linha `proj.ingenuo` do histórico.
 
 Mantém o percentual atual de cada candidato e projeta o total de votos válidos por `válidos ÷ fração de seções`. O
 percentual projetado é igual ao atual; o que muda é o tamanho esperado do total. Ignora a ordem geográfica da apuração
@@ -209,7 +212,7 @@ depois.
 - Candidatos gravados: todos com 1% ou mais, ou os 6 primeiros.
 - Não duplica ponto: mesma chave e mesmo `t` é ignorado.
 - A demonstração grava em `…-demo.jsonl` e recomeça do zero a cada execução.
-- Leitura: `GET /api/historico/{cargo}/{uf}?modelo=ingenuo|estratificado|swing`.
+- Leitura: `GET /api/historico/{cargo}/{uf}?modelo=estratificado|swing`.
 
 Esse arquivo também serve para **validar os modelos depois da eleição**: compare o que cada um projetava ao longo da noite
 com o resultado final.
@@ -222,7 +225,7 @@ com o resultado final.
 | `GET /api/resumo` | Uma linha por cargo × abrangência (líder, seções, eleitos). |
 | `GET /api/resultado/{cargo}/{uf}` | Resultado completo de um arquivo (ex.: `/api/resultado/1/br`). |
 | `GET /api/municipios/{cargo}/{uf}` | Líder e apuração de cada município de uma UF (cargos 1, 3 e 5). Dispara a carga da UF se preciso. |
-| `GET /api/projecao/{modelo}/{cargo}/{uf}` | Projeção (`ingenuo`, `estratificado`, `swing`). Pode vir `disponivel: false` com o motivo, ou `carregando: true`. |
+| `GET /api/projecao/{modelo}/{cargo}/{uf}` | Projeção (`estratificado`, `swing`). Pode vir `disponivel: false` com o motivo, ou `carregando: true`. |
 | `GET /api/historico/{cargo}/{uf}?modelo=` | Série gravada para o gráfico; 404 se não houver gravação. |
 | `GET /api/partidos` | Eleitos de 2014, 2018 e 2022 por partido (governador, senador e deputado federal), com as siglas já traduzidas para o partido de hoje; `disponivel: false` sem `eleitos.json`. |
 | `GET /api/busca?q=&cargo=&uf=` | Busca global de candidatos e municípios. |

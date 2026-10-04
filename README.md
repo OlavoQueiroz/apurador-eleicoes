@@ -196,7 +196,7 @@ transferência de votos**: com dados por UF não dá para saber de quem veio cad
 - `GET /api/resumo` — uma linha por cargo × abrangência (líder, seções, eleitos).
 - `GET /api/resultado/{cargo}/{uf}` — resultado completo (ex.: `/api/resultado/1/br`).
 - `GET /api/municipios/{cargo}/{uf}` — líder e apuração de cada município de uma UF (cargos 1, 3 e 5).
-- `GET /api/projecao/{modelo}/{cargo}/{uf}` — projeção (`ingenuo`, `estratificado`, `swing`); pode vir
+- `GET /api/projecao/{modelo}/{cargo}/{uf}` — projeção (`estratificado`, `swing`); pode vir
   `disponivel: false` com o motivo, ou `carregando: true`.
 - `GET /api/historico/{cargo}/{uf}?modelo=` — série gravada da evolução da apuração (404 se não houver).
 - `GET /api/busca?q=&cargo=&uf=` — busca global de candidatos e municípios.
@@ -215,8 +215,8 @@ transferência de votos**: com dados por UF não dá para saber de quem veio cad
 - A visão **Projeção (estimativa)** é separada e sempre rotulada como estimativa do painel, não dado do TSE. Há três
   modelos, que usam votos válidos e a fração de seções totalizadas (fórmulas em
   [docs/arquitetura.md](docs/arquitetura.md)):
-  - **Extrapolação simples**: mantém o percentual atual e projeta o total pela fração de seções; ignora o viés
-    geográfico da ordem de apuração, então no começo pode ser uma miragem.
+  - A **extrapolação simples** (mantém o % atual) foi retirada da tela por errar de 3 a 5 pp nos ensaios; fica só como plano
+    B dos outros modelos. Por isso deputado não tem aba Projeção.
   - **Estratificação por município** (presidente, governador e senador): projeta os **municípios grandes** um a um e o
     **resto do estado** em bloco (arquivo da UF menos os grandes). Estratos ainda sem votos entram pelo eleitorado e
     pela média do medido; a tela mostra quanto da projeção depende disso. Se os arquivos da UF e dos municípios

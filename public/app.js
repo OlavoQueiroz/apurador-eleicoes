@@ -55,7 +55,7 @@ const estado = {
   detalhe: undefined, // undefined = carregando; null = sem dado
   visao: 'apuracao', // 'apuracao' (dados do TSE), 'projecao' (estimativa do painel) ou 'analise' (bancadas por bloco/partido; na presidência, o comparativo entre eleições)
   comparativo: { periodo: PADRAO, bases: {}, regiao: null, terceiros: null }, // período, base de cada período (carregada uma vez), região aberta e terceiros nas barras (null = os padrão do período)
-  modelo: 'ingenuo',
+  modelo: 'estratificado',
   projecao: undefined, // mesmo contrato de `detalhe`
   comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
   mapaProj: undefined, // projeção de cada UF para pintar o mapa: { chave, porUf: Map uf → { lider, margem } }
@@ -186,13 +186,11 @@ let recarga = null;
 // Mapa da projeção: o vencedor projetado de cada UF, pelo modelo escolhido. Só nos majoritários, que têm um vencedor por UF.
 const querMapaProjecao = () => estado.visao === 'projecao' && ehMajoritario(estado.cargo) && cargoMeta().abrangencias.length > 1;
 // Modelos que servem ao cargo aberto e estão disponíveis; os outros ficam fora do seletor.
-// A extrapolação simples vai por último: é a pior nos ensaios (erro de 3 a 5 pp aos 5-50% apurados, contra ~0,2 a 1,3 pp do swing) e
-// fica só como ponto de comparação. O modelo aberto por padrão é o melhor disponível para o cargo.
-const modelosDoCargo = (cargo = estado.cargo) => estado.meta.modelos
-  .filter((m) => m.disponivel && (!m.cargos || m.cargos.includes(cargo)))
-  .sort((a, b) => (a.id === 'ingenuo') - (b.id === 'ingenuo'));
+const modelosDoCargo = (cargo = estado.cargo) => estado.meta.modelos.filter((m) => m.disponivel && (!m.cargos || m.cargos.includes(cargo)));
+// Só presidente, governador e senador têm projeção (deputados não: a extrapolação simples foi retirada, errava de 3 a 5 pp).
+const temProjecao = (cargo) => modelosDoCargo(cargo).length > 0;
 const MODELO_PADRAO = { 1: 'swing', 3: 'estratificado', 5: 'estratificado' };
-const modeloPadrao = (cargo) => (modelosDoCargo(cargo).some((m) => m.id === MODELO_PADRAO[cargo]) ? MODELO_PADRAO[cargo] : 'ingenuo');
+const modeloPadrao = (cargo) => (modelosDoCargo(cargo).some((m) => m.id === MODELO_PADRAO[cargo]) ? MODELO_PADRAO[cargo] : modelosDoCargo(cargo)[0]?.id ?? 'estratificado');
 const chaveMapaProj = () => `${estado.cargo}:${estado.modelo}`;
 let recargaMapaProj = null;
 async function carregarMapaProjecao() {
@@ -311,7 +309,7 @@ async function carregarMunicipios() {
 // ---------- evolução da apuração (gráfico) ----------
 
 const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && ['apuracao', 'projecao'].includes(estado.visao);
-const chaveHistorico = () => `${chaveAtual()}:${estado.modelo ?? 'ingenuo'}`;
+const chaveHistorico = () => `${chaveAtual()}:${estado.modelo ?? 'estratificado'}`;
 
 async function buscarHistorico() {
   if (!querHistorico()) {
@@ -319,7 +317,7 @@ async function buscarHistorico() {
     return;
   }
   const chave = chaveHistorico();
-  const dados = await carregarHistorico(estado.cargo, estado.uf, estado.modelo ?? 'ingenuo');
+  const dados = await carregarHistorico(estado.cargo, estado.uf, estado.modelo ?? 'estratificado');
   if (chave !== chaveHistorico()) return; // a seleção mudou enquanto carregava
   estado.historico = dados ? { chave, dados } : undefined; // sem a rota ou sem gravação, a seção some
 }
@@ -333,7 +331,7 @@ function montarGraficoEvolucao(raiz) {
   secao.className = 'grafico';
   secao.innerHTML = `<h3 class="secao">${estado.visao === 'projecao' ? 'Evolução da projeção' : 'Evolução da apuração'}</h3><div class="gr-corpo"></div>`;
   ancora.after(secao);
-  const modelo = estado.modelo ?? 'ingenuo';
+  const modelo = estado.modelo ?? 'estratificado';
   montarGrafico(secao.querySelector('.gr-corpo'), h.dados, {
     corPartido, fmtPct, esc, chave: h.chave,
     nomeModelo: estado.meta.modelos?.find((m) => m.id === modelo)?.nome ?? modelo,
@@ -384,7 +382,7 @@ function lerHash() {
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
-  estado.visao = m?.[3] === 'projecao' ? 'projecao' : m?.[3] === 'analise' && temAnalise(meta.codigo) ? 'analise' : 'apuracao';
+  estado.visao = m?.[3] === 'projecao' && temProjecao(meta.codigo) ? 'projecao' : m?.[3] === 'analise' && temAnalise(meta.codigo) ? 'analise' : 'apuracao';
   if (emAnalise()) {
     // Depois de "analise" vêm, em qualquer ordem: o período (presidência), a análise (placar ou serie) e o agrupamento (partido).
     const extras = (an?.[3] ?? '').split('/').filter(Boolean);
@@ -478,7 +476,7 @@ function renderAbas() {
   const visao = (id, rotulo) =>
     `<a class="aba" href="${hashPara(estado.cargo, estado.uf, id)}" ${estado.visao === id ? 'aria-current="page"' : ''}>${rotulo}</a>`;
   const analise = temAnalise(estado.cargo) ? visao('analise', 'Análise') : '';
-  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}${analise}</div>`;
+  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${temProjecao(estado.cargo) ? visao('projecao', 'Projeção') : ''}${analise}</div>`;
   $('#abas').innerHTML = `<div class="seg">${itens}</div>${modo}`;
 }
 

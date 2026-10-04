@@ -2,20 +2,12 @@
 // do TSE, e ficam numa visão separada da interface. Cada modelo recebe o resultado normalizado de um
 // arquivo (cargo × abrangência) e devolve a projeção por candidato.
 //
-// Ver docs/modelos-simulacao.md. Existem os modelos 1 (extrapolação simples) e 2 (estratificação por
-// município); o swing histórico e o bayesiano dependem de dados de eleições anteriores e de pesquisas.
+// Ver docs/modelos-simulacao.md. Os modelos oferecidos são a estratificação por município e o swing histórico; o bayesiano
+// depende de pesquisas. A extrapolação simples (`projetarIngenuo`) deixou de ser um modelo da interface (errava de 3 a 5 pp
+// nos ensaios), mas continua como plano B dos outros dois quando os arquivos ficam fora de sincronia e como base de
+// comparação no ensaio e no histórico.
 
 export const MODELOS = [
-  {
-    id: 'ingenuo',
-    nome: 'Extrapolação simples',
-    curto: 'Simples',
-    resumo: 'Mantém o % atual de cada candidato e projeta pelo total de seções.',
-    disponivel: true,
-    descricao:
-      'Mantém o percentual atual de cada candidato e projeta o total de votos válidos pela fração de seções '
-      + 'totalizadas. Ignora a ordem geográfica da apuração: no começo, o resultado pode ser uma miragem.',
-  },
   {
     id: 'estratificado',
     nome: 'Estratificação por município',
@@ -475,7 +467,6 @@ export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado', ant
 }
 
 export function projetar(modelo, dados, opcoes) {
-  if (modelo === 'ingenuo') return projetarIngenuo(dados, opcoes);
   if (modelo === 'estratificado') return projetarEstratificado(dados, opcoes);
   return null;
 }

@@ -16,7 +16,7 @@ import { CARGOS } from './tse.js';
 import { lerSerie } from './historico.js';
 import { buscarCandidatos, criarIndiceMunicipios } from './busca.js';
 import { projetarUfSwing } from './swing.js';
-import { MODELOS, projetar, projetarUf, projetarBrasil, tamanhoUf } from './projecao.js';
+import { MODELOS, projetarUf, projetarBrasil, tamanhoUf } from './projecao.js';
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -253,8 +253,8 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     const h = /^\/api\/historico\/(\d+)\/([a-z]{2})$/.exec(pathname);
     if (h) {
-      const modelo = new URL(req.url, 'http://localhost').searchParams.get('modelo') ?? 'ingenuo';
-      const serie = historico && ['ingenuo', 'estratificado', 'swing'].includes(modelo) ? lerSerie(historico, `${Number(h[1])}:${h[2]}`, modelo) : null;
+      const modelo = new URL(req.url, 'http://localhost').searchParams.get('modelo') ?? 'estratificado';
+      const serie = historico && ['estratificado', 'swing'].includes(modelo) ? lerSerie(historico, `${Number(h[1])}:${h[2]}`, modelo) : null;
       if (!serie) return enviarJson(res, 404, { erro: 'Sem histórico gravado para esta abrangência.' });
       return enviarJson(res, 200, serie);
     }
@@ -276,9 +276,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       if (!modelo || !item) return enviarJson(res, 404, { erro: 'Modelo, cargo ou abrangência desconhecidos.' });
       if (!modelo.disponivel) return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: modelo.motivo });
       if (modelo.id === 'estratificado' || modelo.id === 'swing') return enviarJson(res, 200, await projecaoPorMunicipios(item, modelo.id));
-      if (!item.dados) return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: 'O arquivo desta abrangência ainda não está disponível no TSE.' });
-      const limite = item.alvo.cargo >= 6 ? 20 : 50; // deputados: só os mais votados
-      return enviarJson(res, 200, { ...projetar(modelo.id, item.dados, { limite }), geradoEm: item.dados.geradoEm });
+      return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: modelo.motivo ?? 'Modelo sem cálculo nesta versão.' });
     }
 
     if (pathname === '/events') {
