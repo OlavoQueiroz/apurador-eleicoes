@@ -1,7 +1,8 @@
 // Classificação ideológica dos partidos para o mapa de cadeiras. É uma simplificação editorial, não um dado
 // oficial: não existe classificação consensual, e partidos mudam de posição. Ajuste as listas abaixo à vontade.
 // Critério aproximado: posição do partido na maioria das votações recentes no Congresso e no governo federal.
-// Partidos fora das listas (e senadores sem partido) caem em "Independente".
+// Partidos fora das listas (e senadores sem partido) caem em "Independente" — é o caso do Missão, que se
+// posiciona contra o governo Lula e contra o bolsonarismo.
 
 export const GRUPOS = [
   { id: 'esquerda', nome: 'Esquerda', cor: '#d9363e' },
@@ -13,7 +14,7 @@ export const GRUPOS = [
 const PARTIDOS = {
   esquerda: ['PT', 'PCDOB', 'PV', 'PSOL', 'REDE', 'PSB', 'PDT', 'PCB', 'PSTU', 'PCO', 'UP'],
   centrao: ['MDB', 'PSD', 'PP', 'UNIAO', 'REPUBLICANOS', 'PSDB', 'CIDADANIA', 'PODE', 'AVANTE', 'SOLIDARIEDADE', 'PRD', 'MOBILIZA'],
-  direita: ['PL', 'NOVO', 'MISSAO', 'DC', 'DEMOCRATA', 'AGIR', 'PRTB', 'PMB'],
+  direita: ['PL', 'NOVO', 'DC', 'DEMOCRATA', 'AGIR', 'PRTB', 'PMB'],
 };
 
 // "PC do B", "PCdoB" e "PC DO B" são o mesmo partido; "UNIÃO" e "UNIAO" também.
