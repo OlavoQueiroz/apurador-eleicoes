@@ -20,7 +20,9 @@
 import { Limitador, pedeCalma, recuoDoErro } from './limitador.js';
 
 const cederVez = () => new Promise((resolve) => setImmediate(resolve));
-const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.());
+// Sem unref: quem chama está ESPERANDO por esta pausa, então ela precisa manter o processo vivo (com unref, um
+// processo sem mais nada pendente termina no meio da espera, o que derrubava os testes no CI).
+const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class Municipios {
   constructor({

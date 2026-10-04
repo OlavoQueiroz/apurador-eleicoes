@@ -5,7 +5,9 @@
 //  • um 429/503 de qualquer lado faz os DOIS recuarem (pausa compartilhada) e deixa o ritmo mais lento;
 //  • contadores para acompanhar a carga durante a apuração.
 
-const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.());
+// Sem unref: quem chama está ESPERANDO por esta pausa, então ela precisa manter o processo vivo (com unref, um
+// processo sem mais nada pendente termina no meio da espera, o que derrubava os testes no CI).
+const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class Limitador {
   constructor({ altaMs = 50, baixaMs = 200, agora = Date.now } = {}) {
