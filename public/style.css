@@ -81,19 +81,14 @@ button { font: inherit; color: inherit; }
 }
 .topo-titulo { display: flex; align-items: center; gap: 14px; }
 .marca {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  display: block;
+  width: 64px;
   flex: none;
 }
-.marca svg { width: 26px; height: 26px; }
-@media (prefers-color-scheme: dark) { .marca { color: #0b1020; } }
-.topo h1 { font-size: 26px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; }
+.marca svg { display: block; width: 100%; height: auto; }
+/* O azul-marinho some no fundo escuro: no tema escuro o logo ganha uma placa clara. */
+@media (prefers-color-scheme: dark) { .marca { background: #f6f8fb; padding: 6px 7px 3px; border-radius: 12px; width: 76px; } }
+.topo h1 { color: #14201B; font-size: 26px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; }
 .topo .muted { font-size: 13.5px; margin-top: 2px; }
 
 .estado {
@@ -458,3 +453,5 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .resumo-modelo { margin: -8px 0 14px; }
 .topo-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .topo-acoes .voltar { margin-left: 0; }
+
+@media (prefers-color-scheme: dark) { .topo h1 { color: var(--text); } }
