@@ -1117,8 +1117,8 @@ function detalheAgregadoHtml() {
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
           <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? ` · <b class="eleito-conta" title="${esc(dicaEleito(vence, c.pct, pctSecoes))}">eleito*</b>` : ''}</span></div></td>`);
     const { campo, dir } = estado.ordemUfs;
-    // Senado: o estado com as duas vagas definidas já está em "Senadores eleitos" e sai desta lista.
-    const definidas = meta.codigo === 5 ? itens.filter(({ item }) => eleitosDaUf(item, 5)?.estado === 'eleita') : [];
+    // O estado com tudo definido (governador eleito; Senado, as duas vagas) já está na lista de eleitos e sai desta.
+    const definidas = itens.filter(({ item }) => eleitosDaUf(item, meta.codigo)?.estado === 'eleita');
     const emAberto = itens.filter((x) => !definidas.includes(x));
     const ordenado = emAberto.sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
@@ -1138,9 +1138,10 @@ function detalheAgregadoHtml() {
       return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0], item.secoes.pctTotalizadas)}${celula(b, fora[1], eleitos[1], item.secoes.pctTotalizadas)}${celula(c, fora[2], eleitos[2], item.secoes.pctTotalizadas)}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
+    const listaEleitos = meta.codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
     tabela = `<h3 class="secao">${definidas.length ? `Mais votados nos estados ainda em aberto (${emAberto.length})` : 'Mais votados em cada UF'}</h3>
-      ${definidas.length ? `<p class="muted pequeno">${definidas.length === 1 ? '1 estado já tem' : `${definidas.length} estados já têm`} as duas vagas definidas (TSE ou pela conta do painel*) e ${definidas.length === 1 ? 'aparece' : 'aparecem'} só em "Senadores eleitos".</p>` : ''}
-      ${emAberto.length ? '' : '<p class="aviso-bloco">Todos os estados já têm as vagas definidas.</p>'}
+      ${definidas.length ? `<p class="muted pequeno">${definidas.length === 1 ? '1 estado já tem' : `${definidas.length} estados já têm`} ${meta.codigo === 3 ? 'o governador definido' : 'as duas vagas definidas'} (TSE ou pela conta do painel*) e ${definidas.length === 1 ? 'aparece' : 'aparecem'} só em "${listaEleitos}".</p>` : ''}
+      ${emAberto.length ? '' : `<p class="aviso-bloco">Todos os estados já têm ${meta.codigo === 3 ? 'o governador' : 'as vagas'} definido${meta.codigo === 3 ? '' : 's'}.</p>`}
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
         <thead><tr>${cabecalho('uf', 'UF')}<th>1º</th><th>2º</th><th>3º</th>${cabecalho('pct', 'Totalizadas', 'num')}</tr></thead>
         <tbody>${linhas}</tbody></table></div>
