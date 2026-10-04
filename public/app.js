@@ -2,6 +2,7 @@
 
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
+import { quantosClassificam, semChanceMatematica, votosRestantes } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -773,18 +774,19 @@ function pilulaSituacao(c) {
 }
 
 // Antes de qualquer voto não há o que mostrar: sem barra, sem líder e um traço no lugar de "0,00%" repetido.
-function candidatoHtml(c, posicao, largura, semVotos = false) {
+function candidatoHtml(c, posicao, largura, semVotos = false, fora = false) {
   const cor = corPartido(c.partido);
   const classes = [
     estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? 'destaque' : '',
     posicao === 1 && !semVotos ? 'lider' : '',
+    fora ? 'sem-chance' : '',
   ].filter(Boolean).join(' ');
   // Em disputa proporcional o número identifica o candidato (e a busca usa ele); nos majoritários é o do partido.
   const numero = ehProporcional(estado.cargo) ? `<span class="cand-num">${esc(c.numero)}</span>` : '';
   return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}</div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${fora ? '<span class="pill" title="Mesmo com todos os votos que faltam, não alcança os classificados">Sem chance matemática</span>' : ''}</div>
       <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
     ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
@@ -889,7 +891,8 @@ function detalheArquivoHtml() {
       ${termo && filtrados.length > limite ? `<p class="muted pequeno">Mostrando ${limite} de ${fmtInt(filtrados.length)}. Refine a busca.</p>` : ''}
       ${agrupamentosHtml(d)}`;
   } else {
-    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos)).join('')}</ol>`;
+    const fora = semChanceMatematica(candidatos.map((c) => c.votos), quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }), votosRestantes(d.eleitorado));
+    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos, fora[i] && c.situacao !== 'eleito')).join('')}</ol>`;
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
@@ -991,10 +994,11 @@ function detalheAgregadoHtml() {
   const porNome = (a, b) => nomeUf(a.uf).localeCompare(nomeUf(b.uf), 'pt-BR');
   if (meta.codigo === 3 || meta.codigo === 5) {
     // Governador e Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
-    const celula = (c) => (c
-      ? `<td><div class="colocado-nome">${esc(c.nomeUrna)}</div>
+    // `fora`: sem chance matemática de classificação (public/chances.js); a célula fica apagada e com o aviso.
+    const celula = (c, fora) => (c
+      ? `<td${fora ? ' class="sem-chance" title="Sem chance matemática: mesmo com todos os votos que faltam, não alcança os classificados"' : ''}><div class="colocado-nome">${esc(c.nomeUrna)}</div>
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
-          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}</span></div></td>`
+          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance matemática' : ''}</span></div></td>`
       : '<td class="muted">—</td>');
     const { campo, dir } = estado.ordemUfs;
     const ordenado = itens.slice().sort(campo === 'pct'
@@ -1003,8 +1007,10 @@ function detalheAgregadoHtml() {
     const cabecalho = (id, rotulo, classe = '') => `<th${classe ? ` class="${classe}"` : ''} aria-sort="${campo === id ? (dir > 0 ? 'ascending' : 'descending') : 'none'}">
       <button type="button" class="ordenar" data-ordem="${id}">${rotulo}<span aria-hidden="true">${campo === id ? (dir > 0 ? ' ▲' : ' ▼') : ''}</span></button></th>`;
     const linhas = ordenado.map(({ uf, item }) => {
-      const [a, b, c] = item.colocados ?? [];
-      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a)}${celula(b)}${celula(c)}
+      const colocados = item.colocados ?? [];
+      const fora = semChanceMatematica(colocados.map((x) => x.votos), quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }), item.eleitorado ? votosRestantes(item.eleitorado) : null);
+      const [a, b, c] = colocados;
+      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0])}${celula(b, fora[1])}${celula(c, fora[2])}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>

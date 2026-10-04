@@ -230,6 +230,8 @@ export function resumir(dados) {
     colocados: dados.candidatos.slice(0, 3).filter((c) => c.votos > 0).map(compacto), // 1º, 2º e 3º (tabela do Senado)
     eleitos: Object.values(eleitosPorPartido).reduce((soma, n) => soma + n, 0),
     eleitosPorPartido,
+    turno: dados.turno,
+    eleitorado: { total: dados.eleitorado.total, comparecimento: dados.eleitorado.comparecimento, abstencao: dados.eleitorado.abstencao }, // teto dos votos que faltam (public/chances.js)
     // Câmara e Assembleia: eleitos mais as vagas já conquistadas (ou estimadas, se `cadeirasEstimadas`) por partido/federação.
     ...([6, 7].includes(dados.cargo.codigo) ? (({ porPartido, estimativa }) => ({ cadeirasPorPartido: porPartido, cadeirasEstimadas: estimativa }))(cadeirasPorPartido(dados)) : {}),
     segundoTurno,
