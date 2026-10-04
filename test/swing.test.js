@@ -133,3 +133,24 @@ test('projetarUfSwing: sem dados de 2022 ou sem o arquivo da UF, explica o que f
   const anterior = criarAnterior(historico({}), mapeamento);
   assert.equal(projetarUfSwing({ foto: { completo: true, dados: [] }, ufDados: null, anterior }).disponivel, false);
 });
+
+test('swing: o resto não confunde a ordem de chegada com variação de voto', () => {
+  // Dois municípios pequenos: p1 (reduto de A, 90/10 em 2022) já apurado; p2 (reduto de B, 10/90) ainda não.
+  // Não houve swing nenhum. Com um prior agregado do resto (50/50) o modelo veria "A +40" e erraria feio.
+  const anterior = criarAnterior(historico({ cap: [500, 500], p1: [900, 100], p2: [100, 900] }), mapeamento);
+  const detalhes = new Map([
+    ['cap', { aptos: 1000, secoes: { total: 10, totalizadas: 10 } }],
+    ['p1', { aptos: 1000, secoes: { total: 10, totalizadas: 10 } }],
+    ['p2', { aptos: 1000, secoes: { total: 10, totalizadas: 0 } }],
+  ]);
+  const r = projetarSwing({
+    anterior,
+    detalhes,
+    grandes: [municipioAtual('cap', 500, 500)],
+    ufDados: ufArquivo({ a: 1400, b: 600, total: 30, totalizadas: 20, aptos: 3000 }),
+  });
+  assert.equal(r.disponivel, true);
+  const a = r.candidatos.find((c) => c.numero === '13');
+  assert.ok(Math.abs(a.pctProjetado - 50) < 1, `esperado ~50%, veio ${a.pctProjetado.toFixed(1)}%`);
+  assert.ok(Math.abs(r.swing.find((s) => s.numero === '13').pontos) < 1, 'swing medido ~0');
+});

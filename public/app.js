@@ -3,6 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { iniciarBusca } from './busca.js';
+import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
@@ -51,6 +52,7 @@ const estado = {
   visao: 'apuracao', // 'apuracao' (dados do TSE) ou 'projecao' (estimativa do painel)
   modelo: 'ingenuo',
   projecao: undefined, // mesmo contrato de `detalhe`
+  comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
   mapaProj: undefined, // projeção de cada UF para pintar o mapa: { chave, porUf: Map uf → { lider, margem } }
   historico: undefined, // histórico gravado da UF aberta: { chave, dados }; undefined = sem gráfico
   mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
@@ -137,6 +139,7 @@ async function carregarDetalhe() {
   } catch {
     if (atual()) estado[campo] = null;
   }
+  if (estado.visao === 'projecao' && atual()) estado.comparacao = await carregarComparacao(estado.meta.modelos, estado.cargo, estado.uf, getJson);
   // Projeção por município: a primeira carga leva alguns segundos, então pergunta de novo até terminar.
   clearTimeout(recarga);
   if (estado.visao === 'projecao' && estado.projecao?.carregando && !estado.projecao.disponivel) {
@@ -347,6 +350,7 @@ async function aplicarHash() {
   lerHash();
   estado.detalhe = undefined;
   estado.projecao = undefined;
+  estado.comparacao = undefined;
   estado.mapaProj = undefined;
   estado.mun = undefined;
   estado.eleitos = null;
@@ -1008,7 +1012,8 @@ function detalheProjecaoHtml() {
       <div class="numero"><b>${fmtInt(p.votosFaltantes)}</b><span>Votos válidos ainda a apurar</span></div>
     </div>
     ${comoCalcula}
-    ${municipiosHtml(p)}`;
+    ${municipiosHtml(p)}
+    ${comparacaoHtml(p, estado.comparacao, { modelos: estado.meta.modelos, modelo: estado.modelo, esc, fmtPct })}`;
 }
 
 // Brasil dos cargos sem arquivo nacional: a projeção é por UF, escolhida no mapa.

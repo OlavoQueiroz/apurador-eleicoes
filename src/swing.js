@@ -40,15 +40,26 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
     sep = separarResto({ grandes, ufDados, detalhes, tolerancia });
     if (sep.erro) return { ...base, disponivel: false, ...sep.erro };
     const porSq = new Map(ufDados.candidatos.map((c) => [c.sq, c.numero]));
-    const herdados = new Map(numeros.map((n) => [n, 0]));
-    let validos22 = 0;
+    // Prior do resto SEM perder a ordem de chegada: o acompanhamento diz quanto de cada município pequeno já foi
+    // apurado. O prior da parte já contada (para medir o swing) e o da parte que falta (para projetar) saem do
+    // mesmo conjunto de municípios, ponderados por essa fração. Um prior agregado único confundiria "quais
+    // municípios chegaram primeiro" com "variação de voto".
+    const vazio = () => new Map(numeros.map((n) => [n, 0]));
+    const contado = { herdados: vazio(), validos: 0 };
+    const falta = { herdados: vazio(), validos: 0 };
     let comPrior = 0;
     for (const codigo of sep.restoIds) {
       const pr = anterior.prior(codigo);
       if (!pr) continue;
       comPrior += 1;
-      validos22 += pr.validos;
-      for (const n of numeros) herdados.set(n, herdados.get(n) + (pr.herdados.get(n) ?? 0));
+      const d = detalhes.get(codigo).secoes;
+      const f = d.total > 0 ? Math.min(1, d.totalizadas / d.total) : 0;
+      contado.validos += f * pr.validos;
+      falta.validos += (1 - f) * pr.validos;
+      for (const n of numeros) {
+        contado.herdados.set(n, contado.herdados.get(n) + f * (pr.herdados.get(n) ?? 0));
+        falta.herdados.set(n, falta.herdados.get(n) + (1 - f) * (pr.herdados.get(n) ?? 0));
+      }
     }
     const fracaoResto = ufDados.totalizacaoFinal ? 1 : (sep.restoTotal > 0 ? sep.restoTotalizadas / sep.restoTotal : 0);
     lugares.push({
@@ -58,7 +69,9 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
       validos: sep.restoValidos,
       fracao: fracaoResto,
       aptos: sep.restoAptos,
-      prior: comPrior > 0 ? { herdados, validos: validos22 } : null,
+      prior: comPrior > 0 && contado.validos > 0 ? contado : null, // para medir o swing: só o que já foi contado
+      priorFalta: comPrior > 0 && falta.validos > 0 ? falta : null, // para o que falta
+      priorTotalValidos: contado.validos + falta.validos,
     });
   }
 
@@ -70,7 +83,8 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
 
   // Fator de crescimento 2022 → 2026 do total de votos válidos, medido onde já há apuração e há prior.
   const comPriorIni = iniciados.filter((l) => l.prior && l.prior.validos > 0);
-  const crescimento = comPriorIni.length ? soma(comPriorIni.map((l) => l.esperado)) / soma(comPriorIni.map((l) => l.prior.validos)) : null;
+  const priorTotal = (l) => l.priorTotalValidos ?? l.prior?.validos ?? 0;
+  const crescimento = comPriorIni.length ? soma(comPriorIni.map((l) => l.esperado)) / soma(comPriorIni.map(priorTotal)) : null;
   const taxa = soma(iniciados.map((l) => l.esperado)) / Math.max(1, soma(iniciados.map((l) => l.aptos)));
 
   // Swing por candidato nos lugares bem apurados que têm prior.
@@ -87,12 +101,13 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
 
   const esperadoDe = (l) => {
     if (l.iniciado) return l.esperado;
-    if (l.prior && l.prior.validos > 0 && crescimento !== null) return l.prior.validos * crescimento;
+    if (priorTotal(l) > 0 && crescimento !== null) return priorTotal(l) * crescimento;
     return l.aptos * taxa;
   };
   const parteEsperada = (l) => {
-    if (!l.prior || !(l.prior.validos > 0)) return observado;
-    const bruto = new Map(numeros.map((n) => [n, Math.max(0, (l.prior.herdados.get(n) ?? 0) / l.prior.validos + swing.get(n))]));
+    const pr = l.priorFalta ?? l.prior; // o que falta é projetado pelo prior da parte que falta
+    if (!pr || !(pr.validos > 0)) return observado;
+    const bruto = new Map(numeros.map((n) => [n, Math.max(0, (pr.herdados.get(n) ?? 0) / pr.validos + swing.get(n))]));
     const total = soma([...bruto.values()]);
     return total > 0 ? new Map([...bruto].map(([n, v]) => [n, v / total])) : observado;
   };
@@ -107,7 +122,9 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
     const esperada = parteEsperada(l);
     if (l.iniciado) {
       const faltam = Math.max(0, total - l.validos);
-      const f = Math.min(1, Math.max(0, l.fracao));
+      // Município: o que falta mistura o que ele já mostrou com o esperado, pela fração apurada. O resto do estado
+      // é um conjunto de municípios cuja parte que falta já conhecemos (priorFalta): ali vale só o esperado.
+      const f = l.resto && l.priorFalta ? 0 : Math.min(1, Math.max(0, l.fracao));
       for (const n of numeros) {
         const visto = (l.votos.get(n) ?? 0) / l.validos;
         projetado.set(n, projetado.get(n) + (l.votos.get(n) ?? 0) + faltam * (f * visto + (1 - f) * esperada.get(n)));
