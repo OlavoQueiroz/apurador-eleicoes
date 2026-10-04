@@ -513,6 +513,8 @@ function rotulosMapaHtml(ativas) {
 
 function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
+  // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
+  const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
   if (ehMajoritario(estado.cargo)) {
     const partidos = [...new Set(lideres ?? itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
     const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
@@ -523,9 +525,9 @@ function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
         <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
     }
     return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
-      <div class="leg-linha"><span class="leg-titulo">Apuração</span><span class="muted">pouca</span>${gradiente('var(--text)')}<span class="muted">toda</span></div>`;
+      ${totalizadas}`;
   }
-  return `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
+  return totalizadas;
 }
 
 function renderGrade() {

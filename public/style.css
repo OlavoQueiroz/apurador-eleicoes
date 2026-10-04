@@ -418,10 +418,8 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .colocado-nome { font-weight: 600; line-height: 1.25; }
 .colocado-info { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 
-/* ---------- modo global: Apuração | Projeção ---------- */
+/* ---------- modo global: Apuração | Projeção (mesmo seletor .seg dos cargos, só com menos folga) ---------- */
 .modo-global .aba { padding: 7px 16px; }
-.modo-global .aba[aria-current="page"] { background: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { .modo-global .aba[aria-current="page"] { color: #0b1020; } }
 .como-calcula { margin-top: 16px; border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; }
 .como-calcula summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .como-calcula[open] summary { margin-bottom: 10px; }
