@@ -65,7 +65,7 @@ export function listarCadeiras(bancadas, pendentes) {
 // Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
 const dicaCadeira = (c) => {
   const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
-  return `${quem}${c.sigla}${c.ocupada ? ' · mandato até 2031' : ''}`;
+  return `${quem}${c.sigla}`;
 };
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
@@ -94,9 +94,11 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   const circulos = cadeiras.map((c, i) => {
     const p = pontos[i];
     const cor = corCadeira(c);
-    const r = c.ocupada ? raio * 0.6 : raio;
+    const r = raio;
     const rotulo = c.sigla ? dicaCadeira(c) : 'Em apuração';
-    const estilo = [cor ? `fill:${cor}` : '', noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
+    // Cadeira fora de disputa: a mesma cor, mais clara, para distinguir de quem foi eleito agora.
+    const preenchimento = cor && c.ocupada ? `color-mix(in srgb, ${cor} 42%, var(--surface))` : cor;
+    const estilo = [preenchimento ? `fill:${preenchimento}` : '', noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
     return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" data-dica="${esc(rotulo)}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}></circle>`;
   }).join('');
 
@@ -138,7 +140,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     ? `<p class="muted pequeno">Nenhum eleito ainda: as cadeiras cinza serão preenchidas conforme o TSE totalizar os votos.</p>`
     : '';
   const ocupadas = dados.ocupadas
-    ? `<p class="muted pequeno">Pontos pequenos: as ${fmtInt(bancadas.reduce((s, b) => s + b.ocupadas, 0))} cadeiras fora de disputa em 2026 (eleitas em 2022), com o partido atual de cada senador.</p>`
+    ? `<p class="muted pequeno">Cores mais claras: as ${fmtInt(bancadas.reduce((s, b) => s + b.ocupadas, 0))} cadeiras fora de disputa em 2026 (eleitas em 2022), com o partido atual de cada senador. As cores fortes são os eleitos em 2026.</p>`
     : '';
   const naoDefinido = ui.modo === 'ideologia' && bancadas.some((b) => b.grupo === 'independente' && b.sigla !== 'S/PARTIDO')
     ? '<p class="muted pequeno">“Independente” reúne senadores sem partido e partidos que a classificação do painel não cobre.</p>' : '';
