@@ -147,6 +147,12 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
     de segurança a cada 10 minutos). Isso soma o Brasil na projeção. O resultado fica em `.cache/` e um reinício não rebaixa tudo.
     `--sem-municipios` desliga a carga em segundo plano. Se o TSE responder 429 (limite de requisições), o
     painel recua sozinho; o ritmo é deliberadamente baixo.
+  - **Swing histórico (2022)** (só presidente): mede quanto cada candidato está acima ou abaixo do que o campo dele
+    teve em 2022 nos lugares já bem apurados e aplica essa variação ao que falta, lugar por lugar (os mesmos grandes
+    municípios e o resto do estado do modelo anterior). Quem herda os votos de cada candidato de 2022 está em
+    `dados-historicos/mapeamento-presidente.json` (por padrão só o mesmo partido; edite e reinicie). Os votos de 2022
+    por município estão em `dados-historicos/presidente-2022-t1.json`, gerado por
+    `node scripts/gerar-historico-2022.js` (lê só ~2 MB de um zip dos dados abertos do TSE).
   A "faixa possível" são os extremos matemáticos, não um intervalo de confiança.
   API: `GET /api/projecao/{modelo}/{cargo}/{uf}`.
 - Para cargos sem arquivo nacional (governador, senador, deputados), "Brasil" é a **soma das UFs** calculada

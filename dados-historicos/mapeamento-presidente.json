@@ -1,0 +1,10 @@
+{
+  "_leia": "Para cada candidato de 2026 (número), de quais candidatos de 2022 ele herda votos e que fração (peso, de 0 a 1) dos votos de cada um. Por padrão só o mesmo partido herda: PT→Lula, PL→Flávio Bolsonaro, NOVO→Zema e os pequenos partidos que repetiram candidatura. Votos de 2022 sem herdeiro (Tebet/MDB, Ciro/PDT, Soraya/União, Padre Kelmon/PTB) não são atribuídos a ninguém; o modelo os redistribui pela variação medida (swing). Para atribuir, por exemplo, parte dos votos de Tebet a outro candidato, acrescente {\"de\": \"15\", \"peso\": 0.5}. Reinicie o painel depois de editar.",
+  "13": [{ "de": "13", "peso": 1 }],
+  "22": [{ "de": "22", "peso": 1 }],
+  "30": [{ "de": "30", "peso": 1 }],
+  "21": [{ "de": "21", "peso": 1 }],
+  "80": [{ "de": "80", "peso": 1 }],
+  "16": [{ "de": "16", "peso": 1 }],
+  "27": [{ "de": "27", "peso": 1 }]
+}

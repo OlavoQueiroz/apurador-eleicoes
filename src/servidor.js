@@ -14,7 +14,8 @@ import path from 'node:path';
 import { CARGOS } from './tse.js';
 import { lerSerie } from './historico.js';
 import { buscarCandidatos, criarIndiceMunicipios } from './busca.js';
-import { MODELOS, modeloPorId, projetar, projetarUf, projetarBrasil, tamanhoUf } from './projecao.js';
+import { projetarUfSwing } from './swing.js';
+import { MODELOS, projetar, projetarUf, projetarBrasil, tamanhoUf } from './projecao.js';
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -27,7 +28,12 @@ const TIPOS = {
 
 const SEM_CACHE = { 'cache-control': 'no-store' };
 
-export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null }) {
+export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null }) {
+  // O swing precisa dos dados de 2022; sem eles o modelo aparece como indisponível.
+  const modelos = MODELOS.map((m) => (m.id === 'swing' && !anterior
+    ? { ...m, disponivel: false, motivo: 'Dados de 2022 não carregados (rode scripts/gerar-historico-2022.js).' }
+    : m));
+  const modeloPorIdAtivo = (id) => modelos.find((m) => m.id === id);
   const clientes = new Set();
   const buscarMunicipios = criarIndiceMunicipios(diretorioPublico);
 
@@ -49,7 +55,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       demo: meta.demo,
       intervaloSegundos: meta.intervalo,
       cargos,
-      modelos: MODELOS,
+      modelos,
       requisicoes: limitador?.estatisticas() ?? null, // pedidos ao TSE: por prioridade, por minuto e quantos 429
       ultimoCiclo: apuracao.ultimoCiclo && { ...apuracao.ultimoCiclo, chavesAlteradas: undefined },
     };
@@ -70,9 +76,13 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
   // Modelo 2: precisa dos municípios (ver municipios.js). Uma UF por vez, ou o Brasil na presidência,
   // que soma as 27 UFs e o exterior depois que a carga em segundo plano termina.
-  const projecaoEstratificada = async (item) => {
+  const projecaoPorMunicipios = async (item, modeloId) => {
     const { cargo, uf, eleicao } = item.alvo;
-    const indisponivel = (motivo, extra = {}) => ({ modelo: 'estratificado', disponivel: false, motivo, ...extra });
+    const indisponivel = (motivo, extra = {}) => ({ modelo: modeloId, disponivel: false, motivo, ...extra });
+    if (modeloId === 'swing' && cargo !== 1) return indisponivel('O swing histórico, por enquanto, só existe para presidente.');
+    const projetarDaUf = (foto, ufDados, limite) => (modeloId === 'swing'
+      ? projetarUfSwing({ foto, ufDados, anterior, limite })
+      : projetarUf({ foto, ufDados, limite }));
     if (!municipios) return indisponivel('Os resultados por município não estão ativos nesta execução.');
     if (![1, 3, 5].includes(cargo)) return indisponivel('Este modelo vale só para presidente, governador e senador.');
 
@@ -86,9 +96,9 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
           carregando: true, progresso: { feitos: prontas, total: ufs.length, unidade: 'UFs' },
         });
       }
-      const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) }));
+      const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarDaUf(foto, ufDados), ...tamanhoUf({ foto, ufDados }) }));
       return {
-        ...projetarBrasil(porUf, { limite: 50 }),
+        ...projetarBrasil(porUf, { limite: 50, modelo: modeloId }),
         carregando: false,
         atualizadoEm: Math.min(...fotos.map(({ foto }) => foto.atualizadoEm ?? Infinity)),
       };
@@ -98,7 +108,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     if (snap.primeiraCarga) {
       return indisponivel(snap.erro ?? 'Carregando os resultados dos municípios…', { carregando: snap.carregando, progresso: snap.progresso });
     }
-    const r = projetarUf({ foto: snap, ufDados: item.dados, limite: 50 });
+    const r = projetarDaUf(snap, item.dados, 50);
     return {
       ...r,
       carregando: snap.carregando,
@@ -188,7 +198,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     const h = /^\/api\/historico\/(\d+)\/([a-z]{2})$/.exec(pathname);
     if (h) {
       const modelo = new URL(req.url, 'http://localhost').searchParams.get('modelo') ?? 'ingenuo';
-      const serie = historico && ['ingenuo', 'estratificado'].includes(modelo) ? lerSerie(historico, `${Number(h[1])}:${h[2]}`, modelo) : null;
+      const serie = historico && ['ingenuo', 'estratificado', 'swing'].includes(modelo) ? lerSerie(historico, `${Number(h[1])}:${h[2]}`, modelo) : null;
       if (!serie) return enviarJson(res, 404, { erro: 'Sem histórico gravado para esta abrangência.' });
       return enviarJson(res, 200, serie);
     }
@@ -205,11 +215,11 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     const p = /^\/api\/projecao\/([a-z]+)\/(\d+)\/([a-z]{2})$/.exec(pathname);
     if (p) {
-      const modelo = modeloPorId(p[1]);
+      const modelo = modeloPorIdAtivo(p[1]);
       const item = apuracao.estado.get(`${Number(p[2])}:${p[3]}`);
       if (!modelo || !item) return enviarJson(res, 404, { erro: 'Modelo, cargo ou abrangência desconhecidos.' });
       if (!modelo.disponivel) return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: modelo.motivo });
-      if (modelo.id === 'estratificado') return enviarJson(res, 200, await projecaoEstratificada(item));
+      if (modelo.id === 'estratificado' || modelo.id === 'swing') return enviarJson(res, 200, await projecaoPorMunicipios(item, modelo.id));
       if (!item.dados) return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: 'O arquivo desta abrangência ainda não está disponível no TSE.' });
       const limite = item.alvo.cargo >= 6 ? 20 : 50; // deputados: só os mais votados
       return enviarJson(res, 200, { ...projetar(modelo.id, item.dados, { limite }), geradoEm: item.dados.geradoEm });

@@ -11,6 +11,7 @@ import { Limitador } from './src/limitador.js';
 import { Municipios } from './src/municipios.js';
 import { criarCacheDisco } from './src/cache-disco.js';
 import { Historico, registrarCiclo } from './src/historico.js';
+import { carregarAnterior } from './src/anterior.js';
 import { criarServidor } from './src/servidor.js';
 import { abrirNoNavegador } from './src/abrir.js';
 
@@ -62,6 +63,15 @@ const municipios = new Municipios({
   validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
 });
 
+// Resultado de 2022 por município, para o modelo de swing (opcional: sem os arquivos o modelo fica indisponível).
+let prior2022 = null;
+try {
+  prior2022 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2022-t1.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente.json'));
+  for (const aviso of prior2022.avisos) console.warn(`Mapeamento de 2022: ${aviso}`);
+} catch (erro) {
+  console.warn(`Swing histórico desligado: ${erro.message}`);
+}
+
 // Histórico da apuração (gráfico de evolução): um arquivo por ciclo/turno, em dados/ (fora do git). A
 // demonstração grava num arquivo próprio e recomeça do zero a cada execução.
 const historico = new Historico({
@@ -69,7 +79,7 @@ const historico = new Historico({
   zerar: cfg.demo,
 });
 apuracao.on('ciclo', (c) => {
-  registrarCiclo({ chaves: c.chavesAlteradas, apuracao, municipios, historico });
+  registrarCiclo({ chaves: c.chavesAlteradas, apuracao, municipios, historico, anterior: prior2022 });
 });
 
 // Por padrão o terminal fica quieto: loga o primeiro ciclo e só avisa quando erros ou arquivos
@@ -101,6 +111,7 @@ const servidor = criarServidor({
   municipios,
   historico,
   limitador,
+  anterior: prior2022,
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
   diretorioPublico: path.resolve(raiz, 'public'),
 });

@@ -10,6 +10,7 @@
 import { appendFile, existsSync, mkdirSync, readFileSync, writeFile } from 'node:fs';
 import path from 'node:path';
 import { projetarBrasil, projetarIngenuo, projetarUf, tamanhoUf } from './projecao.js';
+import { projetarUfSwing } from './swing.js';
 
 export const CARGOS_HISTORICO = [1, 3, 5];
 
@@ -83,10 +84,11 @@ function escolherCandidatos(candidatos) {
 
 // Calcula a projeção de cada modelo para o arquivo de `item` AGORA. Estratificado só com municípios já
 // carregados (não dispara carga nenhuma); sem eles, grava null.
-export async function projecoesDoMomento(item, municipios, apuracao) {
+export async function projecoesDoMomento(item, municipios, apuracao, anterior = null) {
   const { cargo, uf, eleicao } = item.alvo;
   const ingenuo = projetarIngenuo(item.dados, { limite: 50 });
   let estratificado = null;
+  let swing = null;
   if (municipios) {
     if (uf === 'br') {
       if (cargo === 1) {
@@ -94,28 +96,35 @@ export async function projecoesDoMomento(item, municipios, apuracao) {
         const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao?.estado.get(`${cargo}:${u}`)?.dados ?? null }));
         if (fotos.every(({ foto }) => !foto.primeiraCarga && !foto.carregando)) {
           estratificado = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50 });
+          if (anterior) {
+            swing = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUfSwing({ foto, ufDados, anterior }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50, modelo: 'swing' });
+          }
         }
       }
     } else {
       const foto = municipios.espiar({ eleicao, cargo, uf });
-      if (!foto.primeiraCarga) estratificado = projetarUf({ foto, ufDados: item.dados, limite: 50 });
+      if (!foto.primeiraCarga) {
+        estratificado = projetarUf({ foto, ufDados: item.dados, limite: 50 });
+        if (anterior && cargo === 1) swing = projetarUfSwing({ foto, ufDados: item.dados, anterior, limite: 50 });
+      }
     }
   }
   return {
     ingenuo: ingenuo.disponivel ? compacto(ingenuo.candidatos) : null,
     estratificado: estratificado?.disponivel ? compacto(estratificado.candidatos) : null,
+    swing: swing?.disponivel ? compacto(swing.candidatos) : null,
   };
 }
 
 // Grava um ponto para cada chave alterada que tenha votos apurados. Nunca lança: o histórico não pode derrubar o ciclo.
-export async function registrarCiclo({ chaves, apuracao, municipios, historico }) {
+export async function registrarCiclo({ chaves, apuracao, municipios, historico, anterior = null }) {
   for (const chave of chaves) {
     try {
       const item = apuracao.estado.get(chave);
       const d = item?.dados;
       if (!d || !CARGOS_HISTORICO.includes(item.alvo.cargo) || !d.geradoEm || !(d.secoes.totalizadas > 0)) continue;
       if (historico.ultimoT(chave) === d.geradoEm) continue;
-      const proj = await projecoesDoMomento(item, municipios, apuracao);
+      const proj = await projecoesDoMomento(item, municipios, apuracao, anterior);
       historico.registrar({
         t: d.geradoEm,
         chave,

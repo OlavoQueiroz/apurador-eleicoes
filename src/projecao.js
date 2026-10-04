@@ -24,6 +24,16 @@ export const MODELOS = [
       + 'estiverem fora de sincronia, volta para a extrapolação simples. Só presidente, governador e senador.',
   },
   {
+    id: 'swing',
+    nome: 'Swing histórico (2022)',
+    disponivel: true,
+    descricao:
+      'Mede quanto cada candidato está acima ou abaixo do que o campo político dele teve em 2022 nos lugares já '
+      + 'apurados e aplica essa variação ao que falta, lugar por lugar. Parte dos mesmos grandes municípios e do '
+      + 'resto do estado do modelo por município. Hoje só para presidente; quem herda os votos de 2022 está em '
+      + 'dados-historicos/mapeamento-presidente.json.',
+  },
+  {
     id: 'bayesiano',
     nome: 'Bayesiano com pesquisas',
     disponivel: false,
@@ -71,7 +81,7 @@ export function projetarIngenuo(dados, { limite = 20 } = {}) {
   return { ...base, disponivel: true, validosProjetados, votosFaltantes: faltantes, candidatos };
 }
 
-const fracaoMunicipio = (d) => {
+export const fracaoMunicipio = (d) => {
   if (d.totalizacaoFinal) return 1;
   const { total, totalizadas } = d.secoes;
   return total > 0 && totalizadas > 0 ? Math.min(1, totalizadas / total) : 0;
@@ -162,8 +172,9 @@ export function projetarEstratificado(municipios, { limite = 20, totalMunicipios
 // Os arquivos têm horários de geração diferentes. Se as seções da UF, do acompanhamento e dos grandes não baterem
 // (além de `tolerancia`, fração do total de seções da UF), ou se a subtração der negativo, devolve
 // `descompasso` e quem chamou usa a extrapolação simples (plano B).
-export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tolerancia = 0.01 }) {
-  const base = { modelo: 'estratificado', modo: 'grandes+resto' };
+// Parte comum aos modelos com "municípios grandes + resto": separa o resto do estado (arquivo da UF menos os
+// grandes) e confere a sincronia dos arquivos. Devolve { erro } (descompasso) ou as partes do resto.
+export function separarResto({ grandes, ufDados, detalhes, tolerancia = 0.01 }) {
   const idsGrandes = new Set(grandes.map((g) => g.codigoMunicipio));
   const secoesUf = ufDados.totalizacaoFinal
     ? { total: ufDados.secoes.total, totalizadas: ufDados.secoes.total }
@@ -174,6 +185,7 @@ export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tole
   let restoTotalizadas = 0;
   let restoAptos = 0;
   let restoMunicipios = 0;
+  const restoIds = [];
   let acompTotalizadas = 0;
   let grandesAcomp = 0;
   for (const [codigo, d] of detalhes) {
@@ -184,6 +196,7 @@ export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tole
       restoTotalizadas += d.secoes.totalizadas;
       restoAptos += d.aptos;
       restoMunicipios += 1;
+      restoIds.push(codigo);
     }
   }
   const grandesArquivos = grandes.reduce((t, g) => t + g.secoes.totalizadas, 0);
@@ -197,7 +210,7 @@ export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tole
     diferencaGrandesPct: dessincGrandes * 100,
   };
   if (Math.max(dessincUf, dessincGrandes) > tolerancia) {
-    return { ...base, disponivel: false, descompasso: true, conferencia, motivo: 'Os arquivos da UF e dos municípios estão em momentos diferentes da apuração.' };
+    return { erro: { descompasso: true, conferencia, motivo: 'Os arquivos da UF e dos municípios estão em momentos diferentes da apuração.' } };
   }
 
   // Votos do resto = UF − grandes, por candidato.
@@ -223,9 +236,22 @@ export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tole
   }
   const restoValidosBruto = ufDados.votos.validos - validosGrandes;
   if (negativo || restoValidosBruto < -folga) {
-    return { ...base, disponivel: false, descompasso: true, conferencia, motivo: 'A soma dos municípios grandes passa do total da UF: arquivos em momentos diferentes.' };
+    return { erro: { descompasso: true, conferencia, motivo: 'A soma dos municípios grandes passa do total da UF: arquivos em momentos diferentes.' } };
   }
   const restoValidos = Math.max(0, restoValidosBruto);
+  return {
+    secoesUf, conferencia, info, votosUf, restoVotos, restoValidos, restoIds, restoMunicipios,
+    restoTotal, restoTotalizadas, restoAptos,
+  };
+}
+
+export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tolerancia = 0.01 }) {
+  const base = { modelo: 'estratificado', modo: 'grandes+resto' };
+  const sep = separarResto({ grandes, ufDados, detalhes, tolerancia });
+  if (sep.erro) return { ...base, disponivel: false, ...sep.erro };
+  const {
+    secoesUf, conferencia, info, votosUf, restoVotos, restoValidos, restoMunicipios, restoTotal, restoTotalizadas, restoAptos,
+  } = sep;
 
   // Estratos já iniciados contribuem com o que mediram; os que ainda não têm votos entram pelo eleitorado.
   const projetado = new Map(); // sq → votos esperados dos estratos iniciados
@@ -332,8 +358,8 @@ export function tamanhoUf({ foto, ufDados }) {
 // Modelo 2 no Brasil (presidente): soma a projeção de cada UF. Uma UF em que nada foi apurado ainda entra pelo
 // eleitorado e pela média nacional das UFs que já têm votos. `ufs` = [{ uf, r, aptos, secoes }], onde `r` é a
 // projeção da UF (projetarUf). Candidatos são identificados pelo número (nacional na presidência).
-export function projetarBrasil(ufs, { limite = 20 } = {}) {
-  const base = { modelo: 'estratificado' };
+export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado' } = {}) {
+  const base = { modelo };
   const comVotos = ufs.filter((u) => u.r.disponivel);
   if (!comVotos.length) return { ...base, disponivel: false, motivo: 'Ainda não há votos apurados em nenhum município.' };
   const semVotos = ufs.filter((u) => !u.r.disponivel);

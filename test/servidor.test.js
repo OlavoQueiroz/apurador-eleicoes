@@ -113,7 +113,8 @@ test('SSE: avisa o cliente a cada ciclo, com as chaves alteradas', async () => {
 
 test('/api/projecao: modelo indisponível explica o motivo, e sem dados não projeta', async () => {
   const meta = await (await fetch(`${base}/api/meta`)).json();
-  assert.deepEqual(meta.modelos.map((m) => m.id), ['ingenuo', 'estratificado', 'bayesiano']);
+  assert.deepEqual(meta.modelos.map((m) => m.id), ['ingenuo', 'estratificado', 'swing', 'bayesiano']);
+  assert.equal(meta.modelos.find((m) => m.id === 'swing').disponivel, false, 'sem dados de 2022 carregados');
 
   const estratificado = await (await fetch(`${base}/api/projecao/estratificado/1/br`)).json();
   assert.equal(estratificado.disponivel, false);

@@ -845,6 +845,16 @@ function municipiosHtml(p) {
   if (p.ufs?.planoB > 0) avisos.push(`${fmtInt(p.ufs.planoB)} UF(s) estão na extrapolação simples porque os arquivos delas estão em momentos diferentes.`);
   if (!p.municipios) return avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('');
 
+  // Swing histórico: quanto cada candidato está acima ou abaixo do que o campo dele teve em 2022 nos lugares já apurados.
+  const swingHtml = p.swing?.length
+    ? `<h3 class="secao">Variação em relação a 2022</h3>
+       <div class="tabela-rolagem"><table class="tabela">
+         <thead><tr><th>Candidato</th><th class="num">Pontos percentuais</th></tr></thead>
+         <tbody>${p.swing.slice(0, 8).map((x) => `<tr><td><b>${esc(x.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(x.partido)}">${esc(x.partido)}</span></td>
+           <td class="num">${x.pontos > 0 ? '+' : ''}${fmtPct(x.pontos, 1)}</td></tr>`).join('')}</tbody></table></div>
+       <p class="muted pequeno">Medido onde a apuração já passa de 50% e somado ao resultado de 2022 de cada lugar. Votos de 2022 sem herdeiro (ex.: candidatos de partidos que não concorrem) entram pela própria variação.</p>`
+    : '';
+
   const m = p.municipios;
   const grandes = m.grandes != null;
   if (m.semVotos > 0 && p.parteEstimadaPelaUf > 0) {
@@ -867,7 +877,8 @@ function municipiosHtml(p) {
       <div class="numero"><b>${fmtInt(m.comVotos)}</b><span>${rotulo} de ${fmtInt(grandes ? m.grandes : m.total)}</span></div>
       <div class="numero"><b>${fmtInt(m.semVotos)}</b><span>${grandes ? 'Grandes ainda sem votos' : 'Municípios ainda sem votos'}</span></div>
     </div>
-    ${avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('')}`;
+    ${avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('')}
+    ${swingHtml}`;
 }
 
 function detalheProjecaoHtml() {
