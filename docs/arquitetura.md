@@ -284,7 +284,7 @@ test/                        testes e fixtures
 - **Nenhum modelo foi validado com votos reais.** Os arquivos existentes antes da votação têm votos zerados; os cálculos
   foram testados com dados sintéticos e a lógica com testes, mas o comportamento sob apuração real (sobretudo o
   descompasso entre arquivos) só aparece ao vivo. A validação deve ser feita depois, com o histórico gravado.
-- **Descompasso entre arquivos** (UF, município, acompanhamento): tratado com tolerância de 1% e plano B, mas o tamanho
+- **Descompasso entre arquivos** (UF, município, acompanhamento): tratado com tolerância adaptativa (1% no fim, 3% no começo, até 4% no meio da apuração) e plano B, mas o tamanho
   real do descompasso é desconhecido.
 - **No resto do estado** a projeção supõe que as seções que faltam votam como as que já abriram. Em capitais grandes a
   ordem de apuração dentro da cidade ainda distorce (a unidade é o município, não a zona).

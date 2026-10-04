@@ -272,14 +272,19 @@ test('projetarBrasil: sem swing medido ou sem 2022 de nenhuma UF zerada, cai na 
   assert.equal(semDado.validosProjetados, projetarBrasil(ufs).validosProjetados);
 });
 
-test('tolerância de sincronia: mais folgada no começo da apuração, 1% no fim', async () => {
+test('tolerância de sincronia: 3% no começo, até 4% no meio da apuração e 1% no fim', async () => {
   const { toleranciaDescompasso } = await import('../src/projecao.js');
   assert.ok(Math.abs(toleranciaDescompasso(0) - 0.03) < 1e-12);
   assert.ok(Math.abs(toleranciaDescompasso(1) - 0.01) < 1e-12);
-  assert.ok(toleranciaDescompasso(0.1) > toleranciaDescompasso(0.5) && toleranciaDescompasso(0.5) > toleranciaDescompasso(0.9));
+  assert.ok(Math.abs(toleranciaDescompasso(0.5) - 0.04) < 1e-12); // pico no meio
+  // nunca é menor que a curva anterior (3% → 1%) e cai de novo na reta final
+  for (let f = 0; f <= 1; f += 0.05) assert.ok(toleranciaDescompasso(f) >= 0.01 + 0.02 * (1 - f) ** 2 - 1e-12, `f=${f}`);
+  assert.ok(toleranciaDescompasso(0.5) > toleranciaDescompasso(0.8) && toleranciaDescompasso(0.8) > toleranciaDescompasso(0.95));
+  // o caso real de SP (governador, 18h49): 48.719 de 103.656 seções na UF e 46.044 no acompanhamento, 2,58% de diferença
+  assert.ok(toleranciaDescompasso(48719 / 103656) > (48719 - 46044) / 103656);
 });
 
-test('uma diferença de 2% das seções é aceita no começo da apuração e vira plano B mais tarde', () => {
+test('uma diferença de 2% das seções é aceita no começo da apuração; no meio cabe até ~4% e, passando disso, vira plano B', () => {
   const montar = (totalizadasUf, capital, p1, p2, votosUf, votosCapital) => projetarComResto({
     grandes: [grande(votosCapital, capital)],
     ufDados: ufArquivo({ ...votosUf, totalizadas: totalizadasUf }),
@@ -292,8 +297,11 @@ test('uma diferença de 2% das seções é aceita no começo da apuração e vir
   // Começo (6% das seções na UF): o acompanhamento já tem 8, diferença de 2% do total → dentro da tolerância de ~2,8%.
   const cedo = montar(6, 4, 3, 1, { a: 70, b: 30 }, { a: 50, b: 20 });
   assert.equal(cedo.disponivel, true);
-  // Mais adiante (60% na UF): a mesma diferença de 2% já passa da tolerância de ~1,3%.
-  const tarde = montar(60, 20, 24, 18, { a: 700, b: 300 }, { a: 500, b: 200 });
+  // No meio (47% na UF): uma diferença de 3% (o acompanhamento sai um pouco antes ou depois, como em SP) cabe nos ~4% do meio.
+  const meio = montar(47, 16, 16, 12, { a: 470, b: 230 }, { a: 300, b: 150 });
+  assert.equal(meio.disponivel, true);
+  // Mais adiante (60% na UF): uma diferença de 5% já passa da tolerância de ~3,9%.
+  const tarde = montar(60, 20, 20, 15, { a: 700, b: 300 }, { a: 500, b: 200 });
   assert.equal(tarde.descompasso, true);
   // Uma tolerância explícita continua valendo.
   assert.equal(projetarComResto({
