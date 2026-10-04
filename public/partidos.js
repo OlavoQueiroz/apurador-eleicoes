@@ -4,6 +4,7 @@
 
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
+import { elegiveisPelaConta, quantosClassificam } from './chances.js';
 import { focoHtml } from './partido-foco.js';
 import { flagsEleitoPelaConta } from './chances.js';
 
@@ -29,6 +30,7 @@ export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
 const PENDENTE = { id: 'pendente', nome: '2026 ainda não definido', cor: 'var(--vazio)' }; // metade cinza do mapa
 const DESCRICAO_SITUACAO = {
   eleito: 'eleito',
+  'eleito-conta': 'eleito* pela conta do painel, o TSE ainda não marcou',
   'segundo-turno': '2º turno',
   'provavel-1t': 'na frente com mais de 50%, pode fechar no 1º turno',
   'provavel-2t': 'na frente com 50% ou menos, provável 2º turno',
@@ -94,14 +96,18 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 // A apuração de 2026 a partir do resumo de cada UF (itens de /api/resumo do cargo, sem "br").
 //   confirmados: eleitos que o TSE já marcou · naFrente: vagas que ainda não têm eleito marcado, atribuídas por ora a
 //   quem lidera (Câmara: vagas já conquistadas pelo partido ou federação) · ocupadas: cadeiras do Senado fora de disputa.
-// Situação de um governador em 2026: 'eleito' (marcado pelo TSE ou dado como vencedor sem 2º turno pela conta do painel, o "Eleito*"
-// de chances.js), 'segundo-turno' (marcado pelo TSE), 'provavel-1t' (lidera com mais de 50% dos válidos, sem a conta fechar),
-// 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
+// Situação de um governador em 2026: 'eleito' (marcado pelo TSE), 'segundo-turno' (marcado pelo TSE), 'eleito-conta' (o TSE ainda
+// não marcou, mas a conta do painel dá como vencedor sem 2º turno, o "Eleito*" de chances.js), 'provavel-1t' (lidera com mais de
+// 50% dos válidos, sem a conta fechar), 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
 export function situacaoGovernador(item) {
   const colocados = item.colocados ?? [];
   if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
-  if (flagsEleitoPelaConta(item, 3)[0]) return 'eleito'; // dado como vencedor sem 2º turno pela conta do painel (public/chances.js)
   if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
+  const [daConta] = elegiveisPelaConta({
+    votos: colocados.map((c) => c.votos), k: quantosClassificam({ cargo: 3, vagas: item.vagas, turno: item.turno }), primeiroTurno: item.turno !== 2,
+    validos: item.validos ?? 0, eleitorado: item.eleitorado ?? null, pctSecoes: item.secoes?.pctTotalizadas ?? null,
+  });
+  if (daConta) return 'eleito-conta';
   const lider = colocados.find((c) => c.votos > 0);
   if (!lider) return 'sem-dado';
   return lider.pct > 50 ? 'provavel-1t' : 'provavel-2t';
