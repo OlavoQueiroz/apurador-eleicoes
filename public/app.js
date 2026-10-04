@@ -59,6 +59,7 @@ const estado = {
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
+  numerosAbertos: false, // detalhe do arquivo: os quatro números (comparecimento etc.) abertos ou só o resumo
   cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
   inferidos: null, // Câmara: Map partido → [{ nome, uf }] das vagas já conquistadas por `vag` cujo eleito o TSE ainda não marcou
   lideres: null, // Senado: Map partido → [{ nome, uf }] dos mais votados que ainda não foram eleitos
@@ -286,7 +287,7 @@ async function buscarHistorico() {
 // Insere o gráfico logo abaixo dos números do arquivo aberto.
 function montarGraficoEvolucao(raiz) {
   const h = estado.historico;
-  const ancora = raiz.querySelector('.numeros');
+  const ancora = raiz.querySelector('.mais-num');
   if (!querHistorico() || !h || h.chave !== chaveHistorico() || !ancora) return;
   const secao = document.createElement('section');
   secao.className = 'grafico';
@@ -625,16 +626,25 @@ function progressoHtml({ total, totalizadas, pct, pctTotalizadas }, rotulo = 'Se
   </div>`;
 }
 
+// Informação de apoio: fechado, só comparecimento e abstenção numa linha; aberto, os quatro números com os valores
+// absolutos. O estado (aberto ou não) sobrevive aos redesenhos do painel.
 function numerosHtml(dados) {
   const { eleitorado: e, votos: v } = dados;
   const caixa = (rotulo, valor, pct) => `<div class="numero"><b>${fmtPct(pct)}</b><span>${rotulo}</span><span class="valor">${fmtInt(valor)}</span></div>`;
+  const resumo = (rotulo, pct) => `<span><i>${rotulo}</i> <b>${fmtPct(pct)}</b></span>`;
   // Brancos e nulos não entram no cálculo de quem vence, então ficam juntos num bloco só.
-  return `<div class="numeros quatro">
-    ${caixa('Comparecimento', e.comparecimento, e.pctComparecimento)}
-    ${caixa('Abstenção', e.abstencao, e.pctAbstencao)}
-    ${caixa('Votos válidos', v.validos, v.pctValidos)}
-    ${caixa('Brancos e nulos', v.brancos + v.nulos, v.pctBrancos + v.pctNulos)}
-  </div>`;
+  return `<details class="mais-num"${estado.numerosAbertos ? ' open' : ''}>
+    <summary>
+      <span class="resumo-linha">${resumo('Comparecimento', e.pctComparecimento)}${resumo('Abstenção', e.pctAbstencao)}</span>
+      <span class="alterna"><span class="mais-ab">Mais números ▾</span><span class="mais-fe">Menos ▴</span></span>
+    </summary>
+    <div class="numeros quatro">
+      ${caixa('Comparecimento', e.comparecimento, e.pctComparecimento)}
+      ${caixa('Abstenção', e.abstencao, e.pctAbstencao)}
+      ${caixa('Votos válidos', v.validos, v.pctValidos)}
+      ${caixa('Brancos e nulos', v.brancos + v.nulos, v.pctBrancos + v.pctNulos)}
+    </div>
+  </details>`;
 }
 
 function selosHtml(dados, status) {
@@ -1028,6 +1038,7 @@ function renderDetalhe() {
     topoDetalhe.append(acoes);
   }
   $('.como-calcula', raiz)?.addEventListener('toggle', (e) => { estado.comoAberto = e.target.open; });
+  $('.mais-num', raiz)?.addEventListener('toggle', (e) => { estado.numerosAbertos = e.target.open; });
 
   const busca = $('#busca', raiz);
   if (busca) {
