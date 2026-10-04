@@ -1,9 +1,11 @@
 /* Gráfico "Evolução da apuração" (ver grafico.js). Usa as variáveis de cor de style.css. */
 .grafico { margin-top: 18px; }
 .gr-barra { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; font-size: 13px; }
-.gr-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
-.gr-seg button { border: 0; background: transparent; padding: 5px 12px; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; }
-.gr-seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); font-weight: 650; }
+/* Seletor compacto: mesmo desenho do .seg de style.css (trilho cinza, seleção em branco), em tamanho menor. */
+.gr-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--track); border-radius: 11px; }
+.gr-seg button { border: 0; background: transparent; padding: 4px 12px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 550; color: var(--muted); cursor: pointer; }
+.gr-seg button:hover { color: var(--text); }
+.gr-seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 650; box-shadow: 0 1px 3px rgba(15, 27, 45, 0.18); }
 .gr-proj { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
 .gr-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .gr-chip {

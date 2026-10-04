@@ -511,21 +511,18 @@ function rotulosMapaHtml(ativas) {
   }).join('');
 }
 
-function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
+function legendaHtml({ unidade = 'UF' } = {}) {
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
-  if (ehMajoritario(estado.cargo)) {
-    const partidos = [...new Set(lideres ?? itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
-    const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-    if (unidade === 'UF' && estado.visao === 'projecao') {
-      const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
-      const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-      return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
-        <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
-    }
-    return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
-      <div class="leg-linha"><span class="leg-titulo">Apuração</span><span class="muted">pouca</span>${gradiente('var(--text)')}<span class="muted">toda</span></div>`;
+  // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
+  const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
+  // Fora da projeção não há chave de cores dos partidos: o painel ao lado já mostra a etiqueta colorida de cada um.
+  if (ehMajoritario(estado.cargo) && unidade === 'UF' && estado.visao === 'projecao') {
+    const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
+    const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
+      <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
   }
-  return `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
+  return totalizadas;
 }
 
 function renderGrade() {
@@ -549,7 +546,7 @@ function renderGrade() {
   if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
   destacarMunicipio();
   $('#legenda').innerHTML = municipal
-    ? legendaHtml({ lideres: estado.mun.resultados.municipios.map((m) => m.lider?.partido).filter(Boolean), unidade: 'município' })
+    ? legendaHtml({ unidade: 'município' })
       + (estado.visao === 'projecao' ? '<p class="muted pequeno leg-nota">Municípios: apuração atual. A projeção é por UF.</p>' : '')
     : legendaHtml();
 }
@@ -660,25 +657,22 @@ function pilulaSituacao(c) {
   return '';
 }
 
-function extraCandidato(c) {
-  if (!c.vices?.length) return '';
-  const rotulo = { v: 'Vice', s1: '1º suplente', s2: '2º suplente' };
-  const texto = c.vices.map((x) => `${rotulo[x.tipo] ?? 'Vice'}: ${esc(x.nomeUrna)}`).join(' · ');
-  return `<span class="cand-extra">${texto}</span>`;
-}
-
-function candidatoHtml(c, posicao, largura) {
+// Antes de qualquer voto não há o que mostrar: sem barra, sem líder e um traço no lugar de "0,00%" repetido.
+function candidatoHtml(c, posicao, largura, semVotos = false) {
   const cor = corPartido(c.partido);
-  const destaque = estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? ' class="destaque"' : '';
-  return `<li${destaque} style="--cor:${cor}">
+  const classes = [
+    estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? 'destaque' : '',
+    posicao === 1 && !semVotos ? 'lider' : '',
+  ].filter(Boolean).join(' ');
+  // Em disputa proporcional o número identifica o candidato (e a busca usa ele); nos majoritários é o do partido.
+  const numero = ehProporcional(estado.cargo) ? `<span class="cand-num">${esc(c.numero)}</span>` : '';
+  return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong><span class="cand-num">${esc(c.numero)}</span>${extraCandidato(c)}</div>
-      <span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>
-      ${pilulaSituacao(c)}
-      <div class="cand-votos"><b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small></div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}</div>
+      <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
-    <div class="barra"><i style="width:${largura}%"></i></div>
+    ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
   </li>`;
 }
 
@@ -713,9 +707,7 @@ function detalheArquivoHtml() {
   const d = det.dados;
   const aviso = [];
   if (det.status === 'erro') aviso.push(`<p class="aviso-bloco erro">Falha ao atualizar: ${esc(det.erro)}.</p>`);
-  if (d.secoes.totalizadas === 0) {
-    aviso.push('<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>');
-  } else if (!d.totalizacaoFinal) {
+  if (d.secoes.totalizadas > 0 && !d.totalizacaoFinal) {
     aviso.push('<p class="aviso-bloco">Resultado parcial: os percentuais refletem só as seções já totalizadas e podem mudar bastante, porque as regiões chegam em ordens diferentes.</p>');
   }
 
@@ -726,6 +718,7 @@ function detalheArquivoHtml() {
     topo = `<p class="aviso-bloco"><b>${esc(a.nomeUrna)}</b> está ${fmtInt(a.votos - b.votos)} votos (${fmtPct(a.pct - b.pct)} pontos) à frente de <b>${esc(b.nomeUrna)}</b>.</p>`;
   }
 
+  const semVotos = candidatos.every((c) => !c.votos);
   let lista;
   let fixado = '';
   if (ehProporcional(d.cargo.codigo)) {
@@ -743,23 +736,24 @@ function detalheArquivoHtml() {
     const escolhido = estado.destaque?.tipo === 'c' && !termo ? candidatos.find((c) => String(c.sq) === estado.destaque.id) : null;
     fixado = escolhido && !visiveis.includes(escolhido)
       ? `<h3 class="secao sel-fixado">Candidato selecionado</h3>
-        <ol class="candidatos" style="list-style:none;padding:0">${candidatoHtml(escolhido, posicaoGeral.get(escolhido.sq), largura(escolhido))}</ol>`
+        <ol class="candidatos" style="list-style:none;padding:0">${candidatoHtml(escolhido, posicaoGeral.get(escolhido.sq), largura(escolhido), semVotos)}</ol>`
       : '';
     lista = `<div class="ferramentas">
         <input id="busca" type="search" placeholder="Buscar candidato, número ou partido" value="${esc(estado.busca)}" autocomplete="off">
         ${termo || filtrados.length <= 20 ? '' : `<button class="botao" id="mostrar-todos">${estado.mostrarTodos ? 'Mostrar só os 20 primeiros' : `Mostrar todos (${fmtInt(filtrados.length)})`}</button>`}
       </div>
-      <ol class="candidatos" style="list-style:none;padding:0">${visiveis.map((c) => candidatoHtml(c, posicaoGeral.get(c.sq), largura(c))).join('')}</ol>
+      <ol class="candidatos" style="list-style:none;padding:0">${visiveis.map((c) => candidatoHtml(c, posicaoGeral.get(c.sq), largura(c), semVotos)).join('')}</ol>
       ${filtrados.length === 0 ? '<p class="vazio-msg">Nenhum candidato encontrado.</p>' : ''}
       ${termo && filtrados.length > limite ? `<p class="muted pequeno">Mostrando ${limite} de ${fmtInt(filtrados.length)}. Refine a busca.</p>` : ''}
       ${agrupamentosHtml(d)}`;
   } else {
-    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct)).join('')}</ol>`;
+    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos)).join('')}</ol>`;
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
+  const subtitulo = ehProporcional(d.cargo.codigo) ? `${fmtInt(candidatos.length)} candidatos${vagas}` : d.cargo.vagas > 1 ? `${d.cargo.vagas} vagas` : '';
   return `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
-      <p class="muted pequeno">${ehProporcional(d.cargo.codigo) ? `${fmtInt(candidatos.length)} candidatos${vagas}` : `${d.cargo.vagas > 1 ? `${d.cargo.vagas} vagas · ` : ''}${estado.meta.demo ? 'Simulação de' : 'Dados do TSE de'} ${esc(fmtDataHora(d.geradoEm))}`}</p></div>
+      ${subtitulo ? `<p class="muted pequeno">${subtitulo}</p>` : ''}</div>
       ${selosHtml(d, det.status)}</div>
     ${aviso.join('')}
     ${progressoHtml(d.secoes)}
@@ -853,7 +847,7 @@ function detalheAgregadoHtml() {
 
   const barras = partidos.length
     ? `<h3 class="secao">Eleitos por partido</h3>
-       <ol class="candidatos">${partidos.map(([p, n], i) => `<li style="--cor:${corPartido(p)}">
+       <ol class="candidatos">${partidos.map(([p, n], i) => `<li class="${i === 0 ? 'lider' : ''}" style="--cor:${corPartido(p)}">
          <div class="cand-topo"><span class="cand-pos">${i + 1}</span><div class="cand-nome"><strong>${esc(p)}</strong></div>
          <div class="cand-votos"><b>${fmtInt(n)}</b></div></div>
          <div class="barra"><i style="width:${(n / maior) * 100}%"></i></div></li>`).join('')}</ol>`
@@ -879,9 +873,7 @@ function detalheAgregadoHtml() {
         <tbody>${linhas}</tbody></table></div>`;
   }
 
-  return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2>
-      <p class="muted pequeno">Soma das UFs. Selecione uma UF no mapa para ver os candidatos.</p></div></div>
-    ${secoes.totalizadas === 0 ? '<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>' : ''}
+  return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
     ${meta.codigo === 3 ? '' : numeros}${barras}${tabela}`;
@@ -1086,14 +1078,52 @@ function render() {
   renderEstado();
 }
 
+// O que o card do topo resume: o arquivo aberto (UF ou Brasil da presidência) ou, nas visões "Brasil" somadas
+// (governador, senado, câmara), as UFs juntas, com a hora do arquivo mais recente.
+function origemEstado() {
+  if (ehAgregado()) {
+    const itens = itensDoCargo();
+    if (!itens.length) return null;
+    const { totalizadas, pct } = agregadoSecoes();
+    const geradoEm = itens.map(({ item }) => item.geradoEm).filter(Boolean).sort().at(-1) ?? null;
+    return { geradoEm, totalizadas, pct, final: itens.every(({ item }) => item.totalizacaoFinal) };
+  }
+  const fonte = estado.detalhe?.dados ?? itemResumo(estado.cargo, estado.uf);
+  if (!fonte?.secoes) return null;
+  return { geradoEm: fonte.geradoEm ?? null, totalizadas: fonte.secoes.totalizadas, pct: fonte.secoes.pctTotalizadas, final: !!fonte.totalizacaoFinal };
+}
+
 function renderEstado() {
   const textos = { 'ao-vivo': 'Ao vivo', reconectando: 'Reconectando…', conectando: 'Conectando…' };
   $('#pulso').dataset.estado = estado.conexao;
   $('#estado-texto').textContent = textos[estado.conexao];
-  const verificado = estado.ultimoCicloEm
+  $('#cel-conexao').title = estado.ultimoCicloEm
     ? `Verificado há ${Math.max(0, Math.round((Date.now() - estado.ultimoCicloEm) / 1000))} s · a cada ${estado.meta.intervaloSegundos} s`
     : 'Aguardando a primeira verificação…';
-  $('#estado-detalhe').textContent = verificado;
+
+  const origem = origemEstado();
+  $('#tse-rotulo').textContent = estado.meta.demo ? 'Simulação' : 'Arquivo do TSE';
+  $('#tse-hora').textContent = origem?.geradoEm ? fmtDataHora(origem.geradoEm) : '—';
+
+  const ap = $('#apuracao-estado');
+  let texto = '—';
+  let tom = '';
+  let dica = '';
+  if (origem) {
+    if (origem.totalizadas === 0) {
+      texto = 'Aguardando início';
+      dica = 'Os arquivos do TSE já existem, mas ainda não têm votos.';
+    } else if (origem.final) {
+      texto = 'Apuração concluída';
+      tom = 'final';
+    } else {
+      texto = `Em apuração · ${fmtPct(origem.pct, 1)}`;
+      tom = 'parcial';
+    }
+  }
+  ap.textContent = texto;
+  ap.className = `v ${tom}`.trim();
+  ap.title = dica;
 }
 
 // ---------- tempo real ----------
@@ -1128,7 +1158,6 @@ async function iniciar() {
   const { meta } = estado;
   document.title = `${meta.demo ? '[DEMO] ' : ''}Apuração ${meta.ano}`;
   $('#ano').textContent = meta.ano;
-  $('#subtitulo').textContent = `${meta.turno}º turno`;
   $('#banner-demo').hidden = !meta.demo;
 
   fetch('/senado-ocupadas.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))

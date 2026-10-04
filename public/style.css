@@ -5,7 +5,7 @@
   --text: #0f1b2d;
   --muted: #5a6779;
   --line: #e0e6ee;
-  --accent: #1d4ed8;
+  --accent: #002776;
   --accent-suave: #e8eefc;
   --ok: #15803d;
   --warn: #b45309;
@@ -79,35 +79,36 @@ button { font: inherit; color: inherit; }
   gap: 16px;
   flex-wrap: wrap;
 }
-.topo-titulo { display: flex; align-items: center; gap: 14px; }
+.topo-titulo { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .marca {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  display: block;
+  width: 110px;
   flex: none;
 }
-.marca svg { width: 26px; height: 26px; }
-@media (prefers-color-scheme: dark) { .marca { color: #0b1020; } }
-.topo h1 { font-size: 26px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; }
-.topo .muted { font-size: 13.5px; margin-top: 2px; }
+.marca svg { display: block; width: 100%; height: auto; }
+/* O azul-marinho some no fundo escuro: no tema escuro o logo ganha uma placa clara. */
+@media (prefers-color-scheme: dark) { .marca { background: #f6f8fb; padding: 7px 8px 4px; border-radius: 12px; width: 124px; } }
+.topo h1 { color: #3b4a43; font-size: 12px; font-weight: 650; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1.2; }
 
+/* Card do topo: três células (conexão, hora do arquivo do TSE, situação da apuração). */
 .estado {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px 8px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 16px;
   box-shadow: var(--sombra);
+  overflow: hidden;
 }
-.estado-texto { font-weight: 650; font-size: 14px; line-height: 1.2; }
-.estado .pequeno { font-size: 12px; line-height: 1.2; }
+.estado .cel { display: flex; flex-direction: column; gap: 2px; padding: 9px 16px; border-left: 1px solid var(--line); min-width: 0; }
+.estado .cel:first-child { border-left: 0; }
+.estado .cab { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.estado .v { display: flex; align-items: center; gap: 7px; font-weight: 650; font-size: 13.5px; line-height: 1.3; white-space: nowrap; }
+.estado .v.parcial { color: var(--warn); }
+.estado .v.final { color: var(--ok); }
+@media (max-width: 640px) {
+  .estado { width: 100%; }
+  .estado .cel { flex: 1; padding: 8px 12px; }
+}
 
 .pulso {
   width: 10px;
@@ -315,7 +316,6 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 /* ---------- candidatos ---------- */
 .candidatos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .candidatos > li { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid transparent; }
-.candidatos > li:first-child { background: color-mix(in srgb, var(--cor, var(--accent)) 9%, var(--surface)); border-color: color-mix(in srgb, var(--cor, var(--accent)) 28%, var(--line)); }
 .cand-topo { display: flex; align-items: center; gap: 10px; }
 .cand-pos {
   display: grid;
@@ -330,14 +330,14 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
   font-weight: 700;
   flex: none;
 }
-.candidatos > li:first-child .cand-pos { background: var(--cor, var(--accent)); border-color: transparent; color: #fff; }
-.cand-nome { flex: 1; min-width: 0; }
+.candidatos > li.lider .cand-pos { background: var(--cor, var(--accent)); border-color: transparent; color: #fff; }
+.cand-nome { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .cand-nome strong { font-weight: 650; }
-.cand-num { color: var(--muted); font-size: 12.5px; margin-left: 4px; }
-.cand-extra { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cand-num { color: var(--muted); font-size: 12.5px; }
 .cand-votos { text-align: right; flex: none; }
 .cand-votos b { display: block; font-size: 17px; letter-spacing: -0.01em; }
 .cand-votos small { color: var(--muted); font-size: 12px; }
+.cand-votos .sem-votos { color: var(--muted); font-weight: 500; }
 .partido {
   flex: none;
   font-size: 11.5px;
@@ -357,7 +357,7 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 @media (prefers-color-scheme: dark) {
   .pill.eleito, .pill.segundo-turno { color: #0b1020; }
 }
-.barra { margin: 8px 0 0 36px; height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+.barra { margin: 8px 0 0 36px; height: 5px; border-radius: 99px; background: var(--track); overflow: hidden; }
 .barra i { display: block; height: 100%; border-radius: 99px; background: var(--cor, var(--accent)); }
 @media (prefers-reduced-motion: no-preference) {
   .barra i, .trilho i { transition: width 0.5s ease; }
@@ -392,7 +392,8 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
   .mapa, .detalhe { padding: 14px; }
   .principal { padding: 12px; gap: 14px; }
   .topo { padding: 18px 14px 6px; }
-  .topo h1 { font-size: 22px; }
+  .topo h1 { font-size: 11px; }
+  .marca { width: 88px; }
   .abas { padding-left: 14px; padding-right: 14px; }
   .rot { font-size: 17px; }
   .cand-topo { gap: 6px; flex-wrap: wrap; }
@@ -423,10 +424,8 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .colocado-nome { font-weight: 600; line-height: 1.25; }
 .colocado-info { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 
-/* ---------- modo global: Apuração | Projeção ---------- */
+/* ---------- modo global: Apuração | Projeção (mesmo seletor .seg dos cargos, só com menos folga) ---------- */
 .modo-global .aba { padding: 7px 16px; }
-.modo-global .aba[aria-current="page"] { background: var(--accent); color: #fff; }
-@media (prefers-color-scheme: dark) { .modo-global .aba[aria-current="page"] { color: #0b1020; } }
 .como-calcula { margin-top: 16px; border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; }
 .como-calcula summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .como-calcula[open] summary { margin-bottom: 10px; }
@@ -458,3 +457,5 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .resumo-modelo { margin: -8px 0 14px; }
 .topo-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .topo-acoes .voltar { margin-left: 0; }
+
+@media (prefers-color-scheme: dark) { .topo h1 { color: var(--muted); } }

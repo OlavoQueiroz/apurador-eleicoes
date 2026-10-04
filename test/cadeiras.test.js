@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { posicoesHemiciclo, ordenarBancadas, listarCadeiras, cadeirasHtml } from '../public/cadeiras.js';
+import { posicoesHemiciclo, ordemSerpentina, ordenarBancadas, listarCadeiras, cadeirasHtml } from '../public/cadeiras.js';
 import { grupoDoPartido } from '../public/ideologia.js';
 
 const ajuda = { esc: (t) => String(t), corPartido: () => '#000', fmtInt: (n) => String(n) };
@@ -13,6 +13,19 @@ test('posicoesHemiciclo: devolve exatamente n pontos, da esquerda para a direita
     for (let i = 1; i < n; i += 1) assert.ok(pontos[i - 1].angulo >= pontos[i].angulo);
   }
   assert.deepEqual(posicoesHemiciclo(0).pontos, []);
+});
+
+test('ordemSerpentina: usa todos os pontos uma vez e cadeiras seguidas ficam vizinhas', () => {
+  for (const n of [27, 81, 513]) {
+    const { pontos, raio } = posicoesHemiciclo(n);
+    const ordem = ordemSerpentina(pontos);
+    assert.equal(ordem.length, n);
+    assert.equal(new Set(ordem).size, n);
+    // Vizinhas: a distância entre duas cadeiras seguidas nunca passa de poucos diâmetros (sem saltos pelo hemiciclo).
+    const maior = Math.max(...ordem.slice(1).map((p, i) => Math.hypot(p.x - ordem[i].x, p.y - ordem[i].y)));
+    assert.ok(maior < raio * 2 * 12, `n=${n}: salto de ${maior.toFixed(0)}px entre cadeiras seguidas`);
+  }
+  assert.deepEqual(ordemSerpentina([]), []);
 });
 
 test('grupoDoPartido: tolera acento, espaço e caixa; o que não conhece é independente', () => {

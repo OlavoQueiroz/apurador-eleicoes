@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Apuração das eleições</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d4ed8'/%3E%3Cpath d='M8 17l5 5 11-12' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="municipios.css">
   <link rel="stylesheet" href="grafico.css">
@@ -19,20 +19,24 @@
   <header class="topo">
     <div class="topo-titulo">
       <span class="marca" aria-hidden="true">
-        <svg viewBox="0 0 32 32"><path d="M8 17l5 5 11-12" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 66 35.5"><circle cx="19.0" cy="33.0" r="2.2" fill="#009C3B"/><circle cx="20.1" cy="27.6" r="2.2" fill="#009C3B"/><circle cx="23.1" cy="23.1" r="2.2" fill="#009C3B"/><circle cx="27.6" cy="20.1" r="2.2" fill="#F2B705"/><circle cx="33.0" cy="19.0" r="2.2" fill="#F2B705"/><circle cx="38.4" cy="20.1" r="2.2" fill="#F2B705"/><circle cx="42.9" cy="23.1" r="2.2" fill="#002776"/><circle cx="45.9" cy="27.6" r="2.2" fill="#002776"/><circle cx="47.0" cy="33.0" r="2.2" fill="#002776"/><circle cx="11.0" cy="33.0" r="2.2" fill="#009C3B"/><circle cx="11.6" cy="27.7" r="2.2" fill="#009C3B"/><circle cx="13.5" cy="22.8" r="2.2" fill="#009C3B"/><circle cx="16.5" cy="18.4" r="2.2" fill="#009C3B"/><circle cx="20.5" cy="14.9" r="2.2" fill="#009C3B"/><circle cx="25.2" cy="12.4" r="2.2" fill="#F2B705"/><circle cx="30.3" cy="11.2" r="2.2" fill="#F2B705"/><circle cx="35.7" cy="11.2" r="2.2" fill="#F2B705"/><circle cx="40.8" cy="12.4" r="2.2" fill="#F2B705"/><circle cx="45.5" cy="14.9" r="2.2" fill="#002776"/><circle cx="49.5" cy="18.4" r="2.2" fill="#002776"/><circle cx="52.5" cy="22.8" r="2.2" fill="#002776"/><circle cx="54.4" cy="27.7" r="2.2" fill="#002776"/><circle cx="55.0" cy="33.0" r="2.2" fill="#002776"/><circle cx="3.0" cy="33.0" r="2.2" fill="#009C3B"/><circle cx="3.5" cy="27.8" r="2.2" fill="#009C3B"/><circle cx="4.8" cy="22.7" r="2.2" fill="#009C3B"/><circle cx="7.0" cy="18.0" r="2.2" fill="#009C3B"/><circle cx="10.0" cy="13.7" r="2.2" fill="#009C3B"/><circle cx="13.7" cy="10.0" r="2.2" fill="#009C3B"/><circle cx="18.0" cy="7.0" r="2.2" fill="#F2B705"/><circle cx="22.7" cy="4.8" r="2.2" fill="#F2B705"/><circle cx="27.8" cy="3.5" r="2.2" fill="#F2B705"/><circle cx="33.0" cy="3.0" r="2.2" fill="#F2B705"/><circle cx="38.2" cy="3.5" r="2.2" fill="#F2B705"/><circle cx="43.3" cy="4.8" r="2.2" fill="#F2B705"/><circle cx="48.0" cy="7.0" r="2.2" fill="#F2B705"/><circle cx="52.3" cy="10.0" r="2.2" fill="#002776"/><circle cx="56.0" cy="13.7" r="2.2" fill="#002776"/><circle cx="59.0" cy="18.0" r="2.2" fill="#002776"/><circle cx="61.2" cy="22.7" r="2.2" fill="#002776"/><circle cx="62.5" cy="27.8" r="2.2" fill="#002776"/><circle cx="63.0" cy="33.0" r="2.2" fill="#002776"/></svg>
       </span>
-      <div>
-        <h1>Apuração <span id="ano"></span></h1>
-        <p id="subtitulo" class="muted"></p>
-      </div>
+      <h1>Apuração <span id="ano"></span></h1>
     </div>
     <div id="busca-global" class="busca-global" role="search"></div>
     <nav id="modo" class="modo-global" aria-label="Visão"></nav>
     <div class="estado" aria-live="polite">
-      <span id="pulso" class="pulso" data-estado="conectando"></span>
-      <div>
-        <div id="estado-texto" class="estado-texto">Conectando…</div>
-        <div id="estado-detalhe" class="muted pequeno"></div>
+      <div id="cel-conexao" class="cel">
+        <span class="cab">Conexão</span>
+        <span class="v"><span id="pulso" class="pulso" data-estado="conectando"></span><span id="estado-texto">Conectando…</span></span>
+      </div>
+      <div class="cel">
+        <span id="tse-rotulo" class="cab">Arquivo do TSE</span>
+        <span id="tse-hora" class="v">—</span>
+      </div>
+      <div class="cel">
+        <span class="cab">Apuração</span>
+        <span id="apuracao-estado" class="v">—</span>
       </div>
     </div>
   </header>
