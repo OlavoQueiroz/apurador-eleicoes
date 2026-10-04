@@ -10,6 +10,12 @@ import { normalizar } from './normalize.js';
 export const BASE = 'https://resultados.tse.jus.br/oficial';
 const USER_AGENT = 'apurador-local/0.1 (painel pessoal; GET condicional com ETag)';
 
+// Sem prazo, um socket que fica aberto sem enviar dados deixaria a requisição (e o worker do ciclo) presa para
+// sempre. O prazo cobre cabeçalho e corpo e se combina com um `signal` de cancelamento, se houver.
+export const TIMEOUT_MS = 15_000;
+export const comPrazo = (signal, ms = TIMEOUT_MS) =>
+  signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+
 export const UFS = [
   'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg', 'ms', 'mt', 'pa',
   'pb', 'pe', 'pi', 'pr', 'rj', 'rn', 'ro', 'rr', 'rs', 'sc', 'se', 'sp', 'to',
@@ -36,7 +42,7 @@ export const urlResultado = (ciclo, eleicao, abrangencia, cargo) =>
   `${BASE}/${ciclo}/${eleicao}/dados/${abrangencia}/${abrangencia}-c${pad(cargo, 4)}-e${pad(eleicao, 6)}-u.json`;
 
 async function getJson(url, { signal } = {}) {
-  const res = await fetch(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' }, signal });
+  const res = await fetch(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' }, signal: comPrazo(signal) });
   if (!res.ok) throw new Error(`HTTP ${res.status} em ${url}`);
   return res.json();
 }
@@ -83,7 +89,7 @@ export function criarFonteTse({ signal } = {}) {
     async obter(alvo, anterior) {
       const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
       if (anterior?.etag) headers['if-none-match'] = anterior.etag;
-      const res = await fetch(alvo.url, { headers, signal });
+      const res = await fetch(alvo.url, { headers, signal: comPrazo(signal) });
       if (res.status === 304) return { status: 'inalterado' };
       // Antes da apuração, ou fora do turno/UF, o TSE responde 404 (NoSuchKey).
       if (res.status === 404) return { status: 'indisponivel' };
@@ -151,7 +157,7 @@ export function criarFonteMunicipiosTse({ signal } = {}) {
       const url = urlAcompanhamento(ciclo, eleicao, uf);
       const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
       if (anterior?.etag) headers['if-none-match'] = anterior.etag;
-      const res = await fetch(url, { headers, signal });
+      const res = await fetch(url, { headers, signal: comPrazo(signal) });
       if (res.status === 304) return { status: 'inalterado' };
       if (res.status === 404) return { status: 'indisponivel' };
       if (!res.ok) {

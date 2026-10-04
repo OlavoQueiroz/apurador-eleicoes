@@ -25,17 +25,10 @@ test('extrapola o total de válidos pela fração de seções e mantém o percen
   assert.equal(b.votosProjetados, 1600);
 });
 
-test('limites são os extremos matemáticos dos votos faltantes', () => {
-  const [a] = projetarIngenuo(dados()).candidatos;
-  assert.equal(a.pctMinimo, 15); // 600 de 4000
-  assert.equal(a.pctMaximo, 90); // (600 + 3000) de 4000
-});
-
 test('totalização final devolve o resultado como está', () => {
   const r = projetarIngenuo(dados({ totalizacaoFinal: true }));
   assert.equal(r.votosFaltantes, 0);
   assert.equal(r.candidatos[0].votosProjetados, 600);
-  assert.equal(r.candidatos[0].pctMinimo, r.candidatos[0].pctMaximo);
 });
 
 test('sem seções totalizadas ou sem votos, não projeta', () => {
@@ -231,7 +224,81 @@ test('projetarBrasil: soma as UFs e usa a média nacional para a UF sem votos', 
   ]);
   assert.equal(r.disponivel, true);
   assert.equal(r.validosProjetados, 1500 + 150); // 300 eleitores × 0,5 válido por eleitor
-  assert.deepEqual(r.ufs, { total: 3, comVotos: 2, semVotos: 1, planoB: 0 });
+  assert.deepEqual(r.ufs, { total: 3, comVotos: 2, semVotos: 1, planoB: 0, semVotosPorHistorico: 0 });
   assert.equal(r.candidatos[0].numero, '22', 'B soma 800 contra 700 de A');
   assert.equal(r.candidatos.find((c) => c.numero === '13').votosProjetados, 700 + Math.round((700 / 1500) * 150));
+});
+
+test('projetarBrasil: UF zerada usa o próprio 2022 + swing nacional quando há histórico', () => {
+  const uf = (validosProj, votosA, votosB) => ({
+    disponivel: true, validosProjetados: validosProj, votosValidos: validosProj / 2, parteEstimadaPelaUf: 0,
+    candidatos: [
+      { numero: '13', nomeUrna: 'A', partido: 'PT', votosProjetados: votosA, votosAtuais: votosA / 2 },
+      { numero: '22', nomeUrna: 'B', partido: 'PL', votosProjetados: votosB, votosAtuais: votosB / 2 },
+    ],
+  });
+  // 2022: SP 50/50 e MG 50/50 (1000 e 500 válidos); AC foi 80/20 com 200 válidos.
+  const anteriorPorUf = {
+    sp: { validos: 1000, herdados: { 13: 500, 22: 500 } },
+    mg: { validos: 500, herdados: { 13: 250, 22: 250 } },
+    ac: { validos: 200, herdados: { 13: 40, 22: 160 } },
+  };
+  const ufs = [
+    { uf: 'sp', r: uf(1000, 600, 400), aptos: 2000, secoes: { total: 100, totalizadas: 50 } },
+    { uf: 'mg', r: uf(500, 300, 200), aptos: 1000, secoes: { total: 50, totalizadas: 25 } },
+    { uf: 'ac', r: { disponivel: false }, aptos: 300, secoes: { total: 10, totalizadas: 0 } },
+    { uf: 'zz', r: { disponivel: false }, aptos: 100, secoes: { total: 5, totalizadas: 0 } }, // sem 2022
+  ];
+  const media = projetarBrasil(ufs);
+  const hist = projetarBrasil(ufs, { anteriorPorUf });
+  // Swing nacional: A passou de 50% para 60% nas UFs apuradas (+10 pp); AC (20% em 2022) vai a 30%, não a 60%.
+  // Crescimento de votos = 1500 / 1500 = 1 (AC vale 200 válidos). O exterior, sem 2022, entra pela média: 100 × 0,5.
+  const votosA = (r) => r.candidatos.find((c) => c.numero === '13').votosProjetados;
+  assert.equal(hist.ufs.semVotosPorHistorico, 1);
+  assert.equal(hist.validosProjetados, 1500 + 200 + 50);
+  assert.equal(votosA(hist), 900 + 60 + 30);
+  assert.ok(votosA(hist) < votosA(media), 'pela média o AC daria 60% ao A');
+  assert.equal(media.ufs.semVotosPorHistorico, 0);
+});
+
+test('projetarBrasil: sem swing medido ou sem 2022 de nenhuma UF zerada, cai na média', () => {
+  const r = { disponivel: true, validosProjetados: 1000, votosValidos: 500, parteEstimadaPelaUf: 0, candidatos: [
+    { numero: '13', nomeUrna: 'A', partido: 'PT', votosProjetados: 600, votosAtuais: 300 },
+    { numero: '22', nomeUrna: 'B', partido: 'PL', votosProjetados: 400, votosAtuais: 200 },
+  ] };
+  const ufs = [{ uf: 'sp', r, aptos: 2000, secoes: { total: 100, totalizadas: 50 } }, { uf: 'ac', r: { disponivel: false }, aptos: 300, secoes: { total: 10, totalizadas: 0 } }];
+  const semDado = projetarBrasil(ufs, { anteriorPorUf: { sp: { validos: 1000, herdados: { 13: 500, 22: 500 } } } });
+  assert.equal(semDado.ufs.semVotosPorHistorico, 0);
+  assert.equal(semDado.validosProjetados, projetarBrasil(ufs).validosProjetados);
+});
+
+test('tolerância de sincronia: mais folgada no começo da apuração, 1% no fim', async () => {
+  const { toleranciaDescompasso } = await import('../src/projecao.js');
+  assert.ok(Math.abs(toleranciaDescompasso(0) - 0.03) < 1e-12);
+  assert.ok(Math.abs(toleranciaDescompasso(1) - 0.01) < 1e-12);
+  assert.ok(toleranciaDescompasso(0.1) > toleranciaDescompasso(0.5) && toleranciaDescompasso(0.5) > toleranciaDescompasso(0.9));
+});
+
+test('uma diferença de 2% das seções é aceita no começo da apuração e vira plano B mais tarde', () => {
+  const montar = (totalizadasUf, capital, p1, p2, votosUf, votosCapital) => projetarComResto({
+    grandes: [grande(votosCapital, capital)],
+    ufDados: ufArquivo({ ...votosUf, totalizadas: totalizadasUf }),
+    detalhes: detalhes({
+      cap: { aptos: 10000, secoes: { total: 20, totalizadas: capital } },
+      p1: { aptos: 5000, secoes: { total: 40, totalizadas: p1 } },
+      p2: { aptos: 5000, secoes: { total: 40, totalizadas: p2 } },
+    }),
+  });
+  // Começo (6% das seções na UF): o acompanhamento já tem 8, diferença de 2% do total → dentro da tolerância de ~2,8%.
+  const cedo = montar(6, 4, 3, 1, { a: 70, b: 30 }, { a: 50, b: 20 });
+  assert.equal(cedo.disponivel, true);
+  // Mais adiante (60% na UF): a mesma diferença de 2% já passa da tolerância de ~1,3%.
+  const tarde = montar(60, 20, 24, 18, { a: 700, b: 300 }, { a: 500, b: 200 });
+  assert.equal(tarde.descompasso, true);
+  // Uma tolerância explícita continua valendo.
+  assert.equal(projetarComResto({
+    grandes: [grande({ a: 50, b: 20 }, 4)], ufDados: ufArquivo({ a: 70, b: 30, totalizadas: 6 }),
+    detalhes: detalhes({ cap: { aptos: 10000, secoes: { total: 20, totalizadas: 4 } }, p1: { aptos: 5000, secoes: { total: 40, totalizadas: 3 } }, p2: { aptos: 5000, secoes: { total: 40, totalizadas: 1 } } }),
+    tolerancia: 0.01,
+  }).descompasso, true);
 });

@@ -15,7 +15,7 @@ import { fracaoMunicipio, projetarIngenuo, separarResto } from './projecao.js';
 
 const soma = (valores) => valores.reduce((s, v) => s + v, 0);
 
-export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, completo = false, limite = 20, fracaoMinima = 0.5, tolerancia = 0.01 }) {
+export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, completo = false, limite = 20, fracaoMinima = 0.5, tolerancia = null, swingPorGrupo = true }) {
   const base = { modelo: 'swing', modo: completo ? 'municipios' : 'grandes+resto' };
 
   // Candidatos (por número) e votos atuais da UF.
@@ -96,6 +96,19 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
   const pesoRef = soma(referencia.map((l) => l.esperado));
   const swing = new Map(numeros.map((n) => [n, soma(referencia.map((l) => l.esperado * ((l.votos.get(n) ?? 0) / l.validos - (l.prior.herdados.get(n) ?? 0) / l.prior.validos))) / pesoRef]));
 
+  // Swing próprio dos municípios grandes e do resto do estado (interior), cada um medido onde há apuração suficiente
+  // (`fracaoMinima`). Se um grupo não tem lugar de referência, usa o swing geral. Medido no ensaio: sem diferença
+  // quando grandes e interior variam igual; com `--swing-porte 3`, o erro aos 20% apurados cai de ~1,6 para ~0,4 pp.
+  const swingDoGrupo = (grupo) => {
+    const lista = grupo.filter((l) => l.fracao >= fracaoMinima);
+    const ref = lista.length ? lista : grupo;
+    if (!ref.length) return swing;
+    const peso = soma(ref.map((l) => l.esperado));
+    return new Map(numeros.map((n) => [n, soma(ref.map((l) => l.esperado * ((l.votos.get(n) ?? 0) / l.validos - (l.prior.herdados.get(n) ?? 0) / l.prior.validos))) / peso]));
+  };
+  const swingGrandes = swingPorGrupo ? swingDoGrupo(comPriorIni.filter((l) => !l.resto)) : swing;
+  const swingResto = swingPorGrupo ? swingDoGrupo(comPriorIni.filter((l) => l.resto)) : swing;
+
   // % médio observado nos lugares iniciados (para lugares sem prior).
   const observado = new Map(numeros.map((n) => [n, soma(iniciados.map((l) => (l.votos.get(n) ?? 0) / l.fracao)) / soma(iniciados.map((l) => l.esperado))]));
 
@@ -107,7 +120,8 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
   const parteEsperada = (l) => {
     const pr = l.priorFalta ?? l.prior; // o que falta é projetado pelo prior da parte que falta
     if (!pr || !(pr.validos > 0)) return observado;
-    const bruto = new Map(numeros.map((n) => [n, Math.max(0, (pr.herdados.get(n) ?? 0) / pr.validos + swing.get(n))]));
+    const sw = l.resto ? swingResto : swingGrandes;
+    const bruto = new Map(numeros.map((n) => [n, Math.max(0, (pr.herdados.get(n) ?? 0) / pr.validos + sw.get(n))]));
     const total = soma([...bruto.values()]);
     return total > 0 ? new Map([...bruto].map(([n, v]) => [n, v / total])) : observado;
   };
@@ -148,8 +162,6 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
       votosProjetados: Math.round(proj),
       pctAtual: validosAtuais > 0 ? (votos / validosAtuais) * 100 : 0,
       pctProjetado: validosProjetados > 0 ? (proj / validosProjetados) * 100 : 0,
-      pctMinimo: validosProjetados > 0 ? (votos / validosProjetados) * 100 : 0,
-      pctMaximo: validosProjetados > 0 ? (Math.min(votos + faltantes, validosProjetados) / validosProjetados) * 100 : 0,
     };
   }).sort((a, b) => b.votosProjetados - a.votosProjetados).slice(0, limite);
 
@@ -188,7 +200,7 @@ export function projetarSwing({ grandes, ufDados, detalhes = null, anterior, com
 
 // Swing para uma UF, escolhendo o método conforme o que foi carregado (como projetarUf, do modelo 2). Com os
 // arquivos fora de sincronia cai na extrapolação simples (plano B).
-export function projetarUfSwing({ foto, ufDados, anterior, limite = Infinity }) {
+export function projetarUfSwing({ foto, ufDados, anterior, limite = Infinity, swingPorGrupo = true }) {
   const indisponivel = (motivo) => ({ modelo: 'swing', disponivel: false, motivo });
   if (!anterior) return indisponivel('Não há dados de 2022 carregados.');
   if (!ufDados) return indisponivel('O arquivo desta UF ainda não está disponível no TSE.');
@@ -198,7 +210,7 @@ export function projetarUfSwing({ foto, ufDados, anterior, limite = Infinity }) 
   }
   if (!foto.detalhes) return indisponivel(foto.erro ?? 'Aguardando o arquivo de acompanhamento da UF.');
   if (!foto.dados.length) return indisponivel(foto.erro ?? 'Aguardando os municípios grandes desta UF.');
-  const r = projetarSwing({ grandes: foto.dados, ufDados, detalhes: foto.detalhes, anterior, limite });
+  const r = projetarSwing({ grandes: foto.dados, ufDados, detalhes: foto.detalhes, anterior, limite, swingPorGrupo });
   if (!r.descompasso) return r;
   const simples = projetarIngenuo(ufDados, { limite });
   return { ...simples, modelo: 'swing', plano: 'extrapolacao', motivoPlano: r.motivo, conferencia: r.conferencia };

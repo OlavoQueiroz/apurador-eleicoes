@@ -37,6 +37,9 @@ const PERIODOS_COMPARATIVO = {
   '2022x2018': { anoAtual: 2022, anoBase: 2018 },
 };
 
+const LIMITE_BUFFER_SSE = 256 * 1024; // acima disso o cliente SSE não está lendo e é desconectado
+const MANTER_PROJECAO_MS = 3 * 60_000; // por quanto tempo vale a última projeção boa se a UF sai de sincronia
+
 // `anterior` = 2022 (swing e comparativo); `historicos` = outras eleições já encerradas, por ano ({ 2018: anterior2018 }).
 export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, historicos = {}, partidos = null }) {
   const basesHistoricas = { ...(anterior ? { 2022: anterior } : {}), ...historicos };
@@ -46,6 +49,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     : m));
   const modeloPorIdAtivo = (id) => modelos.find((m) => m.id === id);
   const clientes = new Set();
+  const ultimaBoaPorUf = new Map();
   const buscarMunicipios = criarIndiceMunicipios(diretorioPublico);
 
   const enviarJson = (res, status, corpo) => {
@@ -91,9 +95,24 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     const { cargo, uf, eleicao } = item.alvo;
     const indisponivel = (motivo, extra = {}) => ({ modelo: modeloId, disponivel: false, motivo, ...extra });
     if (modeloId === 'swing' && cargo !== 1) return indisponivel('O swing histórico, por enquanto, só existe para presidente.');
-    const projetarDaUf = (foto, ufDados, limite) => (modeloId === 'swing'
+    const calcularUf = (foto, ufDados, limite) => (modeloId === 'swing'
       ? projetarUfSwing({ foto, ufDados, anterior, limite })
       : projetarUf({ foto, ufDados, limite }));
+    // Amortecimento: se os arquivos da UF saem de sincronia logo depois de uma projeção boa, mantém a última por
+    // alguns minutos em vez de cair na extrapolação simples e voltar no ciclo seguinte (a tela oscilaria).
+    const projetarDaUf = (ufDaFoto, foto, ufDados, limite) => {
+      const r = calcularUf(foto, ufDados, limite);
+      const chave = `${modeloId}:${cargo}:${ufDaFoto}:${limite ?? 'tudo'}`;
+      if (r.disponivel && r.plano !== 'extrapolacao') {
+        ultimaBoaPorUf.set(chave, { r, em: Date.now() });
+        return r;
+      }
+      const boa = r.plano === 'extrapolacao' ? ultimaBoaPorUf.get(chave) : null;
+      if (boa && Date.now() - boa.em <= MANTER_PROJECAO_MS) {
+        return { ...boa.r, mantida: { desde: boa.em, motivo: r.motivoPlano } };
+      }
+      return r;
+    };
     if (!municipios) return indisponivel('Os resultados por município não estão ativos nesta execução.');
     if (![1, 3, 5].includes(cargo)) return indisponivel('Este modelo vale só para presidente, governador e senador.');
 
@@ -107,9 +126,9 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
           carregando: true, progresso: { feitos: prontas, total: ufs.length, unidade: 'UFs' },
         });
       }
-      const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarDaUf(foto, ufDados), ...tamanhoUf({ foto, ufDados }) }));
+      const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarDaUf(u, foto, ufDados), ...tamanhoUf({ foto, ufDados }) }));
       return {
-        ...projetarBrasil(porUf, { limite: 50, modelo: modeloId }),
+        ...projetarBrasil(porUf, { limite: 50, modelo: modeloId, anteriorPorUf: anterior?.porUf() ?? null }),
         carregando: false,
         atualizadoEm: Math.min(...fotos.map(({ foto }) => foto.atualizadoEm ?? Infinity)),
       };
@@ -119,7 +138,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     if (snap.primeiraCarga) {
       return indisponivel(snap.erro ?? 'Carregando os resultados dos municípios…', { carregando: snap.carregando, progresso: snap.progresso });
     }
-    const r = projetarDaUf(snap, item.dados, 50);
+    const r = projetarDaUf(uf, snap, item.dados, 50);
     return {
       ...r,
       carregando: snap.carregando,
@@ -275,15 +294,25 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     return servirEstatico(req, res, pathname);
   });
 
-  apuracao.on('ciclo', (ciclo) => {
-    const evento = formatarEvento(ciclo);
-    for (const cliente of clientes) cliente.write(evento);
-  });
+  // Envia a todos os clientes SSE sem que um socket quebrado ou lento atrapalhe os demais: quem já foi encerrado
+  // (ou falha ao escrever) sai da lista, e quem não consome (buffer acumulado) é desconectado — o navegador reconecta.
+  const enviarAosClientes = (texto) => {
+    for (const cliente of [...clientes]) {
+      if (cliente.destroyed || cliente.writableEnded) { clientes.delete(cliente); continue; }
+      try {
+        cliente.write(texto);
+        if (cliente.writableLength > LIMITE_BUFFER_SSE) throw new Error('cliente SSE não está consumindo os eventos');
+      } catch {
+        clientes.delete(cliente);
+        cliente.destroy();
+      }
+    }
+  };
+
+  apuracao.on('ciclo', (ciclo) => enviarAosClientes(formatarEvento(ciclo)));
 
   // Comentário SSE periódico: mantém a conexão viva através de proxies e abas em segundo plano.
-  const batimento = setInterval(() => {
-    for (const cliente of clientes) cliente.write(': ping\n\n');
-  }, 20_000);
+  const batimento = setInterval(() => enviarAosClientes(': ping\n\n'), 20_000);
   batimento.unref();
 
   servidor.on('close', () => {

@@ -4,7 +4,7 @@
 // de erro), mas não o comportamento do TSE ao vivo nem o do eleitorado de 2026.
 //
 //   node scripts/ensaio-apuracao.js [--swing 3] [--ruido 1.5] [--swing-uf 0] [--swing-porte 0] [--semente 1] [--uf sp]
-//                                   [--ordem pequenos|aleatoria|grandes]
+//                                   [--ordem pequenos|aleatoria|grandes] [--brasil-media] [--sem-swing-grupo] [--ruido-secoes 2]
 //
 // A "verdade" de 2026 é montada a partir de 2022: o campo de A (13) ganha `--swing` pontos e o de B (22) perde, e os
 // votos de 2022 sem herdeiro (Tebet, Ciro, Soraya) vão em parte para um candidato novo (55), em parte para A e B.
@@ -28,10 +28,13 @@ const arg = (nome, padrao) => {
 const SWING = Number(arg('swing', 3)) / 100;
 const RUIDO = Number(arg('ruido', 1.5)) / 100;
 const SEMENTE = Number(arg('semente', 1));
+const RUIDO_SECOES = Number(arg('ruido-secoes', 2)) / 100; // desvio-padrão da fatia de UMA seção em torno do município (pontos)
 const SO_UF = arg('uf', null);
 const SWING_UF = Number(arg('swing-uf', 0)) / 100;
 const SWING_PORTE = Number(arg('swing-porte', 0)) / 100;
 const ORDEM = arg('ordem', 'pequenos');
+const SWING_GRUPO = !process.argv.includes('--sem-swing-grupo'); // swing separado: municípios grandes × resto do estado
+const BRASIL_MEDIA = process.argv.includes('--brasil-media'); // UFs zeradas pela média das apuradas (comportamento antigo)
 const MOMENTOS = [0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75];
 
 const historico = JSON.parse(readFileSync(path.join(raiz, 'dados-historicos/presidente-2022-t1.json'), 'utf8'));
@@ -111,7 +114,7 @@ function apurado(m, t) {
   const n = secoesApuradas(m, t);
   if (n === 0) return { n, validos: 0, votos: new Map(CAND.map(([c]) => [c, 0])) };
   const validos = Math.round((m.validos * n) / m.secoes);
-  const brutos = new Map(CAND.map(([c]) => [c, Math.max(0, m.share.get(c) + m.ruidoSecoes.get(c) * 0.02 / Math.sqrt(n))]));
+  const brutos = new Map(CAND.map(([c]) => [c, Math.max(0, m.share.get(c) + m.ruidoSecoes.get(c) * RUIDO_SECOES / Math.sqrt(n))]));
   const soma = [...brutos.values()].reduce((s, v) => s + v, 0);
   return { n, validos, votos: new Map([...brutos].map(([c, v]) => [c, Math.round((validos * v) / soma)])) };
 }
@@ -154,7 +157,7 @@ function projecoesUf(uf, t) {
     simples: projetarIngenuo(ufDados, { limite: 50 }),
     municipio: projetarEstratificado(todos, { limite: 50, totalMunicipios: total }),
     grandes: projetarUf({ foto, ufDados, limite: 50 }),
-    swing: projetarUfSwing({ foto, ufDados, anterior, limite: 50 }),
+    swing: projetarUfSwing({ foto, ufDados, anterior, limite: 50, swingPorGrupo: SWING_GRUPO }),
     swingTodos: projetarUfSwing({ foto: fotoTodos, ufDados, anterior, limite: 50 }),
   };
 }
@@ -206,7 +209,7 @@ for (const alvo of MOMENTOS) {
   const verdadeLead = pctVerdade.get('13') - pctVerdade.get('22');
   const disp = [alvo];
   for (const [chave] of modelos) {
-    const soma = projetarBrasil(porUf.map(({ uf, p }) => ({ uf, r: p[chave], ...tamanhoUf({ foto: { dados: [] }, ufDados: p.ufDados }) })), { limite: 50 });
+    const soma = projetarBrasil(porUf.map(({ uf, p }) => ({ uf, r: p[chave], ...tamanhoUf({ foto: { dados: [] }, ufDados: p.ufDados }) })), { limite: 50, anteriorPorUf: BRASIL_MEDIA ? null : anterior.porUf() });
     const a = achar(soma, '13');
     const b = achar(soma, '22');
     e13.push(a === null ? null : a - pctVerdade.get('13'));

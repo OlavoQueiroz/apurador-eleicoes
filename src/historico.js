@@ -95,9 +95,9 @@ export async function projecoesDoMomento(item, municipios, apuracao, anterior = 
         const ufs = [...(await municipios.listar(eleicao)).keys()];
         const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao?.estado.get(`${cargo}:${u}`)?.dados ?? null }));
         if (fotos.every(({ foto }) => !foto.primeiraCarga && !foto.carregando)) {
-          estratificado = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50 });
+          estratificado = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50, anteriorPorUf: anterior?.porUf() ?? null });
           if (anterior) {
-            swing = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUfSwing({ foto, ufDados, anterior }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50, modelo: 'swing' });
+            swing = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUfSwing({ foto, ufDados, anterior }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50, modelo: 'swing', anteriorPorUf: anterior.porUf() });
           }
         }
       }

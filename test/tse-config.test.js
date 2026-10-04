@@ -134,3 +134,21 @@ test('acompanhamento: detalhes de tamanho e seções por município, e opções 
   assert.equal(lerConfig(['--municipios-todos'], {}).municipiosMinimo, null);
   assert.throws(() => lerConfig(['--municipios-minimo', 'x'], {}), /municipios-minimo/);
 });
+
+test('comPrazo aborta uma requisição que não recebe resposta', async () => {
+  const { createServer } = await import('node:http');
+  const { comPrazo } = await import('../src/tse.js');
+  const servidor = createServer(() => {}); // aceita a conexão e nunca responde
+  await new Promise((resolve) => servidor.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = servidor.address();
+    await assert.rejects(fetch(`http://127.0.0.1:${port}/`, { signal: comPrazo(null, 50) }), (e) => e.name === 'TimeoutError');
+    const manual = new AbortController();
+    const sinal = comPrazo(manual.signal, 10_000);
+    manual.abort();
+    assert.equal(sinal.aborted, true, 'o cancelamento externo continua valendo');
+  } finally {
+    servidor.closeAllConnections();
+    servidor.close();
+  }
+});

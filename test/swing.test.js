@@ -154,3 +154,29 @@ test('swing: o resto não confunde a ordem de chegada com variação de voto', (
   assert.ok(Math.abs(a.pctProjetado - 50) < 1, `esperado ~50%, veio ${a.pctProjetado.toFixed(1)}%`);
   assert.ok(Math.abs(r.swing.find((s) => s.numero === '13').pontos) < 1, 'swing medido ~0');
 });
+
+test('swing por grupo: municípios grandes e interior têm swings próprios', () => {
+  // 2022: 50/50 em toda parte. Nos grandes já apurados A está +10; no interior (resto) já apurado, A está igual (+0).
+  // O grande que falta (g2) deve receber o swing dos grandes (+10 → 60%), o que falta do resto, o do resto (+0).
+  const ids = ['g1', 'g2', 'r1', 'r2'];
+  const anterior = criarAnterior(historico(Object.fromEntries(ids.map((c) => [c, [500, 500]]))), mapeamento);
+  const detalhes = new Map([
+    ['g1', { aptos: 1000, secoes: { total: 10, totalizadas: 10 } }],
+    ['g2', { aptos: 1000, secoes: { total: 10, totalizadas: 0 } }],
+    ['r1', { aptos: 1000, secoes: { total: 10, totalizadas: 5 } }],
+    ['r2', { aptos: 1000, secoes: { total: 10, totalizadas: 5 } }],
+  ]);
+  const entrada = {
+    anterior,
+    detalhes,
+    ufDados: ufArquivo({ a: 1100, b: 900, total: 40, totalizadas: 20, aptos: 4000 }),
+    grandes: [municipioAtual('g1', 600, 400), municipioAtual('g2', 0, 0, { totalizadas: 0 })],
+  };
+  const porGrupo = projetarSwing({ ...entrada, swingPorGrupo: true });
+  const geral = projetarSwing({ ...entrada, swingPorGrupo: false });
+  assert.equal(porGrupo.disponivel, true);
+  const votosA = (r) => r.candidatos.find((c) => c.numero === '13').votosProjetados;
+  assert.equal(votosA(porGrupo), 1100 + 500 + 600); // resto: +500 (50%); g2: 60% de 1000
+  assert.ok(votosA(geral) < votosA(porGrupo), 'o swing único dilui o dos grandes');
+  assert.equal(projetarSwing(entrada).candidatos[0].votosProjetados, porGrupo.candidatos[0].votosProjetados, 'o padrão é por grupo');
+});
