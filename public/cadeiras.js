@@ -67,7 +67,7 @@ export function listarCadeiras(bancadas, pendentes) {
 // Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
 const dicaCadeira = (c) => {
   const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
-  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}`;
+  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}${c.pessoa?.inferido ? ' · vaga do partido, nome pelo ranking da lista' : ''}`;
 };
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
@@ -144,6 +144,10 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   const frente = naFrente
     ? `<p class="muted pequeno">Contorno: ${fmtInt(naFrente)} cadeiras em que o candidato ainda não foi eleito, mas está entre os mais votados da UF neste momento (tantos quantas forem as vagas). Pode mudar até a totalização.</p>`
     : '';
+  const inferidas = bancadas.reduce((n, b) => n + b.pessoasEleitas.filter((x) => x.inferido).length, 0);
+  const porVaga = inferidas
+    ? `<p class="muted pequeno">${fmtInt(inferidas)} cadeiras já foram atribuídas a um partido pelo TSE (campo de vagas conquistadas), mas o candidato eleito ainda não foi marcado. O nome no hover vem do ranking de votos da lista e pode mudar.</p>`
+    : '';
   const aviso = definidas === 0
     ? `<p class="muted pequeno">Nenhum eleito ainda: as cadeiras cinza serão preenchidas conforme o TSE totalizar os votos.</p>`
     : '';
@@ -161,7 +165,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     <div class="cad-dica" hidden></div>
     <svg class="cad-svg" viewBox="${-MARGEM} ${-MARGEM} ${LARGURA + 2 * MARGEM} ${ALTURA + 2 * MARGEM}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
-    ${aviso}${frente}${ocupadas}${naoDefinido}
+    ${aviso}${porVaga}${frente}${ocupadas}${naoDefinido}
     <p class="muted pequeno">Ideologia é uma classificação aproximada do painel, não um dado do TSE; veja <code>public/ideologia.js</code>.</p>
   </section>`;
 }

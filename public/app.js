@@ -57,6 +57,7 @@ const estado = {
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
   cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
+  inferidos: null, // Câmara: Map partido → [{ nome, uf }] das vagas já conquistadas por `vag` cujo eleito o TSE ainda não marcou
   lideres: null, // Senado: Map partido → [{ nome, uf }] dos mais votados que ainda não foram eleitos
   eleitos: null, // nomes dos eleitos do cargo aberto no Brasil (hover do mapa de cadeiras): Map partido → [{ nome, uf }]
   senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
@@ -149,24 +150,36 @@ async function carregarEleitos() {
   if (!ehAgregado() || ![5, 6].includes(estado.cargo)) {
     estado.eleitos = null;
     estado.lideres = null;
+    estado.inferidos = null;
     chaveEleitos = '';
     return;
   }
-  const itens = itensDoCargo().filter(({ item }) => item.eleitos > 0 || estado.cargo === 5); // no Senado, quem lidera também importa
+  const itens = itensDoCargo(); // todas as UFs: no Senado, quem lidera importa; na Câmara, as vagas conquistadas (`vag`) podem vir antes dos nomes
   const chave = `${estado.cargo}|${itens.map(({ uf, item }) => `${uf}${item.alteradoEm}`).join()}`;
   if (chave === chaveEleitos) return;
   chaveEleitos = chave;
   const porPartido = new Map();
   const lideres = new Map(); // só no Senado: os mais votados que ainda não foram eleitos
-  const guardar = (mapa, c, uf) => {
+  const inferidos = new Map(); // só na Câmara: vagas que o TSE já deu a um partido/federação, com o nome pelo ranking da lista
+  const guardar = (mapa, c, uf, inferido = false) => {
     if (!mapa.has(c.partido)) mapa.set(c.partido, []);
-    mapa.get(c.partido).push({ nome: c.nomeUrna, uf });
+    mapa.get(c.partido).push({ nome: c.nomeUrna, uf, inferido });
   };
   await Promise.all(itens.map(async ({ uf }) => {
     try {
       const { dados } = await getJson(`/api/resultado/${estado.cargo}/${uf}`);
       const candidatos = dados?.candidatos ?? [];
       for (const c of candidatos) if (c.situacao === 'eleito') guardar(porPartido, c, uf);
+      if (estado.cargo === 6) {
+        // `vag` (vagas conquistadas) pode estar preenchido antes de os eleitos serem marcados. Dentro de uma lista
+        // (partido ou federação) as vagas vão para os mais votados, então os que faltam são os próximos do ranking.
+        for (const agr of dados.agrupamentos) {
+          const da = candidatos.filter((c) => c.agrupamentoId === agr.id);
+          const faltam = agr.vagas - da.filter((c) => c.situacao === 'eleito').length;
+          da.filter((c) => c.situacao !== 'eleito' && c.votos > 0).slice(0, Math.max(0, faltam))
+            .forEach((c) => guardar(inferidos, c, uf, true));
+        }
+      }
       if (estado.cargo === 5) {
         // Vagas ainda abertas na UF = vagas − eleitos; ocupam-nas, por ora, os mais votados (a lista vem ordenada por votos).
         const abertas = dados.cargo.vagas - candidatos.filter((c) => c.situacao === 'eleito').length;
@@ -177,6 +190,7 @@ async function carregarEleitos() {
   if (chave.startsWith(`${estado.cargo}|`) && ehAgregado()) {
     estado.eleitos = porPartido;
     estado.lideres = lideres;
+    estado.inferidos = inferidos;
   }
 }
 
@@ -299,6 +313,7 @@ async function aplicarHash() {
   estado.mun = undefined;
   estado.eleitos = null;
   estado.lideres = null;
+  estado.inferidos = null;
   chaveEleitos = '';
   render();
   await atualizar();
@@ -700,7 +715,13 @@ function agregadoSecoes() {
 function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
   if (codigo !== 5 && codigo !== 6) return '';
   const partidos = {};
-  for (const [sigla, n] of Object.entries(porPartido)) partidos[sigla] = { eleitos: n, pessoasEleitas: estado.eleitos?.get(sigla) ?? [] };
+  let inferidas = 0;
+  for (const sigla of new Set([...Object.keys(porPartido), ...(estado.inferidos?.keys() ?? [])])) {
+    const nomeados = estado.eleitos?.get(sigla) ?? [];
+    const inferidos = estado.inferidos?.get(sigla) ?? [];
+    inferidas += inferidos.length;
+    partidos[sigla] = { eleitos: (porPartido[sigla] ?? 0) + inferidos.length, pessoasEleitas: [...nomeados, ...inferidos] };
+  }
   let ocupadas = false;
   if (codigo === 5 && estado.senadoOcupadas) {
     ocupadas = true;
@@ -722,7 +743,7 @@ function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
   return cadeirasHtml({
     titulo: codigo === 5 ? 'Composição do Senado' : 'Composição da Câmara',
     total: vagas,
-    pendentes: Math.max(0, vagas - eleitos - naFrente),
+    pendentes: Math.max(0, vagas - eleitos - inferidas - naFrente),
     partidos,
     ocupadas,
   }, estado.cadeiras, { esc, corPartido, fmtInt });
