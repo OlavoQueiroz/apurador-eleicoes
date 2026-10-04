@@ -6,7 +6,7 @@ import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, i
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
-import { CARGOS_PARTIDOS, CARTOES, PRESIDENTE, cargoPartidos, criarModelo, hashPartidos, partidosHtml, seletorCargosHtml } from './partidos.js';
+import { CARGOS_PARTIDOS, CARTOES, PRESIDENTE, cargoPartidos, criarModelo, hashPartidos, ligarHover, partidosHtml, seletorCargosHtml } from './partidos.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -1246,9 +1246,9 @@ function renderPartidos() {
     ocupadas: cargo.codigo === 5 ? (estado.senadoOcupadas ?? []) : [],
     ufs,
   });
-  $('#detalhe').innerHTML = partidosHtml(modelo, { aba: estado.partidos.aba, agrupar: estado.partidos.agrupar, cartoes: estado.partidos.cartoes, cargos: cargosDePartidos() }, {
-    esc, fmtInt, corPartido, nomeUf, mapa: MAPA, rotulos: rotulosMapaHtml(new Set(Object.keys(MAPA.ufs))),
-  });
+  const ajuda = { esc, fmtInt, corPartido, nomeUf, mapa: MAPA, rotulos: rotulosMapaHtml(new Set(Object.keys(MAPA.ufs))) };
+  $('#detalhe').innerHTML = partidosHtml(modelo, { aba: estado.partidos.aba, agrupar: estado.partidos.agrupar, cartoes: estado.partidos.cartoes, cargos: cargosDePartidos() }, ajuda);
+  ligarHover($('#detalhe'), ajuda);
 }
 
 // Presidente na aba Análises: cargo e período numa linha só, como os seletores das outras análises; o mapa e a tabela

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { criarPartidos, criarTradutor, carregarPartidos } from '../src/partidos.js';
 import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
-  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, estadosHtml, partidosHtml, placarHtml, serieHtml,
+  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
 import { resumir } from '../src/normalize.js';
 
@@ -226,4 +226,26 @@ test('placar: dois hemiciclos (eleição anterior e 2026) e três leituras dos c
 
   const sem = criarModelo({ cargo: cargo(6), historico: null, itens: [], ufs: [] });
   assert.equal(placarHtml(sem, ajuda).match(/class="par-hemi"/g).length, 1); // sem histórico, só o de 2026
+});
+
+test('hover: dica com as cadeiras do grupo nas duas eleições e a variação; cadeiras ainda sem definição', () => {
+  const itens = [{ uf: 'sp', vagas: 8, eleitosPorPartido: { PT: 5 }, cadeirasPorPartido: { PT: 5, PL: 1 } }];
+  const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: [] });
+  const aj = { ...ajuda, esc: (t) => String(t).replace(/"/g, '&quot;') }; // como o esc do app, que protege aspas em atributos
+  const lerTotais = (h) => JSON.parse(/data-totais="([^"]*)"/.exec(h)[1].replace(/&quot;/g, '"'));
+  const html = placarHtml(m, aj);
+  assert.match(html, /data-g="esquerda"/);
+  assert.match(html, /data-g="_vaga"/);
+  assert.match(html, /class="par-caixa" data-totais=/);
+  const totais = lerTotais(html);
+  const dica = dicaGrupoHtml(totais, 'esquerda', ajuda);
+  assert.match(dica, /<strong>Esquerda<\/strong>/);
+  assert.match(dica, /2022: <b>7<\/b> cadeiras \(\d+%\)/);
+  assert.match(dica, /2026: <b>5<\/b> cadeiras/);
+  assert.match(dica, /Variação: -2/);
+  assert.match(dicaGrupoHtml(totais, '_vaga', ajuda), /cadeiras sem definição/);
+  assert.equal(dicaGrupoHtml(totais, 'inexistente', ajuda), '');
+  // por partido o id é o partido
+  const porPartido = lerTotais(placarHtml(m, { ...aj, modo: 'partido' }));
+  assert.match(dicaGrupoHtml(porPartido, 'PT', ajuda), /<strong>PT<\/strong>/);
 });

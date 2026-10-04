@@ -222,17 +222,87 @@ function hemiciclo(fonte, modelo, ajuda) {
   const pontos = ordemSerpentina(posicoes);
   const circulos = cadeiras.map((c, i) => {
     const p = pontos[i];
-    if (!c.id) return `<circle class="par-vaga" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${raio.toFixed(1)}"><title>Em apuração</title></circle>`;
+    if (!c.id) return `<circle class="par-vaga" data-g="${VAGA}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${raio.toFixed(1)}"/>`;
     const g = infoGrupo(c.id, modo, ajuda);
     const estilo = c.frente ? `fill="none" stroke="${g.cor}" stroke-width="${Math.max(1.4, raio * 0.35).toFixed(1)}"` : `fill="${g.cor}"`;
-    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${(c.frente ? raio * 0.78 : raio).toFixed(1)}" ${estilo}><title>${esc(g.nome)}${c.frente ? ' · na frente, ainda não eleito' : ''}</title></circle>`;
+    return `<circle data-g="${esc(c.id)}"${c.frente ? ' data-frente="1"' : ''} cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${(c.frente ? raio * 0.78 : raio).toFixed(1)}" ${estilo}/>`;
   }).join('');
   return `<svg class="par-hemi" viewBox="-22 -22 644 366" role="img" aria-label="${esc(`Composição: ${fonte.definidas} de ${fonte.total} cadeiras definidas`)}">${circulos}
     <text class="par-hemi-num" x="300" y="268">${fmtInt(fonte.total)}</text><text class="par-hemi-leg" x="300" y="292">cadeiras${modelo.cargo.codigo === 3 ? ' de governador' : ''}</text></svg>`;
 }
 
 function legendaGrupos(grupos, { esc }, extra = '') {
-  return `<div class="par-leg">${grupos.map((g) => `<span><i style="background:${g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
+  return `<div class="par-leg">${grupos.map((g) => `<span${g.id && g.id !== 'outros' && g.id !== 'disputado' ? ` data-g="${esc(g.id)}"` : ''}><i style="background:${g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
+}
+
+// ---------- hover: total do grupo (bloco ou partido) ----------
+
+const VAGA = '_vaga'; // identificador das cadeiras ainda sem definição
+
+// Cadeiras de cada grupo na eleição anterior e em 2026 (confirmadas, na frente e fora de disputa), para a dica.
+function totaisPorGrupo(modelo, ajuda) {
+  const modo = modoDe(ajuda);
+  const atual = agrupar(unir(modelo.vivo.confirmados, modelo.vivo.ocupadas, modelo.vivo.naFrente), modo);
+  const antes = modelo.base ? agrupar(modelo.base.porPartido, modo) : null;
+  const grupos = {};
+  for (const id of new Set([...Object.keys(atual), ...Object.keys(antes ?? {})])) {
+    grupos[id] = { nome: infoGrupo(id, modo, ajuda).nome, antes: antes ? (antes[id] ?? 0) : null, atual: atual[id] ?? 0 };
+  }
+  return { grupos, anoBase: modelo.base?.ano ?? null, totalAntes: antes ? somaValores(antes) : null, totalAtual: modelo.vivo.total, pendentes: modelo.vivo.pendentes };
+}
+
+// Texto da dica ao passar o mouse num grupo: cadeiras e participação nas duas eleições, e a variação.
+export function dicaGrupoHtml(totais, id, { esc, fmtInt }) {
+  if (id === VAGA) return `<strong>Em apuração</strong><span>${fmtInt(totais.pendentes)} cadeiras sem definição</span>`;
+  const g = totais.grupos[id];
+  if (!g) return '';
+  const pct = (n, t) => `${t ? Math.round((100 * n) / t) : 0}%`;
+  const linhas = [];
+  if (g.antes !== null) linhas.push(`<span>${esc(totais.anoBase)}: <b>${fmtInt(g.antes)}</b> cadeiras (${pct(g.antes, totais.totalAntes)})</span>`);
+  linhas.push(`<span>2026: <b>${fmtInt(g.atual)}</b> cadeiras (${pct(g.atual, totais.totalAtual)})</span>`);
+  if (g.antes !== null) {
+    const d = g.atual - g.antes;
+    linhas.push(`<span class="${classeDelta(d)}">Variação: ${d > 0 ? '+' : ''}${fmtInt(d)}</span>`);
+  }
+  return `<strong>${esc(g.nome)}</strong>${linhas.join('')}`;
+}
+
+// Liga o hover: ao passar o mouse numa cadeira ou item da legenda, destaca o grupo nos dois hemiciclos e mostra a dica.
+export function ligarHover(raiz, ajuda) {
+  for (const caixa of raiz.querySelectorAll('.par-caixa[data-totais]')) {
+    const totais = JSON.parse(caixa.dataset.totais);
+    const dica = document.createElement('div');
+    dica.className = 'par-dica';
+    dica.hidden = true;
+    caixa.append(dica);
+    // A dica acompanha o mouse, sem passar da borda direita do cartão.
+    const posicionar = (e) => {
+      if (dica.hidden) return;
+      const r = caixa.getBoundingClientRect();
+      dica.style.left = `${Math.max(4, Math.min(e.clientX - r.left + 14, r.width - dica.offsetWidth - 4))}px`;
+      dica.style.top = `${e.clientY - r.top + 14}px`;
+    };
+    const limpar = () => {
+      delete caixa.dataset.foco;
+      caixa.querySelectorAll('.on').forEach((el) => el.classList.remove('on'));
+      dica.hidden = true;
+    };
+    caixa.addEventListener('mouseover', (e) => {
+      const alvo = e.target.closest('[data-g]');
+      if (!alvo) return limpar();
+      const id = alvo.dataset.g;
+      if (caixa.dataset.foco !== id) {
+        limpar();
+        caixa.dataset.foco = id;
+        caixa.querySelectorAll('[data-g]').forEach((el) => el.classList.toggle('on', el.dataset.g === id));
+        dica.innerHTML = dicaGrupoHtml(totais, id, ajuda);
+      }
+      dica.hidden = !dica.innerHTML;
+      posicionar(e);
+    });
+    caixa.addEventListener('mousemove', posicionar);
+    caixa.addEventListener('mouseleave', limpar);
+  }
 }
 
 export const CARTOES = ['2022', '2026', 'delta'];
@@ -285,7 +355,7 @@ export function placarHtml(modelo, ajuda) {
   const figura = (rotulo, fonte) => `<figure class="par-fig"><figcaption>${esc(rotulo)}</figcaption>${hemiciclo(fonte, modelo, ajuda)}</figure>`;
   const hemiciclos = `<div class="par-duplo">${base ? figura(`Eleição de ${base.ano}`, fonteBase(modelo)) : ''}${figura(vivo.pendentes > 0 ? '2026 · em apuração' : '2026', fonteAoVivo(modelo))}</div>`;
   return `${seletor}<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>
-    <div class="par-caixa"><h3 class="par-h">${esc(modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
+    <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
     <p class="par-nota">${fmtInt(confirmadas)} confirmadas pelo TSE em 2026${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
 }
 
