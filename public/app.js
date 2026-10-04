@@ -787,10 +787,27 @@ function detalheAgregadoHtml() {
     : '<p class="aviso-bloco espera">Nenhum candidato eleito ainda.</p>';
 
   let tabela = '';
-  if (ehMajoritario(meta.codigo) || meta.codigo === 5) {
+  const porNome = (a, b) => nomeUf(a.uf).localeCompare(nomeUf(b.uf), 'pt-BR');
+  if (meta.codigo === 5) {
+    // Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
+    const celula = (c) => (c
+      ? `<td><div class="colocado-nome">${esc(c.nomeUrna)}</div>
+          <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
+          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}</span></div></td>`
+      : '<td class="muted">—</td>');
+    const linhas = itens.slice().sort(porNome).map(({ uf, item }) => {
+      const [a, b, c] = item.colocados ?? [];
+      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a)}${celula(b)}${celula(c)}
+        <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
+    }).join('');
+    tabela = `<h3 class="secao">Mais votados em cada UF</h3>
+      <div class="tabela-rolagem"><table class="tabela tabela-colocados">
+        <thead><tr><th>UF</th><th>1º</th><th>2º</th><th>3º</th><th class="num">Totalizadas</th></tr></thead>
+        <tbody>${linhas}</tbody></table></div>`;
+  } else if (ehMajoritario(meta.codigo)) {
     const linhas = itens
       .slice()
-      .sort((a, b) => nomeUf(a.uf).localeCompare(nomeUf(b.uf), 'pt-BR'))
+      .sort(porNome)
       .map(({ uf, item }) => `<tr class="clicavel" data-uf="${uf}">
         <td>${esc(nomeUf(uf))}</td>
         <td>${item.lider ? esc(item.lider.nomeUrna) : '—'}</td>

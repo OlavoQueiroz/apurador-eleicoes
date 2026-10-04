@@ -56,6 +56,9 @@ test('com votos: converte texto em número, lê vírgula decimal e ordena por vo
   const r = resumir(d);
   assert.equal(r.lider.nomeUrna, 'FLAVIO BOLSONARO');
   assert.equal(r.segundo.nomeUrna, 'LULA');
+  const comVotos = d.candidatos.slice(0, 3).filter((c) => c.votos > 0);
+  assert.deepEqual(r.colocados.map((c) => c.nomeUrna), comVotos.map((c) => c.nomeUrna));
+  assert.ok(r.colocados.length >= 2 && r.colocados[0].nomeUrna === r.lider.nomeUrna);
 });
 
 test('votos válidos caem para vvc quando vv não existe', () => {

@@ -417,3 +417,8 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .seg .aba { flex: none; border: 0; background: transparent; border-radius: 10px; padding: 8px 18px; color: var(--muted); box-shadow: none; }
 .seg .aba:hover { color: var(--text); }
 .seg .aba[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(15, 27, 45, 0.18); }
+
+/* Tabela do Senado: 1º, 2º e 3º colocados por UF, com nome e tag do partido lado a lado. */
+.tabela-colocados td { vertical-align: top; }
+.colocado-nome { font-weight: 600; line-height: 1.25; }
+.colocado-info { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }

@@ -166,6 +166,7 @@ export function resumir(dados) {
     matematicamenteDefinido: dados.matematicamenteDefinido,
     lider: lider?.votos > 0 ? compacto(lider) : null,
     segundo: lider?.votos > 0 ? compacto(segundo) : null,
+    colocados: dados.candidatos.slice(0, 3).filter((c) => c.votos > 0).map(compacto), // 1º, 2º e 3º (tabela do Senado)
     eleitos: Object.values(eleitosPorPartido).reduce((soma, n) => soma + n, 0),
     eleitosPorPartido,
     segundoTurno,
