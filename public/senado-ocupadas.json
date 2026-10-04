@@ -1,0 +1,141 @@
+{
+ "fonte": "https://legis.senado.leg.br/dadosabertos/senador/lista/atual",
+ "geradoEm": "2026-10-04T13:26:20.500Z",
+ "cadeiras": [
+  {
+   "uf": "ac",
+   "nome": "Alan Rick",
+   "partido": "REPUBLICANOS"
+  },
+  {
+   "uf": "al",
+   "nome": "Renan Filho",
+   "partido": "MDB"
+  },
+  {
+   "uf": "am",
+   "nome": "Omar Aziz",
+   "partido": "PSD"
+  },
+  {
+   "uf": "ap",
+   "nome": "Davi Alcolumbre",
+   "partido": "UNIÃO"
+  },
+  {
+   "uf": "ba",
+   "nome": "Otto Alencar",
+   "partido": "PSD"
+  },
+  {
+   "uf": "ce",
+   "nome": "Camilo Santana",
+   "partido": "PT"
+  },
+  {
+   "uf": "df",
+   "nome": "Damares Alves",
+   "partido": "REPUBLICANOS"
+  },
+  {
+   "uf": "es",
+   "nome": "Magno Malta",
+   "partido": "PL"
+  },
+  {
+   "uf": "go",
+   "nome": "Wilder Morais",
+   "partido": "PL"
+  },
+  {
+   "uf": "ma",
+   "nome": "Lourdinha Pereira",
+   "partido": "PSB"
+  },
+  {
+   "uf": "mg",
+   "nome": "Cleitinho",
+   "partido": "REPUBLICANOS"
+  },
+  {
+   "uf": "ms",
+   "nome": "Tereza Cristina",
+   "partido": "PP"
+  },
+  {
+   "uf": "mt",
+   "nome": "Wellington Fagundes",
+   "partido": "PL"
+  },
+  {
+   "uf": "pa",
+   "nome": "Beto Faro",
+   "partido": "PT"
+  },
+  {
+   "uf": "pb",
+   "nome": "Efraim Filho",
+   "partido": "PL"
+  },
+  {
+   "uf": "pe",
+   "nome": "Teresa Leitão",
+   "partido": "PT"
+  },
+  {
+   "uf": "pi",
+   "nome": "Jussara Lima",
+   "partido": "PSD"
+  },
+  {
+   "uf": "pr",
+   "nome": "Sergio Moro",
+   "partido": "PL"
+  },
+  {
+   "uf": "rj",
+   "nome": "Romário",
+   "partido": "S/PARTIDO"
+  },
+  {
+   "uf": "rn",
+   "nome": "Rogerio Marinho",
+   "partido": "PL"
+  },
+  {
+   "uf": "ro",
+   "nome": "Jaime Bagattoli",
+   "partido": "PL"
+  },
+  {
+   "uf": "rr",
+   "nome": "Dr. Hiran",
+   "partido": "PP"
+  },
+  {
+   "uf": "rs",
+   "nome": "Hamilton Mourão",
+   "partido": "REPUBLICANOS"
+  },
+  {
+   "uf": "sc",
+   "nome": "Jorge Seif",
+   "partido": "PL"
+  },
+  {
+   "uf": "se",
+   "nome": "Laércio Oliveira",
+   "partido": "PP"
+  },
+  {
+   "uf": "sp",
+   "nome": "Astronauta Marcos Pontes",
+   "partido": "PL"
+  },
+  {
+   "uf": "to",
+   "nome": "Professora Dorinha Seabra",
+   "partido": "UNIÃO"
+  }
+ ]
+}

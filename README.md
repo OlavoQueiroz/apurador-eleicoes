@@ -95,6 +95,15 @@ TSE (JSON estático, CDN)  →  poller  →  normalização  →  memória  → 
 - **Antes da apuração**: os arquivos já existem, mas com votos zerados; o painel mostra "Aguardando apuração".
   Arquivos que o TSE ainda não publicou (ex.: 2º turno) aparecem como indisponíveis, sem erro.
 
+### Mapa de cadeiras
+
+Em **Senador · Brasil** e **Deputado Federal · Brasil** aparece o hemiciclo da composição: um ponto por cadeira, cinza
+até o TSE marcar o eleito, depois na cor do partido. O botão **Por partido / Por ideologia** muda o agrupamento, e
+clicar num grupo (esquerda, centrão, direita, independente) abre os partidos dele; clicar num partido destaca a
+bancada. No Senado, as 27 cadeiras que não estão em disputa em 2026 entram como pontos menores, com o partido atual
+do senador (`public/senado-ocupadas.json`, gerado por `node scripts/gerar-senado.js` a partir dos dados abertos do
+Senado). A classificação ideológica é **editorial e aproximada**, não um dado oficial: está em `public/ideologia.js`.
+
 ### O mapa
 
 O mapa é o contorno real das 27 UFs, desenhado em SVG a partir das malhas do IBGE (qualidade mínima, ~58 KB em

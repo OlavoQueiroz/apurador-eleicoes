@@ -3,6 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { iniciarBusca } from './busca.js';
+import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -55,6 +56,8 @@ const estado = {
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
+  cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
+  senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
   conexao: 'conectando',
   ultimoCicloEm: null,
 };
@@ -650,6 +653,29 @@ function agregadoSecoes() {
   return { total, totalizadas, pct: total ? (100 * totalizadas) / total : 0 };
 }
 
+// Mapa de cadeiras do Senado (5) e da Câmara (6): eleitos até agora por partido + cadeiras ainda em aberto.
+function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
+  if (codigo !== 5 && codigo !== 6) return '';
+  const partidos = {};
+  for (const [sigla, n] of Object.entries(porPartido)) partidos[sigla] = { eleitos: n };
+  let ocupadas = false;
+  if (codigo === 5 && estado.senadoOcupadas) {
+    ocupadas = true;
+    for (const { partido } of estado.senadoOcupadas) {
+      const sigla = partido.toUpperCase();
+      partidos[sigla] = { ...partidos[sigla], ocupadas: (partidos[sigla]?.ocupadas ?? 0) + 1 };
+    }
+  }
+  const eleitos = Object.values(porPartido).reduce((s, n) => s + n, 0);
+  return cadeirasHtml({
+    titulo: codigo === 5 ? 'Composição do Senado' : 'Composição da Câmara',
+    total: vagas,
+    pendentes: Math.max(0, vagas - eleitos),
+    partidos,
+    ocupadas,
+  }, estado.cadeiras, { esc, corPartido, fmtInt });
+}
+
 function detalheAgregadoHtml() {
   const meta = cargoMeta();
   const itens = itensDoCargo();
@@ -710,6 +736,7 @@ function detalheAgregadoHtml() {
       <p class="muted pequeno">Soma das UFs. Selecione uma UF no mapa para ver os candidatos.</p></div></div>
     ${secoes.totalizadas === 0 ? '<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>' : ''}
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
+    ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
     ${numeros}${barras}${tabela}`;
 }
 
@@ -830,6 +857,7 @@ function renderDetalhe() {
       location.hash = hashPara(estado.cargo, linha.dataset.uf);
     });
   });
+  ligarCadeiras(raiz, estado.cadeiras, renderDetalhe);
   montarGraficoEvolucao(raiz);
   window.scrollTo({ top: rolagem });
   // Candidato escolhido na busca: rola até ele uma vez, quando o detalhe já tiver carregado.
@@ -892,6 +920,8 @@ async function iniciar() {
   $('#subtitulo').textContent = `${meta.turno}º turno`;
   $('#banner-demo').hidden = !meta.demo;
 
+  fetch('/senado-ocupadas.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
+    .then((j) => { estado.senadoOcupadas = j?.cadeiras ?? null; if (estado.cargo === 5) renderDetalhe(); }).catch(() => {});
   lerHash();
   iniciarDica();
   iniciarBusca({
