@@ -252,6 +252,7 @@ final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos município
 - Conselheiro Distrital (Fernando de Noronha) não é acompanhado: o TSE ainda não publica esse arquivo.
 - Deputado estadual: só SP e RJ (`CARGOS[7]` em `src/tse.js`), sem projeção nem gráfico de evolução; é volumoso e menos testado na interface.
 - O modo demonstração simplifica o desfecho (não aplica quociente eleitoral).
+- **A visão Análise não foi vista com votos reais**: a prévia das vagas de deputado (estimada pelo quociente eleitoral) e a situação de cada governador no mapa (clara, listrada ou cheia) dependem de como o TSE publica durante a contagem. São estimativas, mudam até o fim e foram desenhadas para o 1º turno (detalhes em [docs/arquitetura.md](docs/arquitetura.md)).
 - **As projeções não foram validadas com votos reais.** Os cálculos foram testados com dados sintéticos; o descompasso
   entre os arquivos do TSE só aparece ao vivo. A validação deve usar o histórico gravado, depois da eleição.
 - O swing só existe para presidente; governador e senador exigiriam os dados de 2022 por UF (~290 MB).
@@ -288,6 +289,7 @@ src/limitador.js     ritmo único ao TSE: prioridade da UF, recuo em 429, contad
 src/projecao.js      extrapolação simples, estratificação por município, soma do Brasil
 src/swing.js         swing histórico (2022)
 src/anterior.js      resultado de 2022 traduzido pelo mapeamento de herança
+src/partidos.js      eleitos de 2014, 2018 e 2022 por partido, com a tabela de sucessão (/api/partidos)
 src/historico.js     gravador do histórico da apuração e leitura da série
 src/busca.js         busca global
 src/servidor.js      HTTP, API e SSE
@@ -297,7 +299,7 @@ src/abrir.js         abre o painel no navegador ao iniciar
 src/supervisor.js    npm run dev: reinicia o servidor quando o código muda
 src/parar.js         npm run stop: acha e encerra só o painel deste projeto
 public/              interface (HTML, CSS e JS sem build); mapa-brasil.js e municipios/ são gerados
-dados-historicos/    2022 e 2018 por município e mapeamentos de herança (versionados)
+dados-historicos/    2022 e 2018 por município, mapeamentos de herança, eleitos de 2014 a 2022 e sucessão de partidos (versionados)
 dados/               histórico da apuração gravado (fora do git)
 .cache/              cache dos municípios (fora do git)
 scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-eleitos, gerar-historico-2022 e -2018), dev e stop
