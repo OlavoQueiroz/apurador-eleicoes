@@ -163,10 +163,12 @@ window.addEventListener('hashchange', async () => {
 
 // ---------- desenho: abas e mapa ----------
 
+// Navegação entre cargos: controle segmentado.
 function renderAbas() {
-  $('#abas').innerHTML = estado.meta.cargos
+  const itens = estado.meta.cargos
     .map((c) => `<a class="aba" href="#/${c.codigo}/${ufPadrao(c.codigo)}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
+  $('#abas').innerHTML = `<div class="seg">${itens}</div>`;
 }
 
 function conteudoTile(item) {
