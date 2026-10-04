@@ -168,9 +168,15 @@ export function projetarEstratificado(municipios, { limite = 20, totalMunicipios
 // (além de `tolerancia`, fração do total de seções da UF; sem ela, a adaptativa de `toleranciaDescompasso`), ou se a subtração der negativo, devolve
 // `descompasso` e quem chamou usa a extrapolação simples (plano B).
 // Tolerância (fração do total de seções da UF) para considerar os arquivos em sincronia. Uma diferença de poucas
-// seções é normal enquanto cada arquivo é regenerado em um momento: 1% no fim, até 3% no começo da apuração, quando
-// o cenário muda mais rápido entre uma geração e outra e trocar de modelo por pouco faz a tela oscilar.
-export const toleranciaDescompasso = (fracaoApurada) => 0.01 + 0.02 * (1 - Math.min(1, Math.max(0, fracaoApurada))) ** 2;
+// seções é normal enquanto cada arquivo é regenerado em um momento: 1% no fim e até 3% no começo da apuração, quando o
+// cenário muda mais rápido entre uma geração e outra e trocar de modelo por pouco faz a tela oscilar. No meio da apuração
+// (pico por volta de 50%) a UF grande conta milhares de seções por minuto e o arquivo de acompanhamento sai uns 30 segundos
+// antes ou depois do da UF: em SP, a 47% apurado, o TSE publicou os dois com 2,6% de diferença (as outras 24 UFs
+// coincidiam). Por isso a tolerância sobe até 4% no meio, em curva, e é a maior entre as duas formas.
+export function toleranciaDescompasso(fracaoApurada) {
+  const f = Math.min(1, Math.max(0, fracaoApurada));
+  return Math.max(0.01 + 0.02 * (1 - f) ** 2, 0.01 + 0.03 * 4 * f * (1 - f));
+}
 
 // Parte comum aos modelos com "municípios grandes + resto": separa o resto do estado (arquivo da UF menos os
 // grandes) e confere a sincronia dos arquivos. Devolve { erro } (descompasso) ou as partes do resto.
