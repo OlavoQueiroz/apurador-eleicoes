@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { avaliarChances, garantidosNoTopo, quantosClassificam, vitoriaNoPrimeiroTurno } from './chances.js';
+import { avaliarChances, elegiveisPelaConta, quantosClassificam } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -781,8 +781,11 @@ function pilulaSituacao(c) {
 }
 
 // Antes de qualquer voto não há o que mostrar: sem barra, sem líder e um traço no lugar de "0,00%" repetido.
-const DICA_GARANTIDO = 'Mesmo que todos os votos que faltam fossem dos adversários que ainda podem alcançá-lo, ele continuaria entre os eleitos. É uma conta do painel (pela abstenção medida, com margem); só o TSE declara o eleito.';
-const DICA_VITORIA = 'Mesmo que todos os votos que faltam fossem dos outros candidatos, ele passaria de 50% dos válidos: fecha no 1º turno. É uma conta do painel (pela abstenção medida, com margem); só o TSE declara o eleito.';
+const DICA_ELEITO = {
+  matematica: 'Eleito pela conta do painel: mesmo que todos os votos que faltam fossem dos adversários, ele continuaria eleito. O TSE ainda não marcou.',
+  pratica: 'Eleito pela conta do painel: mesmo sem receber mais nenhum voto, pela abstenção medida (com margem), os adversários não o alcançam. O TSE ainda não marcou.',
+  provavel: 'Eleito pela conta do painel: mantido o % atual, com uma folga que diminui conforme a apuração avança, ele fica eleito. Estimativa não validada com votos reais. O TSE ainda não marcou.',
+};
 const DICA_CHANCE = {
   matematica: 'Sem chance matemática: mesmo com todos os votos que ainda podem entrar, não alcança os classificados.',
   pratica: 'Sem chance pela abstenção, brancos e nulos já medidos nas seções apuradas (com margem de segurança). Pode mudar se as seções que faltam votarem muito diferente.',
@@ -800,7 +803,7 @@ function candidatoHtml(c, posicao, largura, semVotos = false, fora = false, gara
   return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${garantido ? `<span class="pill eleito" title="${esc(DICA_GARANTIDO)}">Eleito pela conta*</span>` : ''}${fora ? `<span class="pill" title="${esc(fora === 'matematica' ? DICA_CHANCE.matematica : DICA_CHANCE.pratica)}">${fora === 'matematica' ? 'Sem chance matemática' : 'Sem chance'}</span>` : ''}</div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${garantido ? `<span class="pill eleito" title="${esc(DICA_ELEITO[garantido])}">Eleito*</span>` : ''}${fora ? `<span class="pill" title="${esc(fora === 'matematica' ? DICA_CHANCE.matematica : DICA_CHANCE.pratica)}">${fora === 'matematica' ? 'Sem chance matemática' : 'Sem chance'}</span>` : ''}</div>
       <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
     ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
@@ -907,18 +910,17 @@ function detalheArquivoHtml() {
   } else {
     const chances = avaliarChances({
       votos: candidatos.map((c) => c.votos), k: quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }),
-      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado, pctSecoes: d.secoes.pctTotalizadas,
+      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado, pctSecoes: d.secoes.pctTotalizadas, votosPorEleitor: d.cargo.codigo === 5 ? d.cargo.vagas : 1,
     }).map((x, i) => (candidatos[i].situacao === 'eleito' ? null : x)); // quem o TSE já marcou como eleito nunca é escondido
     const escondidos = estado.mostrarSemChance ? 0 : chances.filter(Boolean).length;
     const visiveisMaj = candidatos.map((c, i) => ({ c, i })).filter(({ i }) => estado.mostrarSemChance || !chances[i]);
-    const garantidos = d.cargo.codigo === 5
-      ? garantidosNoTopo({ votos: candidatos.map((c) => c.votos), k: quantosClassificam({ cargo: 5, vagas: d.cargo.vagas, turno: d.turno }), validos: d.votos.validos, eleitorado: d.eleitorado, pctSecoes: d.secoes.pctTotalizadas })
-        .map((x, i) => (candidatos[i].situacao === 'eleito' ? null : x))
-      : [];
+    const eleitosPelaConta = elegiveisPelaConta({
+      votos: candidatos.map((c) => c.votos), k: quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }),
+      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado,
+      pctSecoes: d.secoes.pctTotalizadas, votosPorEleitor: d.cargo.codigo === 5 ? d.cargo.vagas : 1,
+    }).map((x, i) => (candidatos[i].situacao === 'eleito' ? null : x)); // quem o TSE já marcou não precisa da conta
     const semChanceTotal = chances.filter(Boolean).length;
-    const vence1t = [1, 3].includes(d.cargo.codigo) && d.turno !== 2 && !candidatos[0]?.situacao?.startsWith('eleito')
-      ? vitoriaNoPrimeiroTurno({ votos: candidatos.map((c) => c.votos), validos: d.votos.validos, eleitorado: d.eleitorado, pctSecoes: d.secoes.pctTotalizadas }) : null;
-    lista = `${vence1t ? `<p class="aviso-bloco" title="${esc(DICA_VITORIA)}"><b>${esc(candidatos[0].nomeUrna)}</b> já fecha o 1º turno pela conta do painel (passa de 50% dos válidos mesmo sem receber mais nenhum voto). Ainda não foi declarado eleito pelo TSE.</p>` : ''}<ol class="candidatos">${visiveisMaj.map(({ c, i }) => candidatoHtml(c, i + 1, c.pct, semVotos, chances[i], garantidos[i])).join('')}</ol>
+    lista = `<ol class="candidatos">${visiveisMaj.map(({ c, i }) => candidatoHtml(c, i + 1, c.pct, semVotos, chances[i], eleitosPelaConta[i])).join('')}</ol>
       ${semChanceTotal ? `<button class="botao" id="mostrar-sem-chance">${escondidos ? `Mostrar também os ${fmtInt(escondidos)} sem chance` : 'Esconder os sem chance'}</button>
       <p class="muted pequeno">Sem chance de ${d.cargo.codigo === 5 ? 'ser eleito' : 'chegar ao 2º turno'}: estão fora mesmo que todos os votos que faltam (pela abstenção, brancos e nulos já medidos, com margem) fossem deles. É uma conta, não o resultado do TSE.</p>` : ''}`;
   }
@@ -1028,7 +1030,7 @@ function detalheAgregadoHtml() {
         ? `<td class="sem-chance muted pequeno" title="${esc(`${c.nomeUrna} (${c.partido}, ${fmtPct(c.pct)}). ${DICA_CHANCE[fora]}`)}">sem chance</td>`
         : `<td${fora ? ` class="sem-chance" title="${esc(DICA_CHANCE[fora])}"` : ''}><div class="colocado-nome">${esc(c.nomeUrna)}</div>
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
-          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? (meta.codigo === 5 ? ` · <b title="${esc(DICA_GARANTIDO)}">eleito pela conta*</b>` : ` · <b title="${esc(DICA_VITORIA)}">fecha no 1º turno*</b>`) : ''}</span></div></td>`);
+          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? ` · <b class="eleito-conta" title="${esc(DICA_ELEITO[vence])}">eleito*</b>` : ''}</span></div></td>`);
     const { campo, dir } = estado.ordemUfs;
     const ordenado = itens.slice().sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
@@ -1040,17 +1042,16 @@ function detalheAgregadoHtml() {
       const colocados = item.colocados ?? [];
       const fora = avaliarChances({
         votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }),
-        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas,
+        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: meta.codigo === 5 ? item.vagas : 1,
       }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
       if (fora.some(Boolean)) comSemChance += 1;
-      const vence = [1, 3].includes(meta.codigo) && item.turno !== 2 && colocados[0]?.situacao !== 'eleito'
-        ? vitoriaNoPrimeiroTurno({ votos: colocados.map((x) => x.votos), validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas }) : null;
-      const garantidos = meta.codigo === 5
-        ? garantidosNoTopo({ votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: 5, vagas: item.vagas, turno: item.turno }), validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas })
-          .map((x, i) => (colocados[i].situacao === 'eleito' ? null : x))
-        : [];
+      const eleitos = elegiveisPelaConta({
+        votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }),
+        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
+        pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: meta.codigo === 5 ? item.vagas : 1,
+      }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
       const [a, b, c] = colocados;
-      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], vence ?? garantidos[0])}${celula(b, fora[1], garantidos[1])}${celula(c, fora[2], garantidos[2])}
+      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0])}${celula(b, fora[1], eleitos[1])}${celula(c, fora[2], eleitos[2])}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>

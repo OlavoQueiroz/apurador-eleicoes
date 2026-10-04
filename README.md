@@ -135,6 +135,20 @@ do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios
 `/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
 municípios ficam o exterior (sem geometria) e o DF (um município só).
 
+### "Sem chance" e "Eleito*" (governador e senador)
+
+Na tabela de governador e senador (visão Brasil) e na lista de candidatos da UF, o painel faz duas contas **suas**, que não são o
+resultado do TSE (`public/chances.js`):
+
+- **Sem chance** (escondido por padrão, com botão para mostrar): quem não alcança os classificados (os 2 do 2º turno em
+  governador e presidente; as vagas no Senado) nem recebendo todos os votos que faltam, estimados pelo comparecimento e pelos
+  votos válidos já medidos, com margem de 15%. No 1º turno, se o líder já passa de 50% dos válidos mesmo sem receber mais
+  nenhum voto, os demais ficam sem chance (não há 2º turno).
+- **Eleito\***: quem o painel dá como eleito (selo verde com asterisco e explicação ao passar o mouse) quando o TSE ainda não o
+  marcou. Vale quando há garantia (os adversários não o alcançam nem recebendo tudo o que falta) ou, a partir de 30% das seções,
+  quando o % atual, descontada uma folga que cai com a apuração (12 pp no início, até 3 pp), já decide. A folga vem dos ensaios
+  simulados e não foi validada com votos reais. O selo oficial "Eleito" continua sendo só o do TSE.
+
 ### Visão Análise (partidos e ideologia)
 
 No seletor da direita, ao lado de **Apuração** e **Projeção**, a visão **Análise** respeita o cargo escolhido à esquerda:

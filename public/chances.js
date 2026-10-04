@@ -45,12 +45,15 @@ export function votosRestantesEstimados({ total, comparecimento, abstencao, vali
 //
 // Sem os dados do eleitorado (servidor antigo, ainda sem o campo), só o nível 'pratica' é calculado, e os votos que faltam saem
 // da proporção de seções apuradas: `validos × (100 − p) ÷ p`, com a mesma margem. `pctSecoes` = % de seções totalizadas.
-const restantesPorSecoes = (validos, pctSecoes) => (pctSecoes > 0 ? (pctSecoes >= 100 ? 0 : (validos * (100 - pctSecoes) * MARGEM_SEGURANCA) / pctSecoes) : null);
+// `votosPorEleitor`: no Senado, `validos` conta 2 votos por eleitor, mas um candidato recebe no máximo 1 de cada um.
+const restantesPorSecoes = (validos, pctSecoes, votosPorEleitor = 1) => (pctSecoes > 0
+  ? (pctSecoes >= 100 ? 0 : (validos * (100 - pctSecoes) * MARGEM_SEGURANCA) / pctSecoes / votosPorEleitor)
+  : null);
 
 // O líder já fecha o 1º turno? Verdadeiro se ele passa de 50% dos válidos mesmo que todos os votos que faltam fossem dos
 // outros (ele não recebe mais nenhum). 'matematica' (teto de todos os eleitores aptos que faltam) ou 'pratica' (votos que faltam
 // estimados pela abstenção medida, com margem); `null` se ainda não. É uma conta do painel: quem declara o eleito é o TSE.
-export function vitoriaNoPrimeiroTurno({ votos, validos = 0, eleitorado = null, pctSecoes = null }) {
+export function vitoriaNoPrimeiroTurno({ votos, validos = 0, eleitorado = null, pctSecoes = null }) { // (presidente e governador: 1 voto por eleitor)
   if (!(votos[0] > 0)) return null;
   const decide = (restantes) => restantes != null && 2 * votos[0] > validos + restantes;
   if (eleitorado && decide(votosRestantes(eleitorado))) return 'matematica';
@@ -58,8 +61,8 @@ export function vitoriaNoPrimeiroTurno({ votos, validos = 0, eleitorado = null, 
   return decide(estimados) ? 'pratica' : null;
 }
 
-export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null }) {
-  const restantesSecoes = restantesPorSecoes(validos, pctSecoes);
+export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null, votosPorEleitor = 1 }) {
+  const restantesSecoes = restantesPorSecoes(validos, pctSecoes, votosPorEleitor);
   if (!eleitorado && restantesSecoes === null) return votos.map(() => null);
   const fora = (restantes) => {
     const porLugar = semChanceMatematica(votos, k, restantes);
@@ -74,10 +77,38 @@ export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, e
 // Quem já está garantido entre os `k` primeiros (Senado: os eleitos): mesmo que ele não receba mais nenhum voto e cada
 // adversário que pode alcançá-lo receba todos os votos que faltam, menos de `k` terminam à frente dele. 'matematica' (teto) ou
 // 'pratica' (abstenção medida, com margem). Conta do painel, não o resultado: quem declara o eleito é o TSE.
-export function garantidosNoTopo({ votos, k, validos = 0, eleitorado = null, pctSecoes = null }) {
+export function garantidosNoTopo({ votos, k, validos = 0, eleitorado = null, pctSecoes = null, votosPorEleitor = 1 }) {
   const estrito = eleitorado ? votosRestantes(eleitorado) : null;
-  const pratico = eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes(validos, pctSecoes);
+  const pratico = eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes(validos, pctSecoes, votosPorEleitor);
   const seguro = (restantes, i) => restantes != null && i < k && votos[i] > 0
     && i + votos.slice(i + 1).filter((v) => v + restantes > votos[i]).length < k;
   return votos.map((_, i) => (seguro(estrito, i) ? 'matematica' : seguro(pratico, i) ? 'pratica' : null));
+}
+
+// Folga, em pontos percentuais, que se desconta do % atual de cada candidato para dizer que ele "provavelmente" fica onde está:
+// o % final pode se afastar do atual porque as regiões chegam em ordens diferentes. Nos ensaios (scripts/ensaio-apuracao.js) o
+// erro do % projetado simplesmente mantendo o atual foi de até ~4,6 pp aos 2-5% apurados, ~3,9 aos 10%, ~2 aos 20%, ~1,5 aos
+// 35% e ~1 aos 50%; a folga abaixo é de 3 a 5 vezes isso. Não foi validada com votos reais.
+export const PISO_FOLGA_PP = 3;
+export const FOLGA_INICIAL_PP = 12;
+export const APURACAO_MINIMA_PROVAVEL = 30; // abaixo disso (% de seções) só vale a garantia: o início da apuração é enganoso demais
+export const folgaProvavel = (pctSecoes) => (pctSecoes > 0 ? Math.max(PISO_FOLGA_PP, FOLGA_INICIAL_PP * (1 - Math.min(100, pctSecoes) / 100)) : null);
+
+// Quem o painel dá como eleito (ou, no 1º turno de presidente e governador, como vencedor sem 2º turno): array com 'matematica',
+// 'pratica' (as garantias acima), 'provavel' (o % atual, descontada a folga, já decide) ou null. Só os `k` primeiros podem ser.
+// `votosPorEleitor`: 2 no Senado. É uma conta do painel; só o TSE declara o eleito.
+export function elegiveisPelaConta({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null, votosPorEleitor = 1 }) {
+  const garantia = primeiroTurno
+    ? votos.map((_, i) => (i === 0 ? vitoriaNoPrimeiroTurno({ votos, validos, eleitorado, pctSecoes }) : null))
+    : garantidosNoTopo({ votos, k, validos, eleitorado, pctSecoes, votosPorEleitor });
+  const folga = folgaProvavel(pctSecoes);
+  const pct = (v) => (validos > 0 ? (100 * v) / validos : 0);
+  const margem = folga === null ? null : folga / votosPorEleitor; // os % do Senado são sobre 2 votos por eleitor
+  const provavel = (i) => {
+    if (margem === null || pctSecoes < APURACAO_MINIMA_PROVAVEL || !(votos[i] > 0) || i >= k) return false;
+    if (primeiroTurno) return i === 0 && pct(votos[0]) - margem > 50;
+    const adversarios = votos.slice(i + 1).filter((v) => pct(v) + margem > pct(votos[i]) - margem).length;
+    return i + adversarios < k;
+  };
+  return votos.map((_, i) => garantia[i] ?? (provavel(i) ? 'provavel' : null));
 }
