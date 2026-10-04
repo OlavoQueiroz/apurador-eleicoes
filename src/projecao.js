@@ -61,10 +61,7 @@ function fracaoApurada(dados) {
   if (!(total > 0) || !(totalizadas > 0)) return 0;
   return Math.min(1, totalizadas / total);
 }
-
 // Modelo 1. Projeção = votos atuais + votos válidos faltantes × percentual atual do candidato.
-// Os limites mínimo e máximo são os extremos matemáticos (nenhum ou todos os votos faltantes vão para o
-// candidato); não são intervalo de confiança, só mostram o quanto ainda está em aberto.
 export function projetarIngenuo(dados, { limite = 20 } = {}) {
   const fracao = fracaoApurada(dados);
   const validos = dados.votos.validos;
@@ -83,8 +80,6 @@ export function projetarIngenuo(dados, { limite = 20 } = {}) {
       pctAtual: parte * 100,
       votosProjetados: Math.round(c.votos + faltantes * parte),
       pctProjetado: parte * 100,
-      pctMinimo: (c.votos / validosProjetados) * 100,
-      pctMaximo: ((c.votos + faltantes) / validosProjetados) * 100,
     };
   });
 
@@ -167,8 +162,6 @@ export function projetarEstratificado(municipios, { limite = 20, totalMunicipios
       ...c,
       pctAtual: validosAtuais > 0 ? (c.votosAtuais / validosAtuais) * 100 : 0,
       pctProjetado: validosProjetados > 0 ? (c.votosProjetados / validosProjetados) * 100 : 0,
-      pctMinimo: validosProjetados > 0 ? (c.votosAtuais / validosProjetados) * 100 : 0,
-      pctMaximo: validosProjetados > 0 ? (Math.min(c.votosAtuais + faltantes, validosProjetados) / validosProjetados) * 100 : 0,
     })),
   };
 }
@@ -180,15 +173,21 @@ export function projetarEstratificado(municipios, { limite = 20, totalMunicipios
 //  • `ufDados`: resultado normalizado do arquivo da UF (ciclo principal);
 //  • `detalhes`: Map município → { aptos, secoes:{total,totalizadas} } de TODOS os municípios da UF.
 // Os arquivos têm horários de geração diferentes. Se as seções da UF, do acompanhamento e dos grandes não baterem
-// (além de `tolerancia`, fração do total de seções da UF), ou se a subtração der negativo, devolve
+// (além de `tolerancia`, fração do total de seções da UF; sem ela, a adaptativa de `toleranciaDescompasso`), ou se a subtração der negativo, devolve
 // `descompasso` e quem chamou usa a extrapolação simples (plano B).
+// Tolerância (fração do total de seções da UF) para considerar os arquivos em sincronia. Uma diferença de poucas
+// seções é normal enquanto cada arquivo é regenerado em um momento: 1% no fim, até 3% no começo da apuração, quando
+// o cenário muda mais rápido entre uma geração e outra e trocar de modelo por pouco faz a tela oscilar.
+export const toleranciaDescompasso = (fracaoApurada) => 0.01 + 0.02 * (1 - Math.min(1, Math.max(0, fracaoApurada))) ** 2;
+
 // Parte comum aos modelos com "municípios grandes + resto": separa o resto do estado (arquivo da UF menos os
 // grandes) e confere a sincronia dos arquivos. Devolve { erro } (descompasso) ou as partes do resto.
-export function separarResto({ grandes, ufDados, detalhes, tolerancia = 0.01 }) {
+export function separarResto({ grandes, ufDados, detalhes, tolerancia = null }) {
   const idsGrandes = new Set(grandes.map((g) => g.codigoMunicipio));
   const secoesUf = ufDados.totalizacaoFinal
     ? { total: ufDados.secoes.total, totalizadas: ufDados.secoes.total }
     : ufDados.secoes;
+  const limiteDescompasso = tolerancia ?? toleranciaDescompasso(secoesUf.total > 0 ? secoesUf.totalizadas / secoesUf.total : 0);
 
   // Seções do resto e conferência de sincronia.
   let restoTotal = 0;
@@ -219,7 +218,7 @@ export function separarResto({ grandes, ufDados, detalhes, tolerancia = 0.01 }) 
     diferencaUfPct: dessincUf * 100,
     diferencaGrandesPct: dessincGrandes * 100,
   };
-  if (Math.max(dessincUf, dessincGrandes) > tolerancia) {
+  if (Math.max(dessincUf, dessincGrandes) > limiteDescompasso) {
     return { erro: { descompasso: true, conferencia, motivo: 'Os arquivos da UF e dos municípios estão em momentos diferentes da apuração.' } };
   }
 
@@ -255,7 +254,7 @@ export function separarResto({ grandes, ufDados, detalhes, tolerancia = 0.01 }) 
   };
 }
 
-export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tolerancia = 0.01 }) {
+export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tolerancia = null }) {
   const base = { modelo: 'estratificado', modo: 'grandes+resto' };
   const sep = separarResto({ grandes, ufDados, detalhes, tolerancia });
   if (sep.erro) return { ...base, disponivel: false, ...sep.erro };
@@ -313,8 +312,6 @@ export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tole
       votosProjetados: Math.round(proj),
       pctAtual: validosAtuais > 0 ? (votos / validosAtuais) * 100 : 0,
       pctProjetado: validosProjetados > 0 ? (proj / validosProjetados) * 100 : 0,
-      pctMinimo: validosProjetados > 0 ? (votos / validosProjetados) * 100 : 0,
-      pctMaximo: validosProjetados > 0 ? (Math.min(votos + faltantes, validosProjetados) / validosProjetados) * 100 : 0,
     };
   }).sort((a, b) => b.votosProjetados - a.votosProjetados).slice(0, limite);
 
@@ -368,7 +365,12 @@ export function tamanhoUf({ foto, ufDados }) {
 // Modelo 2 no Brasil (presidente): soma a projeção de cada UF. Uma UF em que nada foi apurado ainda entra pelo
 // eleitorado e pela média nacional das UFs que já têm votos. `ufs` = [{ uf, r, aptos, secoes }], onde `r` é a
 // projeção da UF (projetarUf). Candidatos são identificados pelo número (nacional na presidência).
-export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado' } = {}) {
+//
+// A apuração não começa de forma equilibrada pelo país, então a "média das UFs apuradas" erra no começo da noite.
+// Com `anteriorPorUf` (anterior.porUf(): votos de 2022 por UF, já traduzidos para os candidatos de 2026), uma UF
+// zerada usa o PRÓPRIO resultado de 2022 + o swing nacional medido nas UFs já apuradas, e o total de votos de 2022
+// × o crescimento de votos medido nas mesmas. UF sem dado de 2022 (ou sem swing medido) cai na média, como antes.
+export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado', anteriorPorUf = null } = {}) {
   const base = { modelo };
   const comVotos = ufs.filter((u) => u.r.disponivel);
   if (!comVotos.length) return { ...base, disponivel: false, motivo: 'Ainda não há votos apurados em nenhum município.' };
@@ -402,15 +404,52 @@ export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado' } = 
     for (const k of Object.keys(municipios)) municipios[k] += r.municipios?.[k] ?? 0;
   }
 
+  // UFs zeradas com histórico de 2022: % de 2022 + swing nacional, e total de 2022 × crescimento.
+  const porHistorico = new Map(); // número → votos esperados nas UFs zeradas que usam o histórico
+  let esperadoPorHistorico = 0;
+  let ufsPorHistorico = 0;
+  const usadas = new Set(); // UFs zeradas estimadas pelo histórico
+  if (anteriorPorUf) {
+    const base22 = comVotos.map((u) => ({ u, p: anteriorPorUf[u.uf] })).filter(({ p }) => p?.validos > 0);
+    const peso = base22.reduce((t, { u }) => t + u.r.validosProjetados, 0);
+    const validos22 = base22.reduce((t, { p }) => t + p.validos, 0);
+    const comPrior = semVotos.filter((u) => anteriorPorUf[u.uf]?.validos > 0);
+    if (peso > 0 && validos22 > 0 && comPrior.length) {
+      const crescimento = peso / validos22;
+      const swing = new Map(); // número → variação nacional da fatia (fração, não pontos)
+      for (const n of info.keys()) {
+        let soma = 0;
+        for (const { u, p } of base22) {
+          const agora = (u.r.candidatos.find((c) => c.numero === n)?.votosProjetados ?? 0) / u.r.validosProjetados;
+          soma += u.r.validosProjetados * (agora - (p.herdados[n] ?? 0) / p.validos);
+        }
+        swing.set(n, soma / peso);
+      }
+      for (const { uf } of comPrior) {
+        const p = anteriorPorUf[uf];
+        const bruto = new Map([...info.keys()].map((n) => [n, Math.max(0, (p.herdados[n] ?? 0) / p.validos + swing.get(n))]));
+        const total = [...bruto.values()].reduce((t, v) => t + v, 0);
+        if (!(total > 0)) continue;
+        const votosUf = p.validos * crescimento;
+        esperadoPorHistorico += votosUf;
+        ufsPorHistorico += 1;
+        usadas.add(uf);
+        for (const [n, v] of bruto) porHistorico.set(n, (porHistorico.get(n) ?? 0) + votosUf * (v / total));
+      }
+    }
+  }
+
+  const semHistorico = semVotos.filter((u) => !usadas.has(u.uf));
   const taxa = aptos > 0 ? esperado / aptos : 0;
-  const esperadoUfsVazias = semVotos.reduce((s, u) => s + u.aptos * taxa, 0);
+  const esperadoUfsVazias = semHistorico.reduce((s, u) => s + u.aptos * taxa, 0) + esperadoPorHistorico;
+  const esperadoPorMedia = esperadoUfsVazias - esperadoPorHistorico;
   for (const u of semVotos) secoesTotal += u.secoes.total;
   const validosProjetados = Math.round(esperado + esperadoUfsVazias);
   const faltantes = Math.max(0, validosProjetados - validosAtuais);
 
   const candidatos = [...info.values()].map((i) => {
     const parteComVotos = projetado.get(i.numero) ?? 0;
-    const parteVazias = esperado > 0 ? (parteComVotos / esperado) * esperadoUfsVazias : 0;
+    const parteVazias = (esperado > 0 ? (parteComVotos / esperado) * esperadoPorMedia : 0) + (porHistorico.get(i.numero) ?? 0);
     const votos = atual.get(i.numero) ?? 0;
     return {
       ...i,
@@ -418,8 +457,6 @@ export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado' } = 
       votosProjetados: Math.round(parteComVotos + parteVazias),
       pctAtual: validosAtuais > 0 ? (votos / validosAtuais) * 100 : 0,
       pctProjetado: validosProjetados > 0 ? ((parteComVotos + parteVazias) / validosProjetados) * 100 : 0,
-      pctMinimo: validosProjetados > 0 ? (votos / validosProjetados) * 100 : 0,
-      pctMaximo: validosProjetados > 0 ? (Math.min(votos + faltantes, validosProjetados) / validosProjetados) * 100 : 0,
     };
   }).sort((a, b) => b.votosProjetados - a.votosProjetados).slice(0, limite);
 
@@ -431,7 +468,7 @@ export function projetarBrasil(ufs, { limite = 20, modelo = 'estratificado' } = 
     validosProjetados,
     votosFaltantes: faltantes,
     municipios,
-    ufs: { total: ufs.length, comVotos: comVotos.length, semVotos: semVotos.length, planoB },
+    ufs: { total: ufs.length, comVotos: comVotos.length, semVotos: semVotos.length, planoB, semVotosPorHistorico: ufsPorHistorico },
     parteEstimadaPelaUf: validosProjetados > 0 ? (esperadoEstimado + esperadoUfsVazias) / validosProjetados : 0,
     candidatos,
   };

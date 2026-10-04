@@ -111,6 +111,36 @@ test('SSE: avisa o cliente a cada ciclo, com as chaves alteradas', async () => {
   controle.abort();
 });
 
+test('SSE: cliente que some de repente não atrapalha os outros nem derruba o servidor', async () => {
+  const { connect } = await import('node:net');
+  const porta = new URL(base).port;
+  const morto = connect(Number(porta), '127.0.0.1');
+  await new Promise((resolve) => morto.once('connect', resolve));
+  morto.write('GET /events HTTP/1.1\r\nHost: x\r\n\r\n');
+  await new Promise((resolve) => morto.once('data', resolve));
+  morto.destroy(); // some sem encerrar a conversa
+
+  const controle = new AbortController();
+  const res = await fetch(`${base}/events`, { signal: controle.signal });
+  const leitor = res.body.getReader();
+  const decoder = new TextDecoder();
+  let recebido = '';
+  const lerAte = async (padrao) => {
+    while (!padrao.test(recebido)) {
+      const { value, done } = await leitor.read();
+      if (done) break;
+      recebido += decoder.decode(value);
+    }
+  };
+  await lerAte(/event: ciclo/);
+  recebido = '';
+  await apuracao.ciclo();
+  await apuracao.ciclo();
+  await lerAte(/event: ciclo/);
+  assert.match(recebido, /event: ciclo/);
+  controle.abort();
+});
+
 test('/api/projecao: modelo indisponível explica o motivo, e sem dados não projeta', async () => {
   const meta = await (await fetch(`${base}/api/meta`)).json();
   assert.deepEqual(meta.modelos.map((m) => m.id), ['ingenuo', 'estratificado', 'swing', 'bayesiano']);

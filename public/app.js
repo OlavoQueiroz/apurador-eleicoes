@@ -1008,6 +1008,9 @@ function sobreModelosHtml() {
 function municipiosHtml(p) {
   const avisos = [];
   // Plano B: arquivos da UF e dos municípios em momentos diferentes, então a projeção é a extrapolação simples.
+  if (p.mantida) {
+    avisos.push(`<b>Projeção de poucos minutos atrás.</b> Os arquivos desta UF saíram de sincronia por um instante (${esc(p.mantida.motivo ?? '')}); a tela mantém a última projeção por município em vez de trocar de modelo.`);
+  }
   if (p.plano === 'extrapolacao') {
     avisos.push(`<b>Usando a extrapolação simples nesta UF.</b> ${esc(p.motivoPlano ?? '')} Volta ao modelo por município quando os arquivos se alinharem.`);
   }
@@ -1073,8 +1076,8 @@ function detalheProjecaoHtml() {
       <span class="muted pequeno">${fmtPct(frac, 0)} das seções totalizadas</span>`}</div>${comoCalcula}`;
   }
 
-  // Barras na mesma escala: a do maior valor possível entre os candidatos.
-  const escala = Math.min(100, Math.max(1, ...p.candidatos.map((c) => c.pctMaximo)));
+  // Barras na mesma escala: a do maior percentual (projetado ou atual) entre os candidatos.
+  const escala = Math.min(100, Math.max(1, ...p.candidatos.map((c) => Math.max(c.pctProjetado, c.pctAtual))));
   const x = (pct) => Math.min(100, (pct / escala) * 100);
   const [lider, segundo] = p.candidatos;
   const margem = lider.pctProjetado - (segundo?.pctProjetado ?? 0);
@@ -1084,16 +1087,15 @@ function detalheProjecaoHtml() {
       <div class="heroi-num"><b>${fmtPct(lider.pctProjetado, 1)}</b>${segundo ? `<span class="muted pequeno">+${fmtPct(margem, 1).replace('%', '')} pp sobre o 2º</span>` : ''}</div></div>`;
   const linhas = p.candidatos.map((c) => `<li class="proj-cand" style="--cor:${corPartido(c.partido)}">
       <div class="proj-topo"><span><b>${esc(c.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></span><b>${fmtPct(c.pctProjetado)}</b></div>
-      <div class="proj-barra" role="img" aria-label="Projetado ${fmtPct(c.pctProjetado)}, atual ${fmtPct(c.pctAtual)}, faixa possível de ${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}">
-        <i class="proj-faixa" style="left:${x(c.pctMinimo)}%;width:${Math.max(0.8, x(c.pctMaximo) - x(c.pctMinimo))}%"></i>
+      <div class="proj-barra" role="img" aria-label="Projetado ${fmtPct(c.pctProjetado)}, atual ${fmtPct(c.pctAtual)}">
         <i class="proj-valor" style="width:${x(c.pctProjetado)}%"></i>
         <i class="proj-atual" style="left:${x(c.pctAtual)}%"></i></div>
-      <span class="muted pequeno">atual ${fmtPct(c.pctAtual)} · ${fmtInt(c.votosProjetados)} votos · faixa ${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}</span>
+      <span class="muted pequeno">atual ${fmtPct(c.pctAtual)} · ${fmtInt(c.votosProjetados)} votos</span>
     </li>`).join('');
   return `${topo}
     ${heroi}
     <ul class="proj-lista">${linhas}</ul>
-    <p class="muted pequeno proj-legenda"><span class="lg-valor"></span>projetado <span class="lg-atual"></span>atual <span class="lg-faixa"></span>faixa possível: extremos matemáticos, não é probabilidade; é larga no começo da apuração.</p>
+    <p class="muted pequeno proj-legenda"><span class="lg-valor"></span>projetado <span class="lg-atual"></span>atual</p>
     <div class="progresso">
       <div class="progresso-linha"><span>Seções totalizadas usadas como base</span><span><b>${fmtPct(p.fracaoApurada * 100)}</b></span></div>
       <div class="trilho"><i style="width:${p.fracaoApurada * 100}%"></i></div>
