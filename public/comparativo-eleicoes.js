@@ -29,32 +29,37 @@ export const ESCALA_SALDO = 8; // saldo (p.p.) mínimo que pinta a cor cheia no 
 // `pt` e `pl` são os dois campos (as cores são as do PT e do PL em todo o painel); `numero` é o do período ATUAL, o
 // mesmo em 2022 e 2026; `nomeBase` é quem concorreu na eleição base (a ligação de números vem de dados-historicos/).
 export const PADRAO = '2026x2022';
+// Terceiros candidatos que o painel sabe mostrar nas barras. `numeroBase`/`numeroAtual` = número na eleição base e na atual
+// (ausente = não concorreu). Os de 2026 vêm da urna: Cury (Avante, 70) e Renan Santos (Missão, 14).
+const CIRO = { id: 'ciro', nome: 'Ciro Gomes', partido: 'PDT', numeroBase: '12', numeroAtual: '12' };
+const ALCKMIN = { id: 'alckmin', nome: 'Geraldo Alckmin', partido: 'PSDB', numeroBase: '45' }; // só concorreu em 2018
+const TEBET = { id: 'tebet', nome: 'Simone Tebet', partido: 'MDB', numeroBase: '15' }; // base 2022
+const TEBET_ATUAL = { ...TEBET, numeroBase: undefined, numeroAtual: '15' };
+const CURY = { id: 'cury', nome: 'Augusto Cury', partido: 'AVANTE', numeroAtual: '70', padrao: true };
+const RENAN = { id: 'renan', nome: 'Renan Santos', partido: 'MISSÃO', numeroAtual: '14', padrao: true };
 export const PERIODOS = {
   '2026x2022': {
     id: '2026x2022', rotulo: '2026 × 2022', anoAtual: 2026, anoBase: 2022, vivo: true,
     pt: { numero: '13', nome: 'Lula', nomeBase: 'Lula', partido: 'PT' },
     pl: { numero: '22', nome: 'Flávio Bolsonaro', curto: 'Flávio', nomeBase: 'Bolsonaro', partido: 'PL' },
     nota: 'Em 2022, Bolsonaro concorreu pelo PL, o mesmo partido de Flávio em 2026.',
+    outros: [{ ...CIRO, numeroAtual: undefined }, TEBET, CURY, RENAN], // Ciro e Tebet só em 2022; Cury e Renan só em 2026
   },
   '2026x2018': {
     id: '2026x2018', rotulo: '2026 × 2018', anoAtual: 2026, anoBase: 2018, vivo: true,
     pt: { numero: '13', nome: 'Lula', titulo: 'PT (Haddad em 2018, Lula em 2026)', curto: 'PT', nomeBase: 'Haddad', partido: 'PT' },
     pl: { numero: '22', nome: 'Flávio Bolsonaro', curto: 'Flávio', nomeBase: 'Bolsonaro', partido: 'PL' },
     nota: 'Lula não concorreu em 2018 (estava inelegível): o PT lançou Haddad, então a comparação é entre as candidaturas do PT, Haddad em 2018 e Lula em 2026. Bolsonaro concorreu pelo PSL, com o número 17; em 2026 o campo dele tem Flávio, pelo PL.',
+    outros: [{ ...CIRO, numeroAtual: undefined, padrao: true }, ALCKMIN, CURY, RENAN], // Ciro e Alckmin só em 2018; Cury e Renan só em 2026
   },
   '2022x2018': {
     id: '2022x2018', rotulo: '2022 × 2018', anoAtual: 2022, anoBase: 2018, vivo: false,
     pt: { numero: '13', nome: 'Lula', titulo: 'PT (Haddad em 2018, Lula em 2022)', curto: 'PT', nomeBase: 'Haddad', partido: 'PT' },
     pl: { numero: '22', nome: 'Bolsonaro', curto: 'Bolsonaro', nomeBase: 'Bolsonaro', partido: 'PL' },
     nota: 'Lula não concorreu em 2018 (estava inelegível): o PT lançou Haddad, então a comparação é entre as candidaturas do PT, Haddad em 2018 e Lula em 2022. Bolsonaro concorreu pelo PSL, com o número 17; em 2022, pelo PL, com o 22.',
-    outros: [
-      { id: 'ciro', nome: 'Ciro Gomes', partido: 'PDT', numeroBase: '12', numeroAtual: '12', padrao: true },
-      { id: 'alckmin', nome: 'Geraldo Alckmin', partido: 'PSDB', numeroBase: '45' }, // só concorreu em 2018
-      { id: 'tebet', nome: 'Simone Tebet', partido: 'MDB', numeroAtual: '15' }, // só concorreu em 2022
-    ],
+    outros: [{ ...CIRO, padrao: true }, ALCKMIN, TEBET_ATUAL],
   },
 };
-for (const periodo of Object.values(PERIODOS)) periodo.outros ??= []; // terceiros candidatos que o painel sabe mostrar (hoje só 2022 × 2018)
 export const periodoPorId = (id) => PERIODOS[id] ?? PERIODOS[PADRAO];
 // Terceiros mostrados nas barras: o que o usuário marcou (ui.terceiros) ou, sem escolha, os `padrao` do período.
 export const terceirosSelecionados = (periodo, ui) =>

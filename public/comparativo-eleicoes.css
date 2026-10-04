@@ -13,7 +13,7 @@
 .comp-tab th.nm, .comp-tab td.nm { text-align: left; }
 .comp-tab td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: middle; line-height: 1.25; }
 .comp-tab td.nm { min-width: 0; white-space: nowrap; }
-.comp-tab td.nm small { display: block; font-weight: 400; font-size: 11.5px; }
+.comp-tab td.nm small { display: block; max-width: 150px; white-space: normal; font-weight: 400; font-size: 11.5px; }
 .comp-tab td.nm a { color: inherit; text-decoration: none; }
 .comp-tab td.nm a:hover { text-decoration: underline; }
 .comp-tab td.peso { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
