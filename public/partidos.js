@@ -1,11 +1,11 @@
-// Aba "Partidos": bancadas por bloco ideológico e por partido, comparadas com as eleições anteriores. Sem DOM: o modelo
+// Visão "Análise": bancadas por bloco ideológico e por partido, comparadas com as eleições anteriores. Sem DOM: o modelo
 // é montado a partir de dados puros e as funções devolvem texto HTML/SVG (como cadeiras.js). A classificação dos
 // partidos em blocos é a de ideologia.js, uma simplificação editorial.
 
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
 
-// Cargos da aba, na mesma ordem do menu principal (governador, senador, deputados). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
+// Cargos com análise de bancadas (a presidência tem o comparativo, em comparativo-eleicoes.js). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
 // Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes, então 2014 fica de fora).
 export const CARGOS_PARTIDOS = [
   { codigo: 3, chave: 'governador', nome: 'Governadores', total: 27, anos: [2014, 2018, 2022], mapa: true },
@@ -15,8 +15,6 @@ export const CARGOS_PARTIDOS = [
   { codigo: 7, chave: 'deputadoEstadual', nome: 'Dep. estadual', total: null, anos: [2014, 2018, 2022], mapa: false, ufs: { sp: 94, rj: 70 } },
 ];
 export const cargoPartidos = (codigo) => CARGOS_PARTIDOS.find((c) => c.codigo === Number(codigo));
-// Presidente também mora na aba Análises, mas com a visão Comparativo (comparativo-eleicoes.js) em vez de bancadas.
-export const PRESIDENTE = { codigo: 1, nome: 'Presidente' };
 
 export const ABAS = [
   { id: 'placar', nome: 'Placar' },
@@ -441,25 +439,34 @@ export function estadosHtml(modelo, ajuda) {
 }
 
 export const MODOS = [{ id: 'ideologia', nome: 'Ideologia' }, { id: 'partido', nome: 'Partido' }];
-// Endereço de uma visão da aba; o agrupamento por ideologia é o padrão e não vai no endereço. A UF
-// só entra nos cargos que a escolhem (deputado estadual).
-export const hashPartidos = (cargo, aba, agrupar, uf) => (Number(cargo) === PRESIDENTE.codigo
-  ? '#/partidos/1/comparativo'
-  : `#/partidos/${cargo}/${aba}${cargoPartidos(cargo)?.ufs && uf ? `/${uf}` : ''}${agrupar === 'partido' ? '/partido' : ''}`);
+// Endereço da visão Análise (#/cargo/uf/analise/aba/partido): a análise Placar e o agrupamento por ideologia são o padrão e
+// não vão no endereço. A UF só conta no deputado estadual; nos outros cargos é "br".
+export const hashPartidos = (cargo, aba, agrupar, uf) => {
+  const ufs = cargoPartidos(cargo)?.ufs;
+  const ufDe = ufs ? (uf && uf in ufs ? uf : Object.keys(ufs)[0]) : 'br';
+  return `#/${cargo}/${ufDe}/analise${aba && aba !== 'placar' ? `/${aba}` : ''}${agrupar === 'partido' ? '/partido' : ''}`;
+};
 
-// Seletor de cargo da aba (o mesmo switch do resto do app); `atual` é o código do cargo aberto.
-export function seletorCargosHtml({ cargos, atual, aba, modo, uf, esc }) {
-  const itens = cargos.map((c) =>
-    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo, uf)}" ${c.codigo === atual ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
-  return `<div class="seg seg-modelo" role="group" aria-label="Cargo">${itens}</div>`;
+// Endereços de versões anteriores (#/partidos/..., #/1/br/comparativo/...) viram os atuais (#/cargo/uf/analise/...);
+// null se `hash` não for um deles. `periodoPadrao` é o período do comparativo quando o endereço antigo não trazia um.
+export function hashAntigoParaNovo(hash, periodoPadrao) {
+  const comp = /^#\/(?:partidos\/1\/comparativo|1\/([a-z]{2})\/comparativo)(?:\/(\d{4}x\d{4}))?(?:\/([a-z]{2}))?$/.exec(hash);
+  if (comp) return `#/1/${comp[1] ?? comp[3] ?? 'br'}/analise/${comp[2] ?? periodoPadrao}`;
+  const p = /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?((?:\/[a-z0-9]+)*)$/.exec(hash);
+  if (!p) return null;
+  const cargo = Number(p[1]) || 6;
+  if (cargo === 1) return `#/1/br/analise/${periodoPadrao}`;
+  const extras = p[3].split('/').filter(Boolean);
+  const uf = extras.find((t) => /^[a-z]{2}$/.test(t)) ?? (cargo === 7 ? 'sp' : 'br');
+  return hashPartidos(cargo, p[2], extras.includes('partido') ? 'partido' : 'ideologia', uf);
 }
 
-// Página inteira: seletor de cargo, de agrupamento, abas e o conteúdo da aba. Os controles são links.
+// Página inteira: seletor de UF (deputado estadual), de análise e de agrupamento, e o conteúdo da análise. O cargo vem do
+// menu principal. Os controles são links.
 export function partidosHtml(modelo, ui, ajuda) {
   const { esc } = ajuda;
   const modo = ui.agrupar === 'partido' ? 'partido' : 'ideologia';
   const aba = ABAS.some((a) => a.id === ui.aba) ? ui.aba : 'placar';
-  const cargos = seletorCargosHtml({ cargos: ui.cargos ?? CARGOS_PARTIDOS, atual: modelo.cargo.codigo, aba, modo, uf: modelo.uf, esc });
   const agrupar = MODOS.map((m) =>
     `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id, modelo.uf)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
   const abas = ABAS.map((a) =>
@@ -473,7 +480,7 @@ export function partidosHtml(modelo, ui, ajuda) {
     ? `<div class="seg seg-modelo" role="group" aria-label="UF">${(ui.ufs ?? Object.keys(modelo.cargo.ufs)).map((u) =>
       `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, modo, u)}" ${u === modelo.uf ? 'aria-current="page"' : ''}>${esc(u.toUpperCase())}</a>`).join('')}</div>`
     : '';
-  return `<div class="par-topo">${cargos}${ufs}
+  return `<div class="par-topo">${ufs}
     <div class="seg seg-modelo" role="group" aria-label="Análise">${abas}</div>
     <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>${corpo}
     <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;

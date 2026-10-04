@@ -135,12 +135,12 @@ do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios
 `/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
 municípios ficam o exterior (sem geometria) e o DF (um município só).
 
-### Aba Análises (partidos e ideologia)
+### Visão Análise (partidos e ideologia)
 
-Ao lado dos cargos, a aba **Análises** reúne o Comparativo da presidência (abaixo) e mostra Senado, Câmara, Deputado
-estadual e Governadores por **bloco ideológico** (Esquerda, Centrão, Direita, Independente) e por partido. Cada cargo tem,
-numa linha só, o seletor de cargo, o de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as cores de
-cada um):
+No seletor da direita, ao lado de **Apuração** e **Projeção**, a visão **Análise** respeita o cargo escolhido à esquerda:
+para Governador, Senador, Deputado Federal e Deputado Estadual mostra as bancadas por **bloco ideológico** (Esquerda,
+Centrão, Direita, Independente) e por partido; na Presidência mostra o Comparativo (abaixo). Numa linha só ficam o seletor
+de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as cores de cada um):
 
 - **Placar**: dois hemiciclos lado a lado (eleição anterior e 2026) e, em cima, um cartão por bloco ou partido com as
   cadeiras de 2026, a variação e uma barra em que a parte da eleição anterior fica clara e a diferença se destaca (a mais,
@@ -149,10 +149,10 @@ cada um):
   em que cada UF é dividida ao meio quando mudou (esquerda = eleição anterior, direita = 2026), com as listas de viradas e de
   bastiões.
 - **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
-- **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece ao lado do cargo): é a Assembleia Legislativa, com
-  94 e 70 cadeiras.
+- **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece na linha de seletores): é a Assembleia Legislativa,
+  com 94 e 70 cadeiras.
 
-O endereço guarda a escolha (`#/partidos/6/placar/partido`: agrupamento por partido; `#/partidos/7/placar/rj`: Assembleia do RJ).
+O endereço guarda a escolha (`#/6/br/analise/serie/partido`: Câmara, série histórica por partido; `#/7/rj/analise`: Assembleia do RJ). Os endereços antigos (`#/partidos/...`) redirecionam.
 
 - Os blocos são uma **classificação editorial** (`public/ideologia.js`), não um dado oficial. Edite as listas à vontade.
 - Os eleitos de 2014, 2018 e 2022 vêm de `dados-historicos/eleitos.json`, gerado por `node scripts/gerar-eleitos.js` (três
@@ -166,10 +166,10 @@ O endereço guarda a escolha (`#/partidos/6/placar/partido`: agrupamento por par
 
 ### Comparativo com eleições anteriores
 
-Na aba **Análises**, em **Presidente**, o **Comparativo** compara o PT (Lula ou Haddad) com ele
+Na visão **Análise** de **Presidente**, o **Comparativo** compara o PT (Lula ou Haddad) com ele
 mesmo e o campo de Bolsonaro (Flávio ou Bolsonaro) com Bolsonaro, no 1º turno. O seletor do painel escolhe o período:
 **2026 × 2022**, **2026 × 2018** (a apuração de 2026 ao vivo) e **2022 × 2018** (as duas encerradas: serve para testar a
-página com dados reais antes da apuração). O endereço guarda a escolha (`#/partidos/1/comparativo/2022x2018`, com a UF no fim se houver uma aberta); o endereço antigo (`#/1/br/comparativo`) redireciona.
+página com dados reais antes da apuração). O endereço guarda a escolha (`#/1/br/analise/2022x2018`, com a UF no lugar de `br` se houver uma aberta); o endereço antigo (`#/1/br/comparativo`) redireciona.
 
 A informação principal é o **impacto no saldo nacional**, não a variação dentro da UF: o saldo da UF é a variação do PT
 menos a do campo de Bolsonaro (em pontos percentuais dos votos válidos) e o impacto é o saldo multiplicado pelo peso da UF

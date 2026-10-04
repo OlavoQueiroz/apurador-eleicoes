@@ -173,7 +173,7 @@ fração (peso de 0 a 1). Por padrão só o **mesmo partido** herda (PT→Lula, 
 pequenos que repetiram). É uma **decisão política editável**: reinicie o painel depois de mudar. O painel avisa se a
 herança de um candidato de 2022 passar de 100%.
 
-### Eleitos de 2014, 2018 e 2022 (aba Análises)
+### Eleitos de 2014, 2018 e 2022 (visão Análise)
 
 `dados-historicos/eleitos.json` guarda o partido de cada governador, senador, deputado federal e deputado estadual eleito (por UF), a partir dos zips
 `consulta_cand_AAAA.zip` dos dados abertos do TSE (~4,5 MB cada, baixados inteiros). É gerado por
