@@ -1,0 +1,5 @@
+{
+  "_leia": "Para o comparativo 2022 × 2018 e 2026 × 2018: para cada candidato do período ATUAL (número de 2022 ou de 2026, que são os mesmos), de quais candidatos de 2018 ele herda votos e que fração (peso, de 0 a 1). Por padrão só o mesmo campo político: PT→Haddad (13) e PL→Bolsonaro, que em 2018 concorreu pelo PSL com o número 17. Reinicie o painel depois de editar.",
+  "13": [{ "de": "13", "peso": 1 }],
+  "22": [{ "de": "17", "peso": 1 }]
+}

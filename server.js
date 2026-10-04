@@ -72,6 +72,15 @@ try {
   console.warn(`Swing histórico desligado: ${erro.message}`);
 }
 
+// Resultado de 2018 por UF, para o comparativo 2022 × 2018 e 2026 × 2018 (opcional: sem o arquivo o período fica indisponível).
+let prior2018 = null;
+try {
+  prior2018 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2018-t1.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente-2018.json'));
+  for (const aviso of prior2018.avisos) console.warn(`Mapeamento de 2018: ${aviso}`);
+} catch (erro) {
+  console.warn(`Comparativo com 2018 desligado: ${erro.message}`);
+}
+
 // Histórico da apuração (gráfico de evolução): um arquivo por ciclo/turno, em dados/ (fora do git). A
 // demonstração grava num arquivo próprio e recomeça do zero a cada execução.
 const historico = new Historico({
@@ -112,6 +121,7 @@ const servidor = criarServidor({
   historico,
   limitador,
   anterior: prior2022,
+  historicos: prior2018 ? { 2018: prior2018 } : {},
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
   diretorioPublico: path.resolve(raiz, 'public'),
 });

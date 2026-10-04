@@ -1,6 +1,7 @@
 // Servidor HTTP: API JSON, eventos em tempo real (SSE) e os arquivos estáticos de public/.
 //   GET /api/meta                      configuração e estado do último ciclo
 //   GET /api/resumo                    uma linha por cargo × abrangência (mapa e totais nacionais)
+//   GET /api/comparativo/presidente    base por UF (eleição anterior) para o comparativo; ?periodo=2026x2022|2026x2018|2022x2018
 //   GET /api/resultado/:cargo/:uf      resultado completo de um arquivo
 //   GET /api/historico/:cargo/:uf?modelo=  evolução gravada: % de cada candidato e projeção ao longo da apuração
 //   GET /api/municipios/:cargo/:uf     líder e apuração de cada município de uma UF
@@ -22,14 +23,23 @@ const TIPOS = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
   '.png': 'image/png',
+  '.ico': 'image/x-icon',
   '.json': 'application/json; charset=utf-8',
 };
 
 const SEM_CACHE = { 'cache-control': 'no-store' };
 
-export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null }) {
+// Períodos do comparativo da presidência (eleição "atual" × eleição base). 2026 é a apuração ao vivo; as outras já terminaram.
+const PERIODOS_COMPARATIVO = {
+  '2026x2022': { anoAtual: 2026, anoBase: 2022 },
+  '2026x2018': { anoAtual: 2026, anoBase: 2018 },
+  '2022x2018': { anoAtual: 2022, anoBase: 2018 },
+};
+
+// `anterior` = 2022 (swing e comparativo); `historicos` = outras eleições já encerradas, por ano ({ 2018: anterior2018 }).
+export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, historicos = {} }) {
+  const basesHistoricas = { ...(anterior ? { 2022: anterior } : {}), ...historicos };
   // O swing precisa dos dados de 2022; sem eles o modelo aparece como indisponível.
   const modelos = MODELOS.map((m) => (m.id === 'swing' && !anterior
     ? { ...m, disponivel: false, motivo: 'Dados de 2022 não carregados (rode scripts/gerar-historico-2022.js).' }
@@ -170,6 +180,24 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     if (pathname === '/api/meta') return enviarJson(res, 200, montarMeta());
     if (pathname === '/api/resumo') return enviarJson(res, 200, montarResumo());
+    // Comparativo da presidência: a base (eleição anterior) por UF e, quando a eleição "atual" já terminou (2022 × 2018),
+    // os votos dela também. Com o período ao vivo (2026), a apuração vem de /api/resumo.
+    if (pathname === '/api/comparativo/presidente') {
+      const periodo = new URL(req.url, 'http://localhost').searchParams.get('periodo') ?? '2026x2022';
+      const def = PERIODOS_COMPARATIVO[periodo];
+      if (!def) return enviarJson(res, 400, { disponivel: false, periodo, motivo: `Período desconhecido: ${periodo}.` });
+      const naoCarregado = (ano) => ({ disponivel: false, periodo, motivo: `Dados de ${ano} não carregados (rode scripts/gerar-historico-${ano}.js).` });
+      const base = basesHistoricas[def.anoBase];
+      if (!base) return enviarJson(res, 200, naoCarregado(def.anoBase));
+      const vivo = def.anoAtual === meta.ano;
+      let atual = null;
+      if (!vivo) {
+        const encerrada = basesHistoricas[def.anoAtual];
+        if (!encerrada) return enviarJson(res, 200, naoCarregado(def.anoAtual));
+        atual = { ufs: encerrada.brutoPorUf() };
+      }
+      return enviarJson(res, 200, { disponivel: true, periodo, vivo, anoAtual: def.anoAtual, anoBase: def.anoBase, fonte: base.fonte, candidatos: base.candidatos22, ufs: base.porUf(), atual });
+    }
 
     if (pathname === '/api/busca') {
       const params = new URL(req.url, 'http://localhost').searchParams;

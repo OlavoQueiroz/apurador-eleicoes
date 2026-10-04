@@ -17,9 +17,48 @@ export function criarAnterior(historico, mapeamento) {
   }
 
   const cache = new Map();
+  let porUfCache = null;
+  let brutoCache = null;
   return {
     avisos,
     fonte: historico.fonte,
+    // Votos de 2022 por UF: { uf: { validos, herdados: { numero 2026 → votos herdados } } }. É a base do comparativo
+    // 2026 × 2022 (mesma tradução do swing: PT→Lula, PL→Flávio...). Calculado uma vez.
+    porUf() {
+      if (!porUfCache) {
+        const ufs = {};
+        for (const m of Object.values(historico.municipios)) {
+          const u = (ufs[m.uf] ??= { validos: 0, votos: {} });
+          for (const [numero, votos] of Object.entries(m.votos)) {
+            u.votos[numero] = (u.votos[numero] ?? 0) + votos;
+            u.validos += votos;
+          }
+        }
+        porUfCache = Object.fromEntries(Object.entries(ufs).map(([uf, u]) => [uf, {
+          validos: u.validos,
+          herdados: Object.fromEntries(herdeiros.map(([numero, fontes]) => [numero, fontes.reduce((s, f) => s + f.peso * (u.votos[f.de] ?? 0), 0)])),
+        }]));
+      }
+      return porUfCache;
+    },
+    // Votos brutos (sem tradução) por UF: { uf: { validos, votos: { numero → votos } } }. É o "atual" do comparativo
+    // quando a eleição já terminou (por exemplo 2022 × 2018).
+    brutoPorUf() {
+      if (!brutoCache) {
+        brutoCache = {};
+        for (const m of Object.values(historico.municipios)) {
+          const u = (brutoCache[m.uf] ??= { validos: 0, votos: {} });
+          for (const [numero, votos] of Object.entries(m.votos)) {
+            u.votos[numero] = (u.votos[numero] ?? 0) + votos;
+            u.validos += votos;
+          }
+        }
+      }
+      return brutoCache;
+    },
+    candidatos22: historico.candidatos,
+    ano: historico.ano,
+    turno: historico.turno,
     // Votos de 2022 do município traduzidos: { herdados: Map(numero 2026 → votos), validos: total de válidos em 2022 }.
     prior(codigo) {
       if (cache.has(codigo)) return cache.get(codigo);
