@@ -89,6 +89,26 @@ const dicaCadeira = (c) => {
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
 
+// Legenda enxuta: os três partidos com mais cadeiras ficam à vista e o resto entra num único "Outros", que abre a
+// lista completa (ao passar o mouse, ao focar ou ao tocar). O partido em foco nunca some dentro do "Outros".
+const MAXIMO_VISIVEIS = 3;
+export function legendaPartidos(lista, foco, chipDe, { esc, corPartido, fmtInt }) {
+  if (lista.length <= MAXIMO_VISIVEIS + 1) return lista.map(chipDe).join('');
+  const porTamanho = [...lista].sort((a, b) => b.total - a.total); // sort é estável: empate mantém a ordem ideológica
+  const visiveis = porTamanho.slice(0, MAXIMO_VISIVEIS);
+  const emFoco = foco?.tipo === 'p' ? lista.find((b) => b.sigla === foco.id) : null;
+  if (emFoco && !visiveis.includes(emFoco)) visiveis.push(emFoco);
+  const resto = porTamanho.filter((b) => !visiveis.includes(b));
+  const total = resto.reduce((s, b) => s + b.total, 0);
+  const pontos = resto.slice(0, 3).map((b) => `<u style="background:${corPartido(b.sigla)}"></u>`).join('');
+  const itens = resto.map((b) =>
+    `<button type="button" class="cad-pop-it" data-cad-foco="p:${esc(b.sigla)}"><i style="background:${corPartido(b.sigla)}"></i><span>${esc(b.sigla)}</span><b>${fmtInt(b.total)}</b></button>`).join('');
+  return `${visiveis.map(chipDe).join('')}<div class="cad-outros">
+    <button type="button" class="cad-chip cad-chip-outros" aria-haspopup="true" aria-expanded="false"><span class="cad-pts">${pontos}</span>Outros <b>${fmtInt(total)}</b> <small>${fmtInt(resto.length)} ${resto.length === 1 ? 'partido' : 'partidos'}</small></button>
+    <div class="cad-pop"><div class="cad-pop-caixa"><div class="cad-pop-grade">${itens}</div><div class="cad-pop-rod">Clique em um partido para filtrar o mapa</div></div></div>
+  </div>`;
+}
+
 // `dados`: { titulo, unidade, total, pendentes, partidos, ocupadas (bool: há cadeiras fora de disputa) }
 // `ui`: { modo: 'partido' | 'ideologia', foco: null | { tipo: 'g' | 'p', id } }
 // `ajuda`: { esc, corPartido, fmtInt }
@@ -146,10 +166,11 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   } else {
     // Partidos: todos (por partido) ou só os do grupo aberto (por ideologia). Clicar no que está aberto desfaz o foco.
     const desfazer = ui.modo === 'ideologia' ? `g:${grupoAberto}` : '';
-    legenda = bancadas.filter((b) => !grupoAberto || b.grupo === grupoAberto)
-      .map((b) => (foco?.tipo === 'p' && foco.id === b.sigla
-        ? chip(desfazer, b.sigla, corPartido(b.sigla), b.total, true)
-        : chip(`p:${b.sigla}`, b.sigla, corPartido(b.sigla), b.total, false))).join('');
+    const doGrupo = bancadas.filter((b) => !grupoAberto || b.grupo === grupoAberto);
+    const chipDe = (b) => (foco?.tipo === 'p' && foco.id === b.sigla
+      ? chip(desfazer, b.sigla, corPartido(b.sigla), b.total, true)
+      : chip(`p:${b.sigla}`, b.sigla, corPartido(b.sigla), b.total, false));
+    legenda = legendaPartidos(doGrupo, foco, chipDe, { esc, corPartido, fmtInt });
   }
 
   const modo = (id, rotulo) => `<button type="button" data-cad-modo="${id}" aria-pressed="${ui.modo === id}">${rotulo}</button>`;
@@ -203,6 +224,25 @@ export function ligarCadeiras(raiz, ui, aoMudar) {
     });
     svg.addEventListener('mouseleave', () => { caixa.hidden = true; });
   }
+  // "Outros": abre ao passar o mouse ou focar (CSS) e também ao clicar/tocar, que é a única forma no celular.
+  raiz.querySelectorAll('.cad-outros').forEach((caixa) => {
+    const botao = caixa.querySelector('.cad-chip-outros');
+    const fechar = (e) => {
+      if (e?.target && caixa.contains(e.target) && e.type === 'click') return;
+      caixa.classList.remove('aberto');
+      botao.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', fechar);
+      document.removeEventListener('keydown', aoTeclar);
+    };
+    const aoTeclar = (e) => { if (e.key === 'Escape') fechar(e); };
+    botao.addEventListener('click', () => {
+      if (caixa.classList.contains('aberto')) { fechar(); return; }
+      caixa.classList.add('aberto');
+      botao.setAttribute('aria-expanded', 'true');
+      setTimeout(() => document.addEventListener('click', fechar), 0);
+      document.addEventListener('keydown', aoTeclar);
+    });
+  });
   raiz.querySelectorAll('[data-cad-modo]').forEach((b) => b.addEventListener('click', () => {
     ui.modo = b.dataset.cadModo;
     ui.foco = null;

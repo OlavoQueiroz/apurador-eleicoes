@@ -7,7 +7,7 @@
 .cad.vaga { fill: var(--vazio); }
 .cad-num { font-size: 40px; font-weight: 750; text-anchor: middle; fill: var(--text); }
 .cad-leg { font-size: 15px; text-anchor: middle; fill: var(--muted); }
-.cad-legenda { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.cad-legenda { position: relative; display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
 .cad-chip, .cad-voltar {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 9px; font-size: 13px; cursor: pointer;
   border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text);
@@ -25,3 +25,20 @@
 }
 .cad-dica[hidden] { display: none; }
 .cad:hover { stroke: var(--text); stroke-width: 1.5; }
+
+/* "Outros": o painel é posicionado pela linha da legenda, não pelo botão, para não vazar do cartão à direita. */
+.cad-outros { display: contents; }
+.cad-chip-outros small { color: var(--muted); font-size: 12px; }
+.cad-chip-outros[aria-expanded="true"] { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.cad-pts { display: inline-flex; gap: 2px; }
+.cad-pts u { display: block; width: 6px; height: 6px; border-radius: 50%; }
+.cad-pop { display: none; position: absolute; z-index: 6; top: 100%; left: 0; padding-top: 6px; width: min(340px, 100%); }
+.cad-outros:hover .cad-pop, .cad-outros:focus-within .cad-pop, .cad-outros.aberto .cad-pop { display: block; }
+.cad-pop-caixa { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 28px rgba(15, 27, 45, 0.2); padding: 10px 12px; }
+.cad-pop-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+.cad-pop-it { display: flex; align-items: center; gap: 7px; padding: 3px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 13px; cursor: pointer; text-align: left; }
+.cad-pop-it:hover { background: var(--surface-2); }
+.cad-pop-it i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.cad-pop-it span { flex: 1; min-width: 0; }
+.cad-pop-it b { font-weight: 700; }
+.cad-pop-rod { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }

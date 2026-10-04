@@ -74,3 +74,26 @@ test('cadeiras de quem está na frente: contorno, contam na bancada, não contam
   assert.match(html, /<text class="cad-num"[^>]*>3<\/text>/); // 1 eleito + 2 fora de disputa
   assert.match(html, /data-cad-foco="p:PT"[^>]*>.*?<b>3<\/b>/);
 });
+
+test('legenda: três maiores à vista e o resto em "Outros"; poucos partidos aparecem todos; o foco nunca some', () => {
+  const todos = { PL: 9, PT: 7, PSD: 5, PP: 4, MDB: 3, PSB: 2 };
+  const dados = (n) => ({ titulo: 'Câmara', total: 40, pendentes: 0, partidos: Object.fromEntries(Object.entries(n).map(([s, e]) => [s, { eleitos: e }])), ocupadas: false });
+  const legenda = (ui, n = todos) => cadeirasHtml(dados(n), ui, ajuda).match(/<div class="cad-legenda">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>|<div class="cad-legenda">[\s\S]*?<\/section>/)[0];
+  const visiveis = (h) => [...h.matchAll(/class="cad-chip" data-cad-foco="[^"]*" aria-pressed="(?:true|false)"[^>]*><i><\/i>([^ <]+) /g)].map((m) => m[1]);
+
+  const base = legenda({ modo: 'partido', foco: null });
+  assert.deepEqual(visiveis(base), ['PL', 'PT', 'PSD']);
+  assert.match(base, /Outros <b>9<\/b> <small>3 partidos<\/small>/); // PP 4 + MDB 3 + PSB 2
+  for (const s of ['PP', 'MDB', 'PSB']) assert.match(base, new RegExp(`class="cad-pop-it" data-cad-foco="p:${s}"`));
+
+  // Com o foco num partido do "Outros", ele aparece como chip pressionado e sai da lista.
+  const foco = legenda({ modo: 'partido', foco: { tipo: 'p', id: 'MDB' } });
+  assert.deepEqual(visiveis(foco), ['PL', 'PT', 'PSD', 'MDB']);
+  assert.match(foco, /Outros <b>6<\/b> <small>2 partidos<\/small>/);
+  assert.doesNotMatch(foco, /class="cad-pop-it" data-cad-foco="p:MDB"/);
+
+  // Até quatro partidos, nada de "Outros" e a ordem segue a ideologia, como antes.
+  const poucos = legenda({ modo: 'partido', foco: null }, { PL: 9, PT: 7, PSD: 5, PP: 4 });
+  assert.deepEqual(visiveis(poucos), ['PT', 'PSD', 'PP', 'PL']);
+  assert.doesNotMatch(poucos, /cad-outros/);
+});

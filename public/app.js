@@ -412,14 +412,12 @@ function renderAbas() {
   const itens = estado.meta.cargos
     .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
-  $('#abas').innerHTML = `<div class="seg">${itens}</div>${seletorModeloHtml()}`;
-}
-
-// Seletor global Apuração | Projeção: vale para a página toda e acompanha a troca de cargo e de UF.
-function renderModo() {
-  const aba = (visao, rotulo) =>
-    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, visao)}" ${estado.visao === visao ? 'aria-current="page"' : ''}>${rotulo}</a>`;
-  $('#modo').innerHTML = `<div class="seg">${aba('apuracao', 'Apuração')}${aba('projecao', 'Projeção')}</div>`;
+  // Seletor global Apuração | Projeção: vale para a página toda e acompanha a troca de cargo e de UF. Fica na ponta
+  // direita da linha dos cargos. O seletor de modelo fica dentro do painel da projeção.
+  const visao = (id, rotulo) =>
+    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, id)}" ${estado.visao === id ? 'aria-current="page"' : ''}>${rotulo}</a>`;
+  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}</div>`;
+  $('#abas').innerHTML = `<div class="seg">${itens}</div>${modo}`;
 }
 
 // No mapa da projeção a UF ganha a cor do vencedor projetado, mais forte quanto maior a margem sobre o 2º.
@@ -828,8 +826,6 @@ function detalheAgregadoHtml() {
 
   const secoes = agregadoSecoes();
   const vagas = itens.reduce((s, { item }) => s + item.vagas, 0);
-  const eleitos = itens.reduce((s, { item }) => s + item.eleitos, 0);
-  const concluidas = itens.filter(({ item }) => item.totalizacaoFinal).length;
 
   const porPartido = {};
   for (const { item } of itens) {
@@ -837,13 +833,6 @@ function detalheAgregadoHtml() {
   }
   const partidos = Object.entries(porPartido).sort((a, b) => b[1] - a[1]);
   const maior = partidos[0]?.[1] ?? 0;
-
-  const caixa = (rotulo, valor) => `<div class="numero"><b>${valor}</b><span>${rotulo}</span></div>`;
-  const numeros = `<div class="numeros">
-    ${caixa('Vagas em disputa', fmtInt(vagas))}
-    ${caixa('Eleitos até agora', fmtInt(eleitos))}
-    ${caixa('UFs com totalização final', `${concluidas} de ${itens.length}`)}
-  </div>`;
 
   const barras = partidos.length
     ? `<h3 class="secao">Eleitos por partido</h3>
@@ -876,7 +865,7 @@ function detalheAgregadoHtml() {
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
-    ${meta.codigo === 3 ? '' : numeros}${barras}${tabela}`;
+    ${barras}${tabela}`;
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
@@ -956,7 +945,7 @@ function detalheProjecaoHtml() {
   const topo = `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
       <p class="muted pequeno">Projeção do resultado final · <b>não é resultado do TSE</b></p></div>
       <div class="selos"><span class="selo aviso">Estimativa do painel</span></div></div>
-    ${resumoModeloHtml()}`;
+    ${seletorModeloHtml()}${resumoModeloHtml()}`;
   // Modelo e explicações ficam recolhidos: o que importa primeiro é a tabela.
   const comoCalcula = `<details class="como-calcula"${estado.comoAberto ? ' open' : ''}><summary>Como é calculado · ${esc(estado.meta.modelos.find((m) => m.id === estado.modelo)?.nome ?? '')}</summary>
       <p class="aviso-bloco">Isto <b>não é resultado do TSE</b>: é uma extrapolação feita por este painel a partir de uma apuração parcial, com limitações. Só o resultado oficial vale.</p>
@@ -1013,6 +1002,7 @@ function projecaoAgregadoHtml() {
   return `<div class="detalhe-topo"><div><h2>${esc(cargoMeta().nome)} · Brasil</h2>
       <p class="muted pequeno">Projeção do resultado final · <b>não é resultado do TSE</b></p></div>
       <div class="selos"><span class="selo aviso">Estimativa do painel</span></div></div>
+    ${seletorModeloHtml()}${resumoModeloHtml()}
     <p class="vazio-msg">Escolha uma UF no mapa para ver a projeção dela. O mapa mostra o vencedor projetado em cada UF.</p>`;
 }
 
@@ -1071,7 +1061,6 @@ function renderDetalhe() {
 }
 
 function render() {
-  renderModo();
   renderAbas();
   renderGrade();
   renderDetalhe();
