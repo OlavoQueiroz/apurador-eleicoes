@@ -136,6 +136,7 @@ button { font: inherit; color: inherit; }
   scrollbar-width: none;
 }
 .abas::-webkit-scrollbar { display: none; }
+@media (max-width: 1000px) { .abas { flex-wrap: wrap; } }
 .aba {
   padding: 8px 16px;
   border-radius: 999px;
@@ -424,8 +425,6 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .colocado-nome { font-weight: 600; line-height: 1.25; }
 .colocado-info { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 
-/* ---------- modo global: Apuração | Projeção (mesmo seletor .seg dos cargos, só com menos folga) ---------- */
-.modo-global .aba { padding: 7px 16px; }
 .como-calcula { margin-top: 16px; border: 1px dashed var(--line); border-radius: 12px; padding: 8px 12px; }
 .como-calcula summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .como-calcula[open] summary { margin-bottom: 10px; }
@@ -452,9 +451,10 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .vazio-proj { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 22px 12px 14px; }
 .vazio-proj .ic { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: 20px; margin-bottom: 4px; }
 .vazio-proj .trilho { align-self: stretch; margin: 12px 24px 2px; }
-.seg-modelo { margin-left: auto; }
+.seg-modo { margin-left: auto; }
+.detalhe .seg-modelo { margin: 0 0 12px; }
 .seg-modelo .aba { padding: 8px 14px; }
-.resumo-modelo { margin: -8px 0 14px; }
+.resumo-modelo { margin: 0 0 14px; }
 .topo-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .topo-acoes .voltar { margin-left: 0; }
 
