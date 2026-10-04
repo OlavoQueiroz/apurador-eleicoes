@@ -103,6 +103,13 @@ leva a cor do partido do mais votado, **mais clara quanto menos seções foram t
 o quanto foi totalizado. Passe o mouse numa UF para ver o líder e a apuração. Para regerar os contornos:
 `node scripts/gerar-mapa.js`.
 
+**Municípios.** Ao abrir uma UF no presidente, governador ou senador, o mapa passa a mostrar os municípios dela,
+coloridos pela mesma regra. Os contornos (~1,7 MB no total, um arquivo por UF em `public/municipios/`, carregado só
+quando a UF é aberta) também vêm do IBGE e são indexados pelo código de município do TSE, que a lista de municípios
+do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios.js`. Os resultados vêm de
+`/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
+municípios ficam o exterior (sem geometria) e o DF (um município só).
+
 ### API local
 
 - `GET /api/meta` — configuração, cargos e estado do último ciclo.

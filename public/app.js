@@ -1,6 +1,7 @@
 // Painel de apuração: busca /api/*, escuta /events (SSE) e redesenha quando chegam dados novos.
 
 import { MAPA } from './mapa-brasil.js';
+import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
   ac: 'Acre', al: 'Alagoas', am: 'Amazonas', ap: 'Amapá', ba: 'Bahia', ce: 'Ceará', df: 'Distrito Federal',
@@ -44,6 +45,7 @@ const estado = {
   cargo: 1,
   uf: 'br',
   detalhe: undefined, // undefined = carregando; null = sem dado
+  mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
   busca: '',
   mostrarTodos: false,
   conexao: 'conectando',
@@ -114,6 +116,40 @@ async function carregarDetalhe() {
   }
 }
 
+// ---------- municípios da UF aberta (mapa de municípios) ----------
+
+// Só os cargos majoritários com resultado por município; Brasil, exterior e DF (um município só) ficam de fora.
+const querMunicipios = () =>
+  [1, 3, 5].includes(estado.cargo) && !['br', 'zz', 'df'].includes(estado.uf) && cargoMeta().abrangencias.includes(estado.uf);
+const modoMunicipal = () => estado.mun?.chave === chaveAtual();
+
+let recargaMunicipios = null;
+async function carregarMunicipios() {
+  clearTimeout(recargaMunicipios);
+  if (!querMunicipios()) {
+    estado.mun = undefined;
+    return;
+  }
+  const chave = chaveAtual();
+  try {
+    const [geo, resultados] = await Promise.all([geometriaUf(estado.uf), resultadosMunicipios(estado.cargo, estado.uf)]);
+    if (chave !== chaveAtual()) return; // a seleção mudou enquanto carregava
+    // Sem a rota de municípios (camada desligada), segue no mapa do Brasil.
+    estado.mun = resultados
+      ? { chave, geo, resultados, porCodigo: new Map(resultados.municipios.map((m) => [m.codigo, m])) }
+      : undefined;
+    // Enquanto o servidor ainda carrega os municípios, acompanha o progresso só redesenhando o mapa.
+    if (resultados?.carregando) {
+      recargaMunicipios = setTimeout(async () => {
+        await carregarMunicipios();
+        renderGrade();
+      }, 1500);
+    }
+  } catch {
+    if (chave === chaveAtual()) estado.mun = undefined;
+  }
+}
+
 let atualizando = false;
 let atualizarDeNovo = false;
 async function atualizar() {
@@ -125,7 +161,7 @@ async function atualizar() {
   try {
     do {
       atualizarDeNovo = false;
-      await Promise.all([carregarResumo(), carregarDetalhe()]);
+      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios()]);
       render();
     } while (atualizarDeNovo);
   } catch (erro) {
@@ -157,6 +193,7 @@ function lerHash() {
 window.addEventListener('hashchange', async () => {
   lerHash();
   estado.detalhe = undefined;
+  estado.mun = undefined;
   render();
   await atualizar();
 });
@@ -250,12 +287,12 @@ function rotulosMapaHtml(ativas) {
   }).join('');
 }
 
-function legendaHtml() {
+function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
   if (ehMajoritario(estado.cargo)) {
-    const partidos = [...new Set(itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
+    const partidos = [...new Set(lideres ?? itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
     const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-    return `<div class="leg-linha"><span class="leg-titulo">Mais votado na UF</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
+    return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
       <div class="leg-linha"><span class="leg-titulo">Apuração</span><span class="muted">pouca</span>${gradiente('var(--text)')}<span class="muted">toda</span></div>`;
   }
   return `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
@@ -270,8 +307,9 @@ function renderGrade() {
 
   // A UF selecionada vai por último para que o contorno de destaque não fique escondido; o DF, que é um
   // buraco dentro de Goiás, vem logo antes para ficar por cima dele.
+  const municipal = modoMunicipal();
   const ordem = Object.keys(MAPA.ufs).sort((a, b) => (a === 'df') - (b === 'df')).sort((a, b) => (a === estado.uf) - (b === estado.uf));
-  $('#grade').innerHTML = `<svg class="mapa-svg" viewBox="0 0 ${MAPA.largura + FOLGA_DIREITA} ${MAPA.altura}" role="group" aria-label="Mapa do Brasil por UF">
+  $('#grade').innerHTML = municipal ? mapaMunicipalHtml() : `<svg class="mapa-svg" viewBox="0 0 ${MAPA.largura + FOLGA_DIREITA} ${MAPA.altura}" role="group" aria-label="Mapa do Brasil por UF">
       ${ordem.map((uf) => ufMapaHtml(uf, ativas)).join('')}
       ${ativas.has('zz') ? exteriorGloboHtml() : ''}
       <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
@@ -279,8 +317,30 @@ function renderGrade() {
 
   const temTotal = ativas.has('br') || meta.codigo !== 1;
   if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
-  $('#legenda').innerHTML = legendaHtml();
+  $('#legenda').innerHTML = municipal
+    ? legendaHtml({ lideres: estado.mun.resultados.municipios.map((m) => m.lider?.partido).filter(Boolean), unidade: 'município' })
+    : legendaHtml();
 }
+
+// Mapa dos municípios da UF aberta, no lugar do mapa do Brasil. A cor segue a mesma regra das UFs.
+function corMunicipio(m) {
+  const lider = ehMajoritario(estado.cargo) && m.lider;
+  const cor = lider ? corPartido(m.lider.partido) : ehMajoritario(estado.cargo) ? null : 'var(--accent)';
+  return { cor, forca: m.secoes?.totalizadas ? forcaCor(m.secoes.pctTotalizadas) : 0 };
+}
+
+function mapaMunicipalHtml() {
+  const { geo, resultados } = estado.mun;
+  const total = Object.keys(geo.municipios).length;
+  const progresso = resultados.carregando ? ` · carregando ${fmtInt(resultados.progresso.feitos)} de ${fmtInt(resultados.progresso.total)}` : '';
+  return `${mapaMunicipiosHtml(geo, resultados, corMunicipio)}
+    <div class="mun-titulo"><b>${esc(nomeUf(estado.uf))}</b><span>${fmtInt(total)} municípios${progresso}</span></div>`;
+}
+
+// O TSE escreve os nomes em maiúsculas.
+const nomeProprio = (nome) =>
+  nome.toLowerCase().replace(/(^|\s|-|')(\p{L})/gu, (t, sep, letra) => sep + letra.toUpperCase())
+    .replace(/\s(D[aeo]s?|E)(?=\s)/g, (t) => t.toLowerCase());
 
 // ---------- dica ao passar o mouse sobre uma UF ----------
 
@@ -303,9 +363,13 @@ function iniciarDica() {
   const dica = $('#dica');
   const esconder = () => { dica.hidden = true; };
   area.addEventListener('pointermove', (evento) => {
-    const alvo = evento.target.closest?.('a.uf');
+    const mun = estado.mun && evento.target.closest?.('path.mun');
+    const alvo = mun || evento.target.closest?.('a.uf');
     if (!alvo || evento.pointerType === 'touch') return esconder();
-    dica.innerHTML = dicaHtml(alvo.dataset.uf);
+    dica.innerHTML = mun
+      ? dicaMunicipioHtml(estado.mun.porCodigo.get(mun.dataset.mun), nomeProprio(estado.mun.geo.municipios[mun.dataset.mun].n),
+        { ehMajoritario: ehMajoritario(estado.cargo), corPartido, fmtPct, esc })
+      : dicaHtml(alvo.dataset.uf);
     dica.hidden = false;
     const caixa = area.getBoundingClientRect();
     const x = Math.min(evento.clientX - caixa.left + 14, caixa.width - dica.offsetWidth);
