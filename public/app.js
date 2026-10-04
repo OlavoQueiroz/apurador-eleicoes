@@ -1249,23 +1249,28 @@ function detalheAgregadoHtml() {
 
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
-    ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
     ${secoesRecolhiveisHtml([
+    { id: 'composicao', nome: meta.codigo === 5 ? 'Composição do Senado' : 'Composição da Câmara', html: cadeirasAgregadoHtml(meta.codigo, vagas, porPartido) },
     { id: 'eleitos-partido', nome: 'Eleitos por partido', html: barras },
     { id: 'eleitos', nome: meta.codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos', html: eleitosNomeANomeHtml(meta.codigo, itens) },
     { id: 'segundo-turno', nome: 'Vão para o 2º turno', html: segundoTurnoNomeANomeHtml(meta.codigo, itens) },
     { id: 'em-aberto', nome: 'Em aberto', html: tabela },
-  ])}`;
+  ], meta.codigo)}`;
 }
 
-// Botões para mostrar ou ocultar cada seção da visão Brasil (só as que existem agora) e o conteúdo das que estão visíveis.
-function secoesRecolhiveisHtml(blocos) {
-  const existentes = blocos.filter((b) => b.html);
-  const chips = existentes.length > 1
-    ? `<div class="chips-secoes" role="group" aria-label="Seções da página"><span class="muted pequeno">Mostrar:</span>${existentes.map((b) =>
-      `<button type="button" class="chip-secao" data-secao="${b.id}" aria-pressed="${!estado.secoesOcultas.has(b.id)}">${esc(b.nome)}</button>`).join('')}</div>`
-    : '';
-  return `${chips}${existentes.filter((b) => !estado.secoesOcultas.has(b.id)).map((b) => b.html).join('')}`;
+// Cada seção da visão Brasil se oculta e se mostra pelo próprio título (clicar em "▾ Governadores eleitos" a recolhe; em
+// "▸ ..." a abre de novo). A escolha vale por cargo ("5:composicao": ocultar a composição do Senado não esconde a da Câmara) e é
+// lembrada entre recargas. Seção oculta fica só com o título.
+function secoesRecolhiveisHtml(blocos, cargo) {
+  const titulo = (chave, aberta, rotulo) => `<h3 class="secao sec-rec-titulo" data-secao="${chave}" role="button" tabindex="0" aria-expanded="${aberta}" title="${aberta ? 'Ocultar' : 'Mostrar'} esta seção"><span class="sec-seta" aria-hidden="true">${aberta ? '▾' : '▸'}</span> ${rotulo}`;
+  return blocos.filter((b) => b.html).map((b) => {
+    const chave = `${cargo}:${b.id}`;
+    if (estado.secoesOcultas.has(chave)) return `${titulo(chave, false, esc(b.nome))}</h3>`;
+    // O título da própria seção ganha a seta; blocos sem título (um aviso, por exemplo) recebem um com o nome da seção.
+    return b.html.includes('<h3 class="secao">')
+      ? b.html.replace('<h3 class="secao">', titulo(chave, true, ''))
+      : `${titulo(chave, true, esc(b.nome))}</h3>${b.html}`;
+  }).join('');
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
@@ -1431,13 +1436,17 @@ function renderDetalhe() {
     topoDetalhe.append(acoes);
   }
   if (ehComparativo()) ligarComparativo(raiz, estado.comparativo, () => { renderGrade(); renderDetalhe(); });
-  raiz.querySelectorAll('.chip-secao').forEach((botao) => botao.addEventListener('click', () => {
-    const id = botao.dataset.secao;
-    if (estado.secoesOcultas.has(id)) estado.secoesOcultas.delete(id);
-    else estado.secoesOcultas.add(id);
-    gravarSecoesOcultas();
-    renderDetalhe();
-  }));
+  raiz.querySelectorAll('.sec-rec-titulo').forEach((titulo) => {
+    const alternar = () => {
+      const id = titulo.dataset.secao;
+      if (estado.secoesOcultas.has(id)) estado.secoesOcultas.delete(id);
+      else estado.secoesOcultas.add(id);
+      gravarSecoesOcultas();
+      renderDetalhe();
+    };
+    titulo.addEventListener('click', alternar);
+    titulo.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); } });
+  });
   $('.como-calcula', raiz)?.addEventListener('toggle', (e) => { estado.comoAberto = e.target.open; });
   $('.mais-num', raiz)?.addEventListener('toggle', (e) => { estado.numerosAbertos = e.target.open; });
 
