@@ -7,6 +7,7 @@ import { lerConfig, SAIDA_PORTA_OCUPADA } from './src/config.js';
 import { CARGOS, criarFonteTse, criarFonteMunicipiosTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
 import { criarFonteDemo } from './src/demo.js';
 import { Apuracao } from './src/apuracao.js';
+import { Limitador } from './src/limitador.js';
 import { Municipios } from './src/municipios.js';
 import { criarCacheDisco } from './src/cache-disco.js';
 import { Historico, registrarCiclo } from './src/historico.js';
@@ -42,7 +43,10 @@ if (!alvos.length) {
 
 const fonteTse = criarFonteTse();
 const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
-const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000 });
+// Ritmo único para tudo que vai ao TSE: o dado por UF (ciclo principal) tem prioridade sobre os municípios, e um
+// 429 de qualquer lado faz os dois recuarem. Na demonstração nada de município vai ao TSE.
+const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: 200 });
+const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador });
 const fonteMunicipiosTse = criarFonteMunicipiosTse();
 const raiz = path.dirname(fileURLToPath(import.meta.url));
 const municipios = new Municipios({
@@ -51,8 +55,8 @@ const municipios = new Municipios({
   // Dado de demonstração é inventado e não deve ir para o cache. No real, o ciclo dos municípios é mais
   // lento que o das UFs: são milhares de arquivos.
   cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'municipios')),
-  // Ritmo de requisições ao TSE (recua sozinho se ele responder 429; já levei 429 numa carga sem freio).
-  espacamentoMs: cfg.demo ? 0 : 200, // ~5 req/s: 5,7 mil arquivos levam uns 20 min na primeira vez
+  // Municípios: ~5 req/s e sempre atrás do dado por UF (5,7 mil arquivos levam uns 20 min na primeira vez).
+  limitador,
   validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
 });
 
@@ -80,11 +84,21 @@ apuracao.on('ciclo', (c) => {
   );
 });
 apuracao.on('erro', (erro) => log('erro no ciclo:', erro.message));
+// A cada minuto, uma linha com o volume de pedidos ao TSE, só se houver 429 ou com --verboso.
+let limitadasAntes = 0;
+setInterval(() => {
+  const e = limitador.estatisticas();
+  if (cfg.verboso || e.limitadas !== limitadasAntes) {
+    log(`pedidos ao TSE: ${e.porMinuto}/min (UF ${e.alta}, município ${e.baixa}) · ${e.limitadas} limitados (429/503)`);
+  }
+  limitadasAntes = e.limitadas;
+}, 60_000).unref();
 
 const servidor = criarServidor({
   apuracao,
   municipios,
   historico,
+  limitador,
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
   diretorioPublico: path.resolve(raiz, 'public'),
 });

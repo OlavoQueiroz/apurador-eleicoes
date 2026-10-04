@@ -3,10 +3,12 @@
 
 import { EventEmitter } from 'node:events';
 import { resumir } from './normalize.js';
+import { pedeCalma, recuoDoErro } from './limitador.js';
 
 export class Apuracao extends EventEmitter {
-  constructor({ alvos, fonte, intervaloMs = 60_000, concorrencia = 6, agora = Date.now }) {
+  constructor({ alvos, fonte, intervaloMs = 60_000, concorrencia = 6, limitador = null, agora = Date.now }) {
     super();
+    this.limitador = limitador; // ritmo compartilhado com a carga dos municípios; o dado por UF tem prioridade
     this.fonte = fonte;
     this.intervaloMs = intervaloMs;
     this.concorrencia = concorrencia;
@@ -24,7 +26,14 @@ export class Apuracao extends EventEmitter {
 
   // Devolve true se o dado do alvo mudou.
   async verificar(item) {
-    const r = await this.fonte.obter(item.alvo, item);
+    let r;
+    try {
+      await this.limitador?.vez('alta');
+      r = await this.fonte.obter(item.alvo, item);
+    } catch (erro) {
+      if (pedeCalma(erro)) this.limitador?.recuar(recuoDoErro(erro, 0)); // vale também para a carga dos municípios
+      throw erro;
+    }
     item.verificadoEm = this.agora();
     item.erro = null;
 

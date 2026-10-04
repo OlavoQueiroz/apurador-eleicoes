@@ -13,12 +13,14 @@
 // arquivo de votos saia depois do de acompanhamento. Se a fonte não tiver acompanhamento (demonstração),
 // toda passada consulta todos os municípios abertos.
 
+import { Limitador, pedeCalma, recuoDoErro } from './limitador.js';
+
 const cederVez = () => new Promise((resolve) => setImmediate(resolve));
 const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.());
 
 export class Municipios {
   constructor({
-    fonte, ciclo, cache = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
+    fonte, ciclo, cache = null, limitador = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
     revalidarMs = 600_000, pausaUfMs = 500, agora = Date.now,
   }) {
     this.fonte = fonte;
@@ -28,8 +30,8 @@ export class Municipios {
     this.validadeMs = validadeMs;
     this.revalidarMs = revalidarMs;
     this.pausaUfMs = pausaUfMs;
-    this.espacamentoMs = espacamentoMs; // intervalo mínimo entre inícios de requisição (todas as UFs juntas)
-    this.proximaVez = 0;
+    // Ritmo das requisições (baixa prioridade). Compartilhado com o ciclo principal quando recebe o mesmo limitador.
+    this.limitador = limitador ?? new Limitador({ altaMs: 0, baixaMs: espacamentoMs, agora });
     this.agora = agora;
     this.parado = false;
     this.listas = new Map(); // eleição → Promise<Map uf → municípios>
@@ -101,28 +103,16 @@ export class Municipios {
     this.parado = true;
   }
 
-  // Limita a taxa global de requisições ao TSE. Fila de ordem de chegada: cada chamada reserva o próximo
-  // horário livre, então vários trabalhadores nunca disparam juntos.
-  async #vez() {
-    const horario = Math.max(this.agora(), this.proximaVez);
-    this.proximaVez = horario + this.espacamentoMs;
-    const espera = horario - this.agora();
-    if (espera > 0) await dormir(espera);
-  }
-
-  // Executa uma requisição respeitando o limite. Em 429/503 todo mundo recua (e o ritmo passa a ser mais
-  // lento) e a requisição é repetida algumas vezes; outros erros sobem na hora.
+  // Executa uma requisição respeitando o limite (e a prioridade do dado por UF). Em 429/503 todo mundo recua e a
+  // requisição é repetida algumas vezes; outros erros sobem na hora.
   async #comLimite(pedido) {
     for (let tentativa = 0; ; tentativa += 1) {
-      await this.#vez();
+      await this.limitador.vez('baixa');
       try {
         return await pedido();
       } catch (erro) {
-        const pedeCalma = erro.status === 429 || erro.status === 503;
-        if (!pedeCalma || tentativa >= 4 || this.parado) throw erro;
-        const recuo = erro.esperarMs ?? Math.min(30_000, 2000 * 2 ** tentativa);
-        this.proximaVez = Math.max(this.proximaVez, this.agora() + recuo);
-        this.espacamentoMs = Math.min(2000, Math.ceil(this.espacamentoMs * 2));
+        if (!pedeCalma(erro) || tentativa >= 4 || this.parado) throw erro;
+        this.limitador.recuar(recuoDoErro(erro, tentativa));
       }
     }
   }

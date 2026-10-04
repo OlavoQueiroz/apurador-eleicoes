@@ -83,7 +83,7 @@ test('429 do TSE: recua, repete e termina carregando tudo', async () => {
   const r = m.consultar(consulta);
   assert.equal(r.dados.length, 2);
   assert.equal(r.erro, null);
-  assert.ok(m.espacamentoMs > 1, 'o ritmo ficou mais lento depois do 429');
+  assert.ok(m.limitador.baixaMs > 1, 'o ritmo ficou mais lento depois do 429');
 });
 
 test('erro que não é 429 não é repetido', async () => {

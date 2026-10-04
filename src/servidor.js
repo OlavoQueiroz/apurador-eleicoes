@@ -27,7 +27,7 @@ const TIPOS = {
 
 const SEM_CACHE = { 'cache-control': 'no-store' };
 
-export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null }) {
+export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null }) {
   const clientes = new Set();
   const buscarMunicipios = criarIndiceMunicipios(diretorioPublico);
 
@@ -50,6 +50,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       intervaloSegundos: meta.intervalo,
       cargos,
       modelos: MODELOS,
+      requisicoes: limitador?.estatisticas() ?? null, // pedidos ao TSE: por prioridade, por minuto e quantos 429
       ultimoCiclo: apuracao.ultimoCiclo && { ...apuracao.ultimoCiclo, chavesAlteradas: undefined },
     };
   };
