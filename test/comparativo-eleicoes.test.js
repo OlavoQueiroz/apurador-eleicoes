@@ -5,7 +5,7 @@ import { Apuracao } from '../src/apuracao.js';
 import { criarAnterior } from '../src/anterior.js';
 import { criarServidor } from '../src/servidor.js';
 import {
-  calcular, comparativoHtml, corDoMapa, itemDoAtual, regiaoDaUf, seletorPeriodoHtml, FRACAO_MINIMA, PERIODOS,
+  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, itemDoAtual, regiaoDaUf, seletorPeriodoHtml, FRACAO_MINIMA, PERIODOS,
 } from '../public/comparativo-eleicoes.js';
 
 const ajuda = {
@@ -141,7 +141,7 @@ test('2022 × 2018: o "atual" vem do arquivo de 2022 (apuração completa) e tod
 
   const html = comparativoHtml(m, { uf: 'br', regiao: null }, ajuda);
   assert.match(html, /Presidente · 2022 × 2018/);
-  assert.match(html, /Lula contra Haddad 2018 · Bolsonaro contra Bolsonaro 2018/);
+  assert.match(html, /PT \(Haddad em 2018, Lula em 2022\) · Bolsonaro contra Bolsonaro 2018/);
   assert.match(html, /2022 já terminou, então todas as UFs entram/);
   assert.doesNotMatch(html, /Aguardando apuração/);
   const uf = comparativoHtml(m, { uf: 'ba', regiao: null }, ajuda);
@@ -249,4 +249,51 @@ test('base real de 2018: bate com a apuração oficial do 1º turno e dá um com
   const sp = m.ufs.find((u) => u.uf === 'sp');
   assert.ok(ac.peso < 0.5 && Math.abs(ac.impacto) < 0.1);
   assert.ok(Math.abs(sp.impacto) > 10 * Math.abs(ac.impacto));
+});
+
+test('escala do mapa: no mínimo 8 p.p., cresce com o maior saldo para as UFs não ficarem todas no mesmo tom', () => {
+  assert.equal(modelo.escala, ESCALA_SALDO);
+  assert.equal(corDoMapa({ pronto: true, saldo: 20 }, 40).forca, 50);
+  const encerrada = {
+    vivo: false,
+    ufs: { ba: { validos: 1000, herdados: { 13: 300, 22: 400 } }, sp: { validos: 3000, herdados: { 13: 500, 22: 1800 } } },
+    atual: { ufs: { ba: { validos: 1000, votos: { 13: 700, 22: 200 } }, sp: { validos: 3000, votos: { 13: 1300, 22: 1500 } } } },
+  };
+  const m = calcular(encerrada, itemDoAtual(encerrada, null), { periodo: PERIODOS['2022x2018'] });
+  assert.equal(m.escala, Math.ceil(Math.max(...m.ufs.map((u) => Math.abs(u.saldo)))));
+  const forcas = m.ufs.map((u) => corDoMapa(u, m.escala).forca);
+  assert.ok(forcas.includes(100) && forcas.some((f) => f < 100));
+});
+
+test('total do 1º turno em cada eleição: votos válidos e votação de cada candidatura, no Brasil e na UF', () => {
+  const encerrada = {
+    vivo: false,
+    ufs: { ba: { validos: 1000, herdados: { 13: 300, 22: 400 } }, zz: { validos: 100, herdados: { 13: 10, 22: 60 } } },
+    atual: { ufs: { ba: { validos: 1200, votos: { 13: 700, 22: 200 } }, zz: { validos: 150, votos: { 13: 20, 22: 100 } } } },
+  };
+  const periodo = PERIODOS['2022x2018'];
+  const m = calcular(encerrada, itemDoAtual(encerrada, null), { periodo });
+  assert.equal(m.nacional.base.validos, 1100); // com o exterior
+  assert.equal(m.nacional.base.pt.votos, 310);
+  perto(m.nacional.atual.pt.pct, (100 * 720) / 1350);
+  const html = comparativoHtml(m, { uf: 'br', regiao: null }, ajuda);
+  assert.match(html, /Total do 1º turno, Brasil/);
+  assert.match(html, /<span class="cab num">2018<\/span><span class="cab num">2022<\/span>/);
+  assert.match(html, /<b>1100<\/b>/);
+  assert.match(html, /<b>1350<\/b>/);
+  const ba = comparativoHtml(m, { uf: 'ba', regiao: null }, ajuda);
+  assert.match(ba, /Votos válidos no 1º turno de 2018 <b>1000<\/b>/);
+  assert.match(ba, /de 2022 <b>1200<\/b>/);
+});
+
+test('2018 como base: o cartão do PT diz Haddad e Lula, e a nota explica que Lula não concorreu', () => {
+  for (const id of ['2026x2018', '2022x2018']) {
+    assert.match(PERIODOS[id].pt.titulo, /Haddad em 2018, Lula em 202[26]/);
+    assert.match(PERIODOS[id].nota, /Lula não concorreu em 2018/);
+  }
+  const encerrada = { vivo: false, ufs: { ba: { validos: 1000, herdados: { 13: 300, 22: 400 } } }, atual: { ufs: { ba: { validos: 1000, votos: { 13: 700, 22: 200 } } } } };
+  const m = calcular(encerrada, itemDoAtual(encerrada, null), { periodo: PERIODOS['2022x2018'] });
+  const ba = comparativoHtml(m, { uf: 'ba', regiao: null }, ajuda);
+  assert.match(ba, /<b>PT \(Haddad em 2018, Lula em 2022\)<\/b>/);
+  assert.match(ba, /2018 · Haddad/);
 });

@@ -56,3 +56,22 @@ a.comp-linha:hover, button.comp-linha:hover { background: var(--surface-2); }
 }
 
 .detalhe .seg-periodo { margin: 12px 0 0; }
+
+/* Total do 1º turno em cada eleição: tabela pequena, uma coluna por ano. */
+.comp-titulo-bloco { margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.comp-totais { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 22px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 13px; align-items: baseline; }
+.comp-totais .cab { font-size: 12px; font-weight: 700; color: var(--muted); }
+.comp-totais .cab small { font-weight: 500; }
+.comp-totais .nome { display: flex; align-items: center; gap: 8px; }
+.comp-totais .nome i { width: 10px; height: 10px; border-radius: 50%; background: var(--cor); flex: none; }
+.comp-totais .num { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; text-align: right; }
+.comp-totais .num small { color: var(--muted); font-size: 11.5px; }
+.comp-totais .num b { font-variant-numeric: tabular-nums; }
+.comp-validos { margin-top: 10px; }
+.comp-validos small { font-weight: 500; }
+
+/* Celular: os três períodos cabem na largura do painel. */
+@media (max-width: 520px) {
+  .seg-periodo { display: flex; max-width: 100%; }
+  .seg-periodo .aba { flex: 1 1 0; padding-inline: 6px; text-align: center; white-space: nowrap; font-size: 13px; }
+}

@@ -2,7 +2,7 @@
 
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
-import { PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, seletorPeriodoHtml, sinal } from './comparativo-eleicoes.js';
+import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, seletorPeriodoHtml, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
@@ -489,7 +489,7 @@ function dadoComparativo(uf) {
   const modelo = modeloComparativo();
   if (uf === 'br') return { sub: 'Brasil', sub2: modelo?.total.impacto == null ? '—' : `${sinal(modelo.total.impacto)} p.p.`, pct: 0, cor: null, vazio: false };
   const u = modelo?.ufs.find((x) => x.uf === uf);
-  const cor = corDoMapa(u);
+  const cor = corDoMapa(u, modelo?.escala);
   return cor
     ? { sub: sinal(u.saldo, 1), sub2: 'p.p.', pct: cor.forca, cor: corPartido(cor.candidato === 'pt' ? 'PT' : 'PL'), vazio: false }
     : { sub: '', sub2: '—', pct: 0, cor: null, vazio: true };
@@ -503,7 +503,7 @@ function dicaComparativoHtml(uf) {
   const linha = (c) => {
     const x = u[c.id];
     const variacao = x.d == null ? '' : ` · ${sinal(x.d, 1)} p.p.`;
-    return `<span class="dica-lider" style="--cor:${corPartido(c.partido)}"><i></i><span>${esc(c.nome)}<small>${p.anoBase}: ${fmtPct(x.pBase, 1)} · ${p.anoAtual}: ${u.validosAtual ? fmtPct(x.pAtual, 1) : '—'}${variacao}</small></span></span>`;
+    return `<span class="dica-lider" style="--cor:${corPartido(c.partido)}"><i></i><span>${esc(tituloDe(c))}<small>${p.anoBase}: ${fmtPct(x.pBase, 1)} · ${p.anoAtual}: ${u.validosAtual ? fmtPct(x.pAtual, 1) : '—'}${variacao}</small></span></span>`;
   };
   const rodape = u.pronto ? `Impacto no Brasil: ${sinal(u.impacto)} p.p.` : `Apuração em ${fmtPct(u.fracao, 0)}: ainda fora do comparativo`;
   return `<strong>${esc(nomeUf(uf))}</strong>${linha({ id: 'pt', ...p.pt })}${linha({ id: 'pl', ...p.pl })}<span class="muted">${rodape}</span>`;
@@ -511,9 +511,10 @@ function dicaComparativoHtml(uf) {
 
 function legendaComparativoHtml() {
   const p = periodoPorId(estado.comparativo.periodo);
+  const escala = modeloComparativo()?.escala ?? ESCALA_SALDO;
   return `<div class="leg-linha"><span class="leg-titulo">Saldo na UF</span><span class="muted">${esc(p.pl.curto ?? p.pl.nome)}</span>
-      <span class="leg-grad leg-div" style="--esq:${corPartido('PL')};--dir:${corPartido('PT')}"></span><span class="muted">${esc(p.pt.nome)}</span></div>
-    <p class="muted pequeno leg-nota">Cor = variação de ${esc(p.pt.nome)} − variação de ${esc(p.pl.curto ?? p.pl.nome)} em relação a ${p.anoBase} (cor cheia a ±8 p.p.).${p.vivo ? ' Cinza: menos de 50% das seções, ainda fora do comparativo.' : ''}</p>`;
+      <span class="leg-grad leg-div" style="--esq:${corPartido('PL')};--dir:${corPartido('PT')}"></span><span class="muted">${esc(p.pt.curto ?? p.pt.nome)}</span></div>
+    <p class="muted pequeno leg-nota">Cor = variação de ${esc(p.pt.curto ?? p.pt.nome)} − variação de ${esc(p.pl.curto ?? p.pl.nome)} em relação a ${p.anoBase} (cor cheia a ±${escala} p.p.).${p.vivo ? ' Cinza: menos de 50% das seções, ainda fora do comparativo.' : ''}</p>`;
 }
 
 function comparativoPainelHtml() {
