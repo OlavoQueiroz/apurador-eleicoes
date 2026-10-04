@@ -1195,7 +1195,9 @@ function detalheAgregadoHtml() {
     const { campo, dir } = estado.ordemUfs;
     // O estado com tudo definido (governador eleito; Senado, as duas vagas) já está na lista de eleitos e sai desta.
     const definidas = itens.filter(({ item }) => eleitosDaUf(item, meta.codigo)?.estado === 'eleita');
-    const emAberto = itens.filter((x) => !definidas.includes(x));
+    // Governador: o estado que já vai ao 2º turno (TSE ou pela conta) também sai desta lista; ele está em "Vão para o 2º turno".
+    const noSegundoTurno = meta.codigo === 3 ? itens.filter((x) => !definidas.includes(x) && segundoTurnoDoGovernador(x.item)) : [];
+    const emAberto = itens.filter((x) => !definidas.includes(x) && !noSegundoTurno.includes(x));
     const ordenado = emAberto.sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
       : (a, b) => dir * porNome(a, b));
@@ -1215,9 +1217,13 @@ function detalheAgregadoHtml() {
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     const listaEleitos = meta.codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
-    tabela = `<h3 class="secao">${definidas.length ? `Mais votados nos estados ainda em aberto (${emAberto.length})` : 'Mais votados em cada UF'}</h3>
+    const retirados = definidas.length + noSegundoTurno.length;
+    const notaSegundoTurno = noSegundoTurno.length
+      ? `<p class="muted pequeno">${noSegundoTurno.length === 1 ? '1 estado vai' : `${noSegundoTurno.length} estados vão`} para o 2º turno (TSE ou pela conta do painel*) e ${noSegundoTurno.length === 1 ? 'aparece' : 'aparecem'} só em "Vão para o 2º turno".</p>` : '';
+    tabela = `<h3 class="secao">${retirados ? `Mais votados nos estados ainda em aberto (${emAberto.length})` : 'Mais votados em cada UF'}</h3>
       ${definidas.length ? `<p class="muted pequeno">${definidas.length === 1 ? '1 estado já tem' : `${definidas.length} estados já têm`} ${meta.codigo === 3 ? 'o governador definido' : 'as duas vagas definidas'} (TSE ou pela conta do painel*) e ${definidas.length === 1 ? 'aparece' : 'aparecem'} só em "${listaEleitos}".</p>` : ''}
-      ${emAberto.length ? '' : `<p class="aviso-bloco">Todos os estados já têm ${meta.codigo === 3 ? 'o governador' : 'as vagas'} definido${meta.codigo === 3 ? '' : 's'}.</p>`}
+      ${notaSegundoTurno}
+      ${emAberto.length ? '' : `<p class="aviso-bloco">${noSegundoTurno.length ? 'Todos os estados já estão definidos: governador eleito ou 2º turno.' : `Todos os estados já têm ${meta.codigo === 3 ? 'o governador' : 'as vagas'} definido${meta.codigo === 3 ? '' : 's'}.`}</p>`}
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
         <thead><tr>${cabecalho('uf', 'UF')}<th>1º</th><th>2º</th><th>3º</th>${cabecalho('pct', 'Totalizadas', 'num')}</tr></thead>
         <tbody>${linhas}</tbody></table></div>
