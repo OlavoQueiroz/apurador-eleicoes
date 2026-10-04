@@ -42,6 +42,23 @@ export function posicoesHemiciclo(n) {
   return { pontos, raio: Math.max(2, Math.min(lado * 0.42, 16)) };
 }
 
+// Entrega um ponto a cada cadeira. Só ordenar por ângulo espalha um partido pequeno por fileiras diferentes (pontos de
+// ângulo parecido, mas longe um do outro). Aqui o hemiciclo é percorrido em faixas verticais, da esquerda para a
+// direita, e o sentido alterna a cada faixa (de dentro para fora, depois de fora para dentro): duas cadeiras
+// seguidas na ordem de exibição ficam sempre vizinhas, então cada partido forma um bloco de uma cor só.
+export function ordemSerpentina(pontos) {
+  if (!pontos.length) return [];
+  const raioMax = Math.max(...pontos.map((p) => p.r));
+  const faixas = pontos.filter((p) => p.r === raioMax).length; // a fila de fora define a largura de cada faixa
+  const faixaDe = (p) => Math.min(faixas - 1, Math.floor(((Math.PI - p.angulo) / Math.PI) * faixas));
+  return [...pontos].sort((a, b) => {
+    const fa = faixaDe(a);
+    const fb = faixaDe(b);
+    if (fa !== fb) return fa - fb;
+    return fa % 2 === 0 ? a.r - b.r : b.r - a.r;
+  });
+}
+
 // `partidos`: { sigla: { eleitos, ocupadas } } → bancadas em ordem de exibição, com o grupo de cada uma.
 export function ordenarBancadas(partidos) {
   const ordemGrupo = new Map(GRUPOS.map((g, i) => [g.id, i]));
@@ -78,7 +95,8 @@ const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s +
 export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   const bancadas = ordenarBancadas(dados.partidos);
   const cadeiras = listarCadeiras(bancadas, dados.pendentes);
-  const { pontos, raio } = posicoesHemiciclo(cadeiras.length);
+  const { pontos: posicoes, raio } = posicoesHemiciclo(cadeiras.length);
+  const pontos = ordemSerpentina(posicoes);
   const definidas = cadeiras.filter((c) => c.sigla && !c.lider).length;
   const naFrente = cadeiras.filter((c) => c.lider).length;
   const foco = ui.foco;
@@ -99,11 +117,9 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     const cor = corCadeira(c);
     const r = raio;
     const rotulo = c.sigla ? dicaCadeira(c) : 'Em apuração';
-    // Cadeira fora de disputa: a mesma cor, mais clara, para distinguir de quem foi eleito agora.
-    const preenchimento = cor && c.ocupada ? `color-mix(in srgb, ${cor} 42%, var(--surface))` : cor;
     // Na frente (ainda não eleito): só o contorno na cor do partido.
     const estilo = [
-      c.lider ? `fill:color-mix(in srgb, ${cor} 12%, var(--surface));stroke:${cor};stroke-width:2.2` : (preenchimento ? `fill:${preenchimento}` : ''), noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
+      c.lider ? `fill:color-mix(in srgb, ${cor} 12%, var(--surface));stroke:${cor};stroke-width:2.2` : (cor ? `fill:${cor}` : ''), noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
     return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" data-dica="${esc(rotulo)}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}></circle>`;
   }).join('');
 
@@ -152,7 +168,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     ? `<p class="muted pequeno">Nenhum eleito ainda: as cadeiras cinza serão preenchidas conforme o TSE totalizar os votos.</p>`
     : '';
   const ocupadas = dados.ocupadas
-    ? `<p class="muted pequeno">Cores mais claras: as ${fmtInt(bancadas.reduce((s, b) => s + b.ocupadas, 0))} cadeiras fora de disputa em 2026 (eleitas em 2022), com o partido atual de cada senador. As cores fortes são os eleitos em 2026.</p>`
+    ? `<p class="muted pequeno">${fmtInt(bancadas.reduce((s, b) => s + b.ocupadas, 0))} cadeiras estão fora de disputa em 2026 (eleitas em 2022) e já aparecem preenchidas, com o partido atual de cada senador.</p>`
     : '';
   const naoDefinido = ui.modo === 'ideologia' && bancadas.some((b) => b.grupo === 'independente' && b.sigla !== 'S/PARTIDO')
     ? '<p class="muted pequeno">“Independente” reúne senadores sem partido e partidos que a classificação do painel não cobre.</p>' : '';
