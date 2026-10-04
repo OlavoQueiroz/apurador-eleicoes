@@ -35,6 +35,10 @@ export function lerConfig(
     // Só municípios com pelo menos este nº de eleitores (mais o maior de cada UF) são baixados; o resto da UF vem
     // do arquivo da UF. null = baixar todos.
     municipiosMinimo: env.MUNICIPIOS_MINIMO ? Number(env.MUNICIPIOS_MINIMO) : 30_000,
+    // Intervalo mínimo, em ms, entre dois pedidos de município ao TSE (o dado por UF tem fila própria, na frente). 120 ms ≈ 8
+    // pedidos por segundo: no auge da apuração a recarga dos 150 municípios grandes de SP leva uns 20 s em vez de uns 30 s.
+    // Se o TSE responder 429, o limitador dobra o intervalo sozinho.
+    municipiosRitmoMs: env.MUNICIPIOS_RITMO_MS ? Number(env.MUNICIPIOS_RITMO_MS) : 120,
     verboso: env.VERBOSO === '1', // loga todo ciclo de consultas, mesmo sem novidade
     // Abre o navegador ao iniciar. Por padrão só num terminal interativo: execuções automatizadas
     // (testes, servidores de preview, scripts) não devem fazer janelas aparecerem sozinhas.
@@ -61,6 +65,7 @@ export function lerConfig(
     else if (arg === '--sem-municipios') cfg.municipios = false;
     else if (arg === '--municipios-minimo') cfg.municipiosMinimo = Number(valor());
     else if (arg === '--municipios-todos') cfg.municipiosMinimo = null;
+    else if (arg === '--municipios-ritmo-ms') cfg.municipiosRitmoMs = Number(valor());
     else if (arg === '--demo-minutos') cfg.demoMinutos = Number(valor());
     else if (arg === '--abrir') cfg.abrir = true;
     else if (arg === '--sem-abrir') cfg.abrir = false;
@@ -69,6 +74,7 @@ export function lerConfig(
   }
 
   if (cfg.municipiosMinimo !== null && !(cfg.municipiosMinimo >= 0)) throw new Error('--municipios-minimo precisa ser um número.');
+  if (!(cfg.municipiosRitmoMs >= 50 && cfg.municipiosRitmoMs <= 2000)) throw new Error('--municipios-ritmo-ms precisa ficar entre 50 e 2000 (milissegundos entre pedidos).');
   if (![1, 2].includes(cfg.turno)) throw new Error('O turno deve ser 1 ou 2.');
   if (!Number.isInteger(cfg.porta) || cfg.porta < 1 || cfg.porta > 65535) throw new Error('Porta inválida.');
 
