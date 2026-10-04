@@ -195,7 +195,7 @@ function chipHtml(uf) {
   const estilo = dado.cor ? ` style="--cor:${dado.cor}"` : '';
   return `<a class="chip-uf${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}"${estilo}
       aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
-      <span class="tile-uf">${uf === 'br' ? 'Brasil' : 'Exterior'}</span>
+      <span class="tile-uf">Brasil <small>total, com o exterior</small></span>
       <span class="tile-sub">${dado.sub ? `${dado.sub} · ` : ''}${dado.sub2}</span>
       <span class="tile-barra"><i style="width:${dado.pct}%"></i></span>
     </a>`;
@@ -204,6 +204,19 @@ function chipHtml(uf) {
 // Intensidade da cor: a UF começa cinza e ganha a cor do líder conforme é apurada, para que uma UF com
 // poucas seções não pareça um resultado firme.
 const forcaCor = (pct) => Math.round(Math.min(100, Math.max(0, pct)));
+
+// O exterior não tem contorno: é um globo no canto vazio do mapa, tratado como mais uma UF.
+function exteriorGloboHtml() {
+  const dado = dadoUnidade('zz');
+  const estilo = dado.vazio || !dado.cor ? '' : ` style="--cor:${dado.cor};--forca:${forcaCor(dado.pct)}"`;
+  const aria = `Exterior: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}`;
+  const cx = 66; const cy = MAPA.altura - 78; const r = 38;
+  return `<a class="uf exterior-globo${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/zz" data-uf="zz"${estilo}
+      aria-current="${estado.uf === 'zz'}" aria-label="${aria}">
+      <circle cx="${cx}" cy="${cy}" r="${r}"/>
+      <g class="globo-linhas"><ellipse cx="${cx}" cy="${cy}" rx="${r * 0.42}" ry="${r}"/><path d="M${cx - r} ${cy}H${cx + r}M${cx - r * 0.86} ${cy - r * 0.5}H${cx + r * 0.86}M${cx - r * 0.86} ${cy + r * 0.5}H${cx + r * 0.86}"/></g>
+      <text class="rot-ext" x="${cx}" y="${cy + r + 16}">EXTERIOR</text></a>`;
+}
 
 function ufMapaHtml(uf, ativas) {
   const forma = MAPA.ufs[uf];
@@ -254,13 +267,11 @@ function renderGrade() {
   const ordem = Object.keys(MAPA.ufs).sort((a, b) => (a === 'df') - (b === 'df')).sort((a, b) => (a === estado.uf) - (b === estado.uf));
   $('#grade').innerHTML = `<svg class="mapa-svg" viewBox="0 0 ${MAPA.largura + FOLGA_DIREITA} ${MAPA.altura}" role="group" aria-label="Mapa do Brasil por UF">
       ${ordem.map((uf) => ufMapaHtml(uf, ativas)).join('')}
+      ${ativas.has('zz') ? exteriorGloboHtml() : ''}
       <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
     </svg>`;
 
-  const especiais = [];
-  if (ativas.has('br') || meta.codigo !== 1) especiais.push('br');
-  if (ativas.has('zz')) especiais.push('zz');
-  $('#especiais').innerHTML = especiais.map(chipHtml).join('');
+  $('#especiais').innerHTML = ativas.has('br') || meta.codigo !== 1 ? chipHtml('br') : '';
   $('#legenda').innerHTML = legendaHtml();
 }
 
