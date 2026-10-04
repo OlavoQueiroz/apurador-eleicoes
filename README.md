@@ -142,12 +142,12 @@ para Governador, Senador, Deputado Federal e Deputado Estadual mostra as bancada
 Centrão, Direita, Independente) e por partido; na Presidência mostra o Comparativo (abaixo). Numa linha só ficam o seletor
 de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as cores de cada um):
 
-- **Placar**: dois hemiciclos lado a lado (eleição anterior e 2026) e, em cima, um cartão por bloco ou partido com as
+- **Placar**: hemiciclos lado a lado das duas últimas eleições (por exemplo 2018 e 2022) e de 2026 e, em cima, um cartão por bloco ou partido com as
   cadeiras de 2026, a variação e uma barra em que a parte da eleição anterior fica clara e a diferença se destaca (a mais,
   cheia; a menos, hachurada), com o valor da eleição anterior embaixo. Ao passar o mouse numa cadeira ou na legenda, o bloco
-  ou partido é destacado e uma dica mostra o total nas duas eleições. Em **Governadores**, no lugar dos hemiciclos há o mapa
-  em que cada UF é dividida ao meio quando mudou (esquerda = eleição anterior, direita = 2026), com as listas de viradas e de
-  bastiões.
+  ou partido é destacado e uma dica mostra o total em cada eleição mostrada. Em **Governadores**, no lugar dos hemiciclos há o mapa
+  em que cada UF é dividida ao meio (esquerda = eleição anterior, direita = 2026): quando mudou, as duas cores; enquanto 2026 não
+  está definido, a cor de 2022 e cinza. Há também as listas de viradas e de bastiões.
 - **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
 - **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece na linha de seletores): é a Assembleia Legislativa,
   com 94 e 70 cadeiras.

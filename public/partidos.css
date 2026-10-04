@@ -5,8 +5,7 @@
 
 .par-agrupar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 
-.par-duplo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
-.par-duplo:has(.par-fig:only-child) { grid-template-columns: 1fr; }
+.par-figs { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 8px 16px; }
 .par-fig { margin: 0; text-align: center; }
 .par-fig figcaption { font-size: 13px; font-weight: 650; color: var(--muted); }
 .par-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -73,7 +72,7 @@
 .principal.analises-comparativo::before { content: ""; position: absolute; inset: 16px 20px; z-index: -1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--sombra); }
 .principal.analises-comparativo .mapa, .principal.analises-comparativo .detalhe { background: none; border: 0; box-shadow: none; padding: 0; }
 .principal.analises-comparativo .par-topo { margin-bottom: 0; }
-@media (max-width: 720px) { .par-duplo { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .par-figs { grid-template-columns: 1fr; } }
 .topo-analises[hidden] { display: none; }
 
 /* Hover nos hemiciclos: destaca o grupo e mostra o total (ver ligarHover em partidos.js). */
