@@ -19,25 +19,25 @@ test('urlResultado segue o layout do arquivo unificado do TSE', () => {
   );
 });
 
-test('1º turno com os cargos padrão: sem deputado estadual nem distrital', () => {
+test('1º turno com os cargos padrão: deputado estadual só em SP e RJ, sem distrital', () => {
   const alvos = montarAlvos({ ...eleicoes2026, turno: 1 });
   const por = (cargo) => alvos.filter((a) => a.cargo === cargo);
-  assert.deepEqual(CARGOS_PADRAO, [1, 3, 5, 6]);
+  assert.deepEqual(CARGOS_PADRAO, [1, 3, 5, 6, 7]);
   assert.equal(por(1).length, 29); // br + 27 UFs + exterior
   assert.equal(por(3).length, 27);
   assert.equal(por(5).length, 27);
   assert.equal(por(6).length, 27);
   assert.equal(por(8).length, 0, 'deputado distrital fora por padrão');
-  assert.equal(por(7).length, 0, 'deputado estadual fora por padrão');
-  assert.equal(alvos.length, 110);
+  assert.deepEqual(por(7).map((a) => a.uf), ['sp', 'rj'], 'deputado estadual só em SP e RJ');
+  assert.equal(alvos.length, 112);
   assert.equal(new Set(alvos.map((a) => a.chave)).size, alvos.length, 'chaves únicas');
   assert.ok(por(1).every((a) => a.eleicao === '6257'));
   assert.ok(por(5).every((a) => a.eleicao === '6259'));
 });
 
-test('deputado estadual é opcional e o DF não tem esse cargo', () => {
+test('deputado estadual: só SP e RJ por enquanto (e o DF não tem esse cargo)', () => {
   const alvos = montarAlvos({ ...eleicoes2026, turno: 1, cargos: [7] });
-  assert.equal(alvos.length, UFS.length - 1);
+  assert.deepEqual(alvos.map((a) => a.uf), ['sp', 'rj']);
   assert.ok(!alvos.some((a) => a.uf === 'df'));
 });
 
@@ -60,7 +60,7 @@ test('lerConfig: padrões, flags e ambiente', () => {
   assert.equal(padrao.host, '127.0.0.1', 'só local por padrão');
   assert.equal(padrao.intervalo, 60);
   assert.equal(padrao.demo, false);
-  assert.deepEqual(padrao.cargos, [1, 3, 5, 6]);
+  assert.deepEqual(padrao.cargos, [1, 3, 5, 6, 7]);
 
   const demo = lerConfig(['--demo'], {});
   assert.equal(demo.demo, true);

@@ -28,13 +28,13 @@ export const CARGOS = {
   3: { codigo: 3, nome: 'Governador', pleito: 'estadual', turnos: [1, 2], abrangencias: UFS },
   5: { codigo: 5, nome: 'Senador', pleito: 'estadual', turnos: [1], abrangencias: UFS },
   6: { codigo: 6, nome: 'Deputado Federal', pleito: 'estadual', turnos: [1], abrangencias: UFS },
-  7: { codigo: 7, nome: 'Deputado Estadual', pleito: 'estadual', turnos: [1], abrangencias: UFS.filter((uf) => uf !== 'df') },
+  // Por enquanto só SP e RJ: são milhares de candidatos por UF, então o painel acompanha apenas essas duas.
+  7: { codigo: 7, nome: 'Deputado Estadual', pleito: 'estadual', turnos: [1], abrangencias: ['sp', 'rj'] },
   8: { codigo: 8, nome: 'Deputado Distrital', pleito: 'estadual', turnos: [1], abrangencias: ['df'] },
 };
 
-// Deputado estadual fica de fora por padrão (são milhares de candidatos por UF e o painel
-// não foi pensado para eles). Inclua com CARGOS=1,3,5,6,7,8.
-export const CARGOS_PADRAO = [1, 3, 5, 6];
+// Deputado estadual entra só com SP e RJ (ver CARGOS[7]); o distrital (8) fica de fora. Inclua com CARGOS=1,3,5,6,7,8.
+export const CARGOS_PADRAO = [1, 3, 5, 6, 7];
 
 const pad = (valor, tamanho) => String(valor).padStart(tamanho, '0');
 
