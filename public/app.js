@@ -190,15 +190,19 @@ function dadoUnidade(uf) {
     : conteudoTile(itemResumo(estado.cargo, uf));
 }
 
-function chipHtml(uf) {
-  const dado = dadoUnidade(uf);
-  const estilo = dado.cor ? ` style="--cor:${dado.cor}"` : '';
-  return `<a class="chip-uf${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}"${estilo}
-      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
-      <span class="tile-uf">Brasil <small>total, com o exterior</small></span>
-      <span class="tile-sub">${dado.sub ? `${dado.sub} · ` : ''}${dado.sub2}</span>
-      <span class="tile-barra"><i style="width:${dado.pct}%"></i></span>
-    </a>`;
+// Pílula no canto do mapa que leva ao total do Brasil (que já inclui o exterior).
+function totalBrasilHtml() {
+  const dado = dadoUnidade('br');
+  const cor = dado.cor ? ` style="--cor:${dado.cor}"` : '';
+  return `<a class="tot-pilula" href="#/${estado.cargo}/br" aria-current="${estado.uf === 'br'}"${cor} title="Brasil: total, com o exterior">
+    <i></i><b>Brasil</b><span>${esc(dado.sub2)}</span></a>`;
+}
+
+// Botão de voltar ao total, no topo do painel de detalhe, quando há uma UF (ou o exterior) selecionada.
+function voltarHtml() {
+  const meta = cargoMeta();
+  if (estado.uf === 'br' || !(meta.abrangencias.includes('br') || meta.codigo !== 1)) return '';
+  return `<a class="voltar" href="#/${estado.cargo}/br"><span aria-hidden="true">‹</span> Voltar ao Brasil</a>`;
 }
 
 // Intensidade da cor: a UF começa cinza e ganha a cor do líder conforme é apurada, para que uma UF com
@@ -271,7 +275,8 @@ function renderGrade() {
       <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
     </svg>`;
 
-  $('#especiais').innerHTML = ativas.has('br') || meta.codigo !== 1 ? chipHtml('br') : '';
+  const temTotal = ativas.has('br') || meta.codigo !== 1;
+  if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
   $('#legenda').innerHTML = legendaHtml();
 }
 
@@ -536,7 +541,7 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  raiz.innerHTML = ehAgregado() ? detalheAgregadoHtml() : detalheArquivoHtml();
+  raiz.innerHTML = voltarHtml() + (ehAgregado() ? detalheAgregadoHtml() : detalheArquivoHtml());
 
   const busca = $('#busca', raiz);
   if (busca) {

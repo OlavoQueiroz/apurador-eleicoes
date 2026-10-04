@@ -241,30 +241,6 @@ button { font: inherit; color: inherit; }
 .dica-lider i { width: 10px; height: 10px; margin-top: 4px; border-radius: 3px; background: var(--cor); flex: none; }
 .dica-lider small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
 
-.especiais { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
-.tile-uf small { font-weight: 500; font-size: 12px; color: var(--muted); margin-left: 6px; }
-.chip-uf {
-  position: relative;
-  flex: 1 1 140px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  padding: 9px 12px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--cor, transparent) 18%, var(--surface));
-  overflow: hidden;
-}
-.chip-uf:hover { border-color: var(--accent); }
-.chip-uf[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
-.chip-uf.vazio { border-style: dashed; color: var(--muted); background: var(--surface); }
-.tile-uf { font-weight: 700; font-size: 14px; line-height: 1.2; }
-.tile-sub { font-size: 12px; line-height: 1.2; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-barra { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--track); }
-.tile-barra i { display: block; height: 100%; background: var(--accent); }
-
 .legenda { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
 .leg-linha { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
 .leg-titulo { font-weight: 650; min-width: 112px; }
@@ -384,7 +360,7 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .barra { margin: 8px 0 0 36px; height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
 .barra i { display: block; height: 100%; border-radius: 99px; background: var(--cor, var(--accent)); }
 @media (prefers-reduced-motion: no-preference) {
-  .barra i, .trilho i, .tile-barra i { transition: width 0.5s ease; }
+  .barra i, .trilho i { transition: width 0.5s ease; }
 }
 
 .ferramentas { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
@@ -423,3 +399,12 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
   .cand-nome { flex-basis: 55%; }
   .barra { margin-left: 32px; }
 }
+
+/* ---------- total do Brasil e voltar ---------- */
+.tot-pilula { position: absolute; right: 1%; top: 1%; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 9px; font-size: 12.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--sombra); }
+.tot-pilula i { width: 9px; height: 9px; border-radius: 50%; background: var(--cor, var(--muted)); }
+.tot-pilula span { color: var(--muted); font-weight: 600; }
+.tot-pilula:hover { border-color: var(--accent); }
+.tot-pilula[aria-current="true"] { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.voltar { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 12px; padding: 5px 12px 5px 9px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.voltar:hover { border-color: var(--accent); color: var(--accent); }
