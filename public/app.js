@@ -47,6 +47,21 @@ const CORES = {
 
 const $ = (seletor, raiz = document) => raiz.querySelector(seletor);
 
+// Seções que o usuário ocultou na visão Brasil de governador e senador (eleitos, 2º turno...); lembradas entre recargas.
+const CHAVE_SECOES_OCULTAS = 'apurador.secoesOcultas';
+function lerSecoesOcultas() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(CHAVE_SECOES_OCULTAS) ?? '[]'));
+  } catch {
+    return new Set();
+  }
+}
+function gravarSecoesOcultas() {
+  try {
+    localStorage.setItem(CHAVE_SECOES_OCULTAS, JSON.stringify([...estado.secoesOcultas]));
+  } catch { /* sem armazenamento: vale só nesta página */ }
+}
+
 const estado = {
   meta: null,
   resumo: new Map(),
@@ -65,6 +80,7 @@ const estado = {
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
+  secoesOcultas: lerSecoesOcultas(), // ids das seções ocultas (ver detalheAgregadoHtml)
   mostrarSemChance: false, // governador/senador: mostra também os candidatos sem chance (escondidos por padrão)
   ordemUfs: { campo: 'uf', dir: 1 }, // tabela de governador e senador: ordena por nome da UF ('uf') ou por % de seções totalizadas ('pct')
   numerosAbertos: false, // detalhe do arquivo: os quatro números (comparecimento etc.) abertos ou só o resumo
@@ -1234,7 +1250,22 @@ function detalheAgregadoHtml() {
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
-    ${barras}${eleitosNomeANomeHtml(meta.codigo, itens)}${segundoTurnoNomeANomeHtml(meta.codigo, itens)}${tabela}`;
+    ${secoesRecolhiveisHtml([
+    { id: 'eleitos-partido', nome: 'Eleitos por partido', html: barras },
+    { id: 'eleitos', nome: meta.codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos', html: eleitosNomeANomeHtml(meta.codigo, itens) },
+    { id: 'segundo-turno', nome: 'Vão para o 2º turno', html: segundoTurnoNomeANomeHtml(meta.codigo, itens) },
+    { id: 'em-aberto', nome: 'Em aberto', html: tabela },
+  ])}`;
+}
+
+// Botões para mostrar ou ocultar cada seção da visão Brasil (só as que existem agora) e o conteúdo das que estão visíveis.
+function secoesRecolhiveisHtml(blocos) {
+  const existentes = blocos.filter((b) => b.html);
+  const chips = existentes.length > 1
+    ? `<div class="chips-secoes" role="group" aria-label="Seções da página"><span class="muted pequeno">Mostrar:</span>${existentes.map((b) =>
+      `<button type="button" class="chip-secao" data-secao="${b.id}" aria-pressed="${!estado.secoesOcultas.has(b.id)}">${esc(b.nome)}</button>`).join('')}</div>`
+    : '';
+  return `${chips}${existentes.filter((b) => !estado.secoesOcultas.has(b.id)).map((b) => b.html).join('')}`;
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
@@ -1400,6 +1431,13 @@ function renderDetalhe() {
     topoDetalhe.append(acoes);
   }
   if (ehComparativo()) ligarComparativo(raiz, estado.comparativo, () => { renderGrade(); renderDetalhe(); });
+  raiz.querySelectorAll('.chip-secao').forEach((botao) => botao.addEventListener('click', () => {
+    const id = botao.dataset.secao;
+    if (estado.secoesOcultas.has(id)) estado.secoesOcultas.delete(id);
+    else estado.secoesOcultas.add(id);
+    gravarSecoesOcultas();
+    renderDetalhe();
+  }));
   $('.como-calcula', raiz)?.addEventListener('toggle', (e) => { estado.comoAberto = e.target.open; });
   $('.mais-num', raiz)?.addEventListener('toggle', (e) => { estado.numerosAbertos = e.target.open; });
 
