@@ -355,7 +355,7 @@ async function atualizar() {
 
 function ufPadrao(cargo) {
   const meta = cargoMeta(cargo);
-  // Deputado estadual só tem SP e RJ: um "Brasil" de duas UFs não diz nada, então abre direto em SP.
+  // Deputado estadual só tem SP e RJ e não tem visão Brasil: abre direto em SP.
   return meta.abrangencias.length === 1 || cargo === 7 ? meta.abrangencias[0] : 'br';
 }
 
@@ -389,7 +389,7 @@ function lerHash() {
   // Modelo que não vale para o cargo aberto (ex.: swing em governador) volta para o simples.
   estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : 'ingenuo';
   const ufPedida = m?.[2];
-  const valida = ufPedida && (meta.abrangencias.includes(ufPedida) || (ufPedida === 'br' && meta.codigo !== 1));
+  const valida = ufPedida && (meta.abrangencias.includes(ufPedida) || (ufPedida === 'br' && meta.codigo !== 1 && meta.codigo !== 7));
   estado.uf = valida ? ufPedida : ufPadrao(meta.codigo);
   estado.busca = '';
   estado.mostrarTodos = false;
@@ -572,7 +572,7 @@ function totalBrasilHtml() {
 // Botão de voltar ao total, na linha das abas do painel de detalhe, quando há uma UF (ou o exterior) selecionada.
 function voltarHtml() {
   const meta = cargoMeta();
-  if (estado.uf === 'br' || !(meta.abrangencias.includes('br') || meta.codigo !== 1)) return '';
+  if (estado.uf === 'br' || meta.codigo === 7 || !(meta.abrangencias.includes('br') || meta.codigo !== 1)) return '';
   return `<a class="voltar" href="${hashPara(estado.cargo, 'br')}"><span aria-hidden="true">‹</span> Voltar ao Brasil</a>`;
 }
 
@@ -652,7 +652,8 @@ function renderGrade() {
       <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
     </svg>`;
 
-  const temTotal = ativas.has('br') || meta.codigo !== 1;
+  // Deputado estadual (só SP e RJ) não tem visão Brasil.
+  const temTotal = meta.codigo !== 7 && (ativas.has('br') || meta.codigo !== 1);
   if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
   destacarMunicipio();
   $('#legenda').innerHTML = municipal
@@ -814,6 +815,33 @@ function agrupamentosHtml(dados) {
 
 // ---------- desenho: detalhe de um arquivo (UF ou Brasil/presidente) ----------
 
+// Mapa de cadeiras da Assembleia Legislativa (deputado estadual): como a Câmara, mas de uma UF só, então os nomes saem
+// do próprio arquivo aberto. Eleitos marcados + vagas que o TSE já deu a um partido/federação (nome pelo ranking da lista).
+function cadeirasAssembleiaHtml(d) {
+  const candidatos = d.candidatos;
+  const partidos = {};
+  const guardar = (c, inferido) => {
+    const p = (partidos[c.partido] ??= { eleitos: 0, pessoasEleitas: [] });
+    p.eleitos += 1;
+    p.pessoasEleitas.push({ nome: c.nomeUrna, inferido });
+  };
+  let definidas = 0;
+  for (const c of candidatos) if (c.situacao === 'eleito') { guardar(c, false); definidas += 1; }
+  for (const agr of d.agrupamentos) {
+    const lista = candidatos.filter((c) => c.agrupamentoId === agr.id);
+    const faltam = Math.max(0, agr.vagas - lista.filter((c) => c.situacao === 'eleito').length);
+    for (const c of lista.filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, faltam)) { guardar(c, true); definidas += 1; }
+  }
+  return cadeirasHtml({
+    titulo: `Composição da Assembleia Legislativa · ${nomeUf(estado.uf)}`,
+    total: d.cargo.vagas,
+    pendentes: Math.max(0, d.cargo.vagas - definidas),
+    partidos,
+    ocupadas: false,
+  }, estado.cadeiras, { esc, corPartido, fmtInt });
+}
+
+
 function detalheArquivoHtml() {
   const titulo = `${cargoMeta().nome} · ${nomeUf(estado.uf)}`;
   const det = estado.detalhe;
@@ -879,6 +907,7 @@ function detalheArquivoHtml() {
     ${progressoHtml(d.secoes)}
     ${numerosHtml(d)}
     ${topo ? `<div style="margin-top:14px">${topo}</div>` : ''}
+    ${d.cargo.codigo === 7 ? cadeirasAssembleiaHtml(d) : ''}
     ${fixado}
     <h3 class="secao">${ehProporcional(d.cargo.codigo) ? 'Candidatos mais votados' : 'Candidatos'}</h3>
     ${lista}`;

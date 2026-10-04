@@ -189,7 +189,7 @@ export function resumir(dados) {
     eleitos: Object.values(eleitosPorPartido).reduce((soma, n) => soma + n, 0),
     eleitosPorPartido,
     // Câmara: eleitos mais as vagas já conquistadas por partido/federação, para a aba de partidos.
-    ...(dados.cargo.codigo === 6 ? { cadeirasPorPartido: cadeirasPorPartido(dados) } : {}),
+    ...([6, 7].includes(dados.cargo.codigo) ? { cadeirasPorPartido: cadeirasPorPartido(dados) } : {}),
     segundoTurno,
   };
 }
