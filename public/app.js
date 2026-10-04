@@ -1,6 +1,7 @@
 // Painel de apuração: busca /api/*, escuta /events (SSE) e redesenha quando chegam dados novos.
 
 import { MAPA } from './mapa-brasil.js';
+import { carregarHistorico, montarGrafico } from './grafico.js';
 import { iniciarBusca } from './busca.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
@@ -46,6 +47,10 @@ const estado = {
   cargo: 1,
   uf: 'br',
   detalhe: undefined, // undefined = carregando; null = sem dado
+  visao: 'apuracao', // 'apuracao' (dados do TSE) ou 'projecao' (estimativa do painel)
+  modelo: 'ingenuo',
+  projecao: undefined, // mesmo contrato de `detalhe`
+  historico: undefined, // histórico gravado da UF aberta: { chave, dados }; undefined = sem gráfico
   mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
@@ -85,6 +90,9 @@ const temArquivoNacional = (cargo) => cargo === 1;
 const ehAgregado = () => estado.uf === 'br' && !temArquivoNacional(estado.cargo);
 const chaveAtual = () => `${estado.cargo}:${estado.uf}`;
 const itemResumo = (cargo, uf) => estado.resumo.get(`${cargo}:${uf}`);
+// A visão escolhida (apuração ou projeção) acompanha a troca de cargo e de UF.
+const hashPara = (cargo, uf, visao = estado.visao, modelo = estado.modelo) =>
+  `#/${cargo}/${uf}${visao === 'projecao' ? `/projecao/${modelo}` : ''}`;
 
 async function getJson(url) {
   const res = await fetch(url, { cache: 'no-store' });
@@ -107,16 +115,28 @@ async function carregarResumo() {
 async function carregarDetalhe() {
   if (ehAgregado()) {
     estado.detalhe = null;
+    estado.projecao = null;
     return;
   }
-  const chave = chaveAtual();
+  const chave = `${chaveAtual()}:${estado.visao}:${estado.modelo}`;
+  const atual = () => chave === `${chaveAtual()}:${estado.visao}:${estado.modelo}`;
+  const url = estado.visao === 'projecao'
+    ? `/api/projecao/${estado.modelo}/${estado.cargo}/${estado.uf}`
+    : `/api/resultado/${estado.cargo}/${estado.uf}`;
+  const campo = estado.visao === 'projecao' ? 'projecao' : 'detalhe';
   try {
-    const detalhe = await getJson(`/api/resultado/${estado.cargo}/${estado.uf}`);
-    if (chave === chaveAtual()) estado.detalhe = detalhe; // descarta resposta de uma seleção já trocada
+    const resposta = await getJson(url);
+    if (atual()) estado[campo] = resposta; // descarta resposta de uma seleção já trocada
   } catch {
-    if (chave === chaveAtual()) estado.detalhe = null;
+    if (atual()) estado[campo] = null;
+  }
+  // Projeção por município: a primeira carga leva alguns segundos, então pergunta de novo até terminar.
+  clearTimeout(recarga);
+  if (estado.visao === 'projecao' && estado.projecao?.carregando && !estado.projecao.disponivel) {
+    recarga = setTimeout(atualizar, 1500);
   }
 }
+let recarga = null;
 
 // ---------- municípios da UF aberta (mapa de municípios) ----------
 
@@ -152,6 +172,38 @@ async function carregarMunicipios() {
   }
 }
 
+// ---------- evolução da apuração (gráfico) ----------
+
+const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && estado.visao !== 'projecao';
+const chaveHistorico = () => `${chaveAtual()}:${estado.modelo ?? 'ingenuo'}`;
+
+async function buscarHistorico() {
+  if (!querHistorico()) {
+    estado.historico = undefined;
+    return;
+  }
+  const chave = chaveHistorico();
+  const dados = await carregarHistorico(estado.cargo, estado.uf, estado.modelo ?? 'ingenuo');
+  if (chave !== chaveHistorico()) return; // a seleção mudou enquanto carregava
+  estado.historico = dados ? { chave, dados } : undefined; // sem a rota ou sem gravação, a seção some
+}
+
+// Insere o gráfico logo abaixo dos números do arquivo aberto.
+function montarGraficoEvolucao(raiz) {
+  const h = estado.historico;
+  const ancora = raiz.querySelector('.numeros');
+  if (!querHistorico() || !h || h.chave !== chaveHistorico() || !ancora) return;
+  const secao = document.createElement('section');
+  secao.className = 'grafico';
+  secao.innerHTML = '<h3 class="secao">Evolução da apuração</h3><div class="gr-corpo"></div>';
+  ancora.after(secao);
+  const modelo = estado.modelo ?? 'ingenuo';
+  montarGrafico(secao.querySelector('.gr-corpo'), h.dados, {
+    corPartido, fmtPct, esc, chave: h.chave,
+    nomeModelo: estado.meta.modelos?.find((m) => m.id === modelo)?.nome ?? modelo,
+  });
+}
+
 let atualizando = false;
 let atualizarDeNovo = false;
 async function atualizar() {
@@ -163,7 +215,7 @@ async function atualizar() {
   try {
     do {
       atualizarDeNovo = false;
-      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios()]);
+      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico()]);
       render();
     } while (atualizarDeNovo);
   } catch (erro) {
@@ -181,7 +233,10 @@ function ufPadrao(cargo) {
 }
 
 function lerHash() {
-  const m = /^#\/(\d+)\/([a-z]{2})(?:\/([cm])\/(\w+))?$/.exec(location.hash);
+  const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao)(?:\/([a-z]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
+  estado.visao = m?.[3] === 'projecao' ? 'projecao' : 'apuracao';
+  const modeloPedido = m?.[4];
+  estado.modelo = estado.meta.modelos.some((x) => x.id === modeloPedido && x.disponivel) ? modeloPedido : 'ingenuo';
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
@@ -190,13 +245,14 @@ function lerHash() {
   estado.uf = valida ? ufPedida : ufPadrao(meta.codigo);
   estado.busca = '';
   estado.mostrarTodos = false;
-  estado.destaque = m?.[3] ? { tipo: m[3], id: m[4] } : null;
+  estado.destaque = m?.[5] ? { tipo: m[5], id: m[6] } : null;
   estado.destaqueRolado = false;
 }
 
 async function aplicarHash() {
   lerHash();
   estado.detalhe = undefined;
+  estado.projecao = undefined;
   estado.mun = undefined;
   render();
   await atualizar();
@@ -214,11 +270,11 @@ function cargoParaMunicipio(uf) {
 
 function escolherNaBusca(item) {
   let hash;
-  if (item.tipo === 'candidato') hash = `#/${item.cargo}/${item.uf}/c/${item.sq}`;
+  if (item.tipo === 'candidato') hash = `${hashPara(item.cargo, item.uf, 'apuracao')}/c/${item.sq}`;
   else {
     const cargo = cargoParaMunicipio(item.uf);
     if (!cargo) return;
-    hash = `#/${cargo}/${item.uf}/m/${item.codigo}`;
+    hash = `${hashPara(cargo, item.uf, 'apuracao')}/m/${item.codigo}`;
   }
   // Escolher de novo o que já está aberto não muda o hash; redesenha à mão para rolar até ele outra vez.
   if (location.hash === hash) aplicarHash();
@@ -243,7 +299,7 @@ function municipioSelecionadoHtml() {
     ? '<span class="muted pequeno">Sem votos apurados ainda</span>'
     : `${ehMajoritario(estado.cargo) && m.lider ? `<span class="pequeno"><b>${esc(m.lider.nomeUrna)}</b> (${esc(m.lider.partido)}) lidera com ${fmtPct(m.lider.pct)} dos válidos · </span>` : ''}<span class="muted pequeno">${fmtPct(m.secoes.pctTotalizadas)} das seções totalizadas</span>`;
   return `<div class="sel-municipio"><div><b>${esc(nomeProprio(nome))}</b> · ${esc(nomeUf(estado.uf))}<br>${dado}</div>
-    <a href="#/${estado.cargo}/${estado.uf}">Limpar</a></div>`;
+    <a href="${hashPara(estado.cargo, estado.uf)}">Limpar</a></div>`;
 }
 
 // ---------- desenho: abas e mapa ----------
@@ -251,7 +307,7 @@ function municipioSelecionadoHtml() {
 // Navegação entre cargos: controle segmentado.
 function renderAbas() {
   const itens = estado.meta.cargos
-    .map((c) => `<a class="aba" href="#/${c.codigo}/${ufPadrao(c.codigo)}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
+    .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
   $('#abas').innerHTML = `<div class="seg">${itens}</div>`;
 }
@@ -285,11 +341,11 @@ function totalBrasilHtml() {
     <i></i><b>Brasil</b><span>${esc(dado.sub2)}</span></a>`;
 }
 
-// Botão de voltar ao total, no topo do painel de detalhe, quando há uma UF (ou o exterior) selecionada.
+// Botão de voltar ao total, na linha das abas do painel de detalhe, quando há uma UF (ou o exterior) selecionada.
 function voltarHtml() {
   const meta = cargoMeta();
   if (estado.uf === 'br' || !(meta.abrangencias.includes('br') || meta.codigo !== 1)) return '';
-  return `<a class="voltar" href="#/${estado.cargo}/br"><span aria-hidden="true">‹</span> Voltar ao Brasil</a>`;
+  return `<a class="voltar" href="${hashPara(estado.cargo, 'br')}"><span aria-hidden="true">‹</span> Voltar ao Brasil</a>`;
 }
 
 // Intensidade da cor: a UF começa cinza e ganha a cor do líder conforme é apurada, para que uma UF com
@@ -302,7 +358,7 @@ function exteriorGloboHtml() {
   const estilo = dado.vazio || !dado.cor ? '' : ` style="--cor:${dado.cor};--forca:${forcaCor(dado.pct)}"`;
   const aria = `Exterior: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}`;
   const cx = 66; const cy = MAPA.altura - 78; const r = 38;
-  return `<a class="uf exterior-globo${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/zz" data-uf="zz"${estilo}
+  return `<a class="uf exterior-globo${dado.vazio ? ' vazio' : ''}" href="${hashPara(estado.cargo, 'zz')}" data-uf="zz"${estilo}
       aria-current="${estado.uf === 'zz'}" aria-label="${aria}">
       <circle cx="${cx}" cy="${cy}" r="${r}"/>
       <g class="globo-linhas"><ellipse cx="${cx}" cy="${cy}" rx="${r * 0.42}" ry="${r}"/><path d="M${cx - r} ${cy}H${cx + r}M${cx - r * 0.86} ${cy - r * 0.5}H${cx + r * 0.86}M${cx - r * 0.86} ${cy + r * 0.5}H${cx + r * 0.86}"/></g>
@@ -316,7 +372,7 @@ function ufMapaHtml(uf, ativas) {
   // Nos majoritários, sem líder (ainda sem votos) a UF fica cinza; nos demais cargos a cor é a de destaque.
   const cor = dado.cor ?? (ehMajoritario(estado.cargo) ? null : 'var(--accent)');
   const estilo = dado.vazio || !cor ? '' : ` style="--cor:${cor};--forca:${forcaCor(dado.pct)}"`;
-  return `<a class="uf${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}" data-uf="${uf}"${estilo}
+  return `<a class="uf${dado.vazio ? ' vazio' : ''}" href="${hashPara(estado.cargo, uf)}" data-uf="${uf}"${estilo}
       aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
       <path d="${forma.d}"/></a>`;
 }
@@ -657,6 +713,88 @@ function detalheAgregadoHtml() {
     ${numeros}${barras}${tabela}`;
 }
 
+// ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
+
+function alternadorVisaoHtml() {
+  const aba = (visao, rotulo) =>
+    `<a class="aba" href="${hashPara(estado.cargo, estado.uf, visao)}" ${estado.visao === visao ? 'aria-current="page"' : ''}>${rotulo}</a>`;
+  return `<nav class="abas visoes" aria-label="Visão">${aba('apuracao', 'Apuração (TSE)')}${aba('projecao', 'Projeção (estimativa)')}${voltarHtml()}</nav>`;
+}
+
+function seletorModeloHtml() {
+  const opcoes = estado.meta.modelos
+    .map((m) => `<option value="${m.id}" ${m.id === estado.modelo ? 'selected' : ''} ${m.disponivel ? '' : 'disabled'}>${esc(m.nome)}${m.disponivel ? '' : ' (indisponível)'}</option>`)
+    .join('');
+  const atual = estado.meta.modelos.find((m) => m.id === estado.modelo);
+  const pendentes = estado.meta.modelos.filter((m) => !m.disponivel)
+    .map((m) => `<li><b>${esc(m.nome)}:</b> ${esc(m.motivo)}</li>`).join('');
+  return `<div class="ferramentas"><label class="muted pequeno" for="modelo">Modelo</label>
+      <select id="modelo" class="botao">${opcoes}</select></div>
+    <p class="muted pequeno">${esc(atual.descricao)}</p>
+    ${pendentes ? `<ul class="muted pequeno lista-pendentes">${pendentes}</ul>` : ''}`;
+}
+
+// Só no modelo por município: quanto da projeção depende de municípios que ainda não apuraram nada.
+function municipiosHtml(p) {
+  if (!p.municipios) return '';
+  const m = p.municipios;
+  const avisos = [];
+  if (m.semVotos > 0) {
+    avisos.push(`${fmtInt(m.semVotos)} município(s) ainda sem votos entram pela média da UF: eles respondem por <b>${fmtPct(p.parteEstimadaPelaUf * 100, 0)}</b> do total projetado.`);
+    // Quanto mais alta essa parte, menos a projeção vem de dado apurado.
+  }
+  if (m.semArquivo > 0) avisos.push(`${fmtInt(m.semArquivo)} município(s) sem arquivo no TSE ficaram de fora, então a projeção está incompleta.`);
+  if (p.ufs?.semVotos > 0) avisos.push(`${fmtInt(p.ufs.semVotos)} UF(s) ainda sem nenhum município apurado entram pelo eleitorado e pela média das demais.`);
+  if (p.conferencia && Math.abs(p.conferencia.diferencaPct) > 2) {
+    avisos.push(`A soma dos municípios (${fmtInt(p.conferencia.municipios)} votos válidos) difere ${fmtPct(Math.abs(p.conferencia.diferencaPct), 1)} do arquivo da UF (${fmtInt(p.conferencia.uf)}). Podem estar em momentos diferentes da apuração.`);
+  }
+  if (p.aviso) avisos.push(esc(p.aviso));
+  return `<div class="numeros">
+      <div class="numero"><b>${fmtInt(m.comVotos)}</b><span>Municípios com votos de ${fmtInt(m.total)}</span></div>
+      <div class="numero"><b>${fmtInt(m.semVotos)}</b><span>Municípios ainda sem votos</span></div>
+    </div>
+    ${avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('')}`;
+}
+
+function detalheProjecaoHtml() {
+  const titulo = `${cargoMeta().nome} · ${nomeUf(estado.uf)}`;
+  const topo = `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
+      <p class="muted pequeno">Projeção do resultado final</p></div>
+      <div class="selos"><span class="selo aviso">Estimativa do painel</span></div></div>
+    <p class="aviso-bloco">Isto <b>não é resultado do TSE</b>: é uma extrapolação feita por este painel a partir de uma apuração parcial, com limitações. Só o resultado oficial vale.</p>
+    ${seletorModeloHtml()}`;
+  const p = estado.projecao;
+  if (p === undefined) return `${topo}<p class="vazio-msg">Carregando…</p>`;
+  if (!p || !p.disponivel) {
+    const { feitos, total, unidade = 'municípios' } = p?.progresso ?? {};
+    const andamento = p?.carregando && total ? ` (${fmtInt(feitos)} de ${fmtInt(total)} ${unidade})` : '';
+    return `${topo}<p class="aviso-bloco espera">${esc(p?.motivo ?? 'Projeção indisponível.')}${andamento}</p>`;
+  }
+
+  const linhas = p.candidatos.map((c) => `<tr>
+      <td><b>${esc(c.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></td>
+      <td class="num">${fmtPct(c.pctAtual)}</td>
+      <td class="num"><b>${fmtPct(c.pctProjetado)}</b></td>
+      <td class="num">${fmtInt(c.votosProjetados)}</td>
+      <td class="num">${fmtPct(c.pctMinimo, 1)} a ${fmtPct(c.pctMaximo, 1)}</td>
+    </tr>`).join('');
+  return `${topo}
+    <div class="progresso">
+      <div class="progresso-linha"><span>Seções totalizadas usadas como base</span><span><b>${fmtPct(p.fracaoApurada * 100)}</b></span></div>
+      <div class="trilho"><i style="width:${p.fracaoApurada * 100}%"></i></div>
+    </div>
+    <div class="numeros">
+      <div class="numero"><b>${fmtInt(p.validosProjetados)}</b><span>Votos válidos projetados</span></div>
+      <div class="numero"><b>${fmtInt(p.votosFaltantes)}</b><span>Votos válidos ainda a apurar</span></div>
+    </div>
+    ${municipiosHtml(p)}
+    <h3 class="secao">Candidatos</h3>
+    <div class="tabela-rolagem"><table class="tabela">
+      <thead><tr><th>Candidato</th><th class="num">% atual</th><th class="num">% projetado</th><th class="num">Votos projetados</th><th class="num" title="Extremos matemáticos: nenhum ou todos os votos faltantes para o candidato. Não é intervalo de confiança.">Faixa possível</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
+    <p class="muted pequeno">A faixa possível só mostra o que ainda está matematicamente em aberto; é larga no começo da apuração e não indica probabilidade.</p>`;
+}
+
 // ---------- desenho: orquestração ----------
 
 function renderDetalhe() {
@@ -665,7 +803,12 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  raiz.innerHTML = voltarHtml() + municipioSelecionadoHtml() + (ehAgregado() ? detalheAgregadoHtml() : detalheArquivoHtml());
+  if (ehAgregado()) raiz.innerHTML = detalheAgregadoHtml();
+  else raiz.innerHTML = alternadorVisaoHtml() + (estado.visao === 'projecao' ? '' : municipioSelecionadoHtml()) + (estado.visao === 'projecao' ? detalheProjecaoHtml() : detalheArquivoHtml());
+
+  $('#modelo', raiz)?.addEventListener('change', (evento) => {
+    location.hash = hashPara(estado.cargo, estado.uf, 'projecao', evento.target.value);
+  });
 
   const busca = $('#busca', raiz);
   if (busca) {
@@ -684,9 +827,10 @@ function renderDetalhe() {
   });
   raiz.querySelectorAll('tr[data-uf]').forEach((linha) => {
     linha.addEventListener('click', () => {
-      location.hash = `#/${estado.cargo}/${linha.dataset.uf}`;
+      location.hash = hashPara(estado.cargo, linha.dataset.uf);
     });
   });
+  montarGraficoEvolucao(raiz);
   window.scrollTo({ top: rolagem });
   // Candidato escolhido na busca: rola até ele uma vez, quando o detalhe já tiver carregado.
   const alvo = !estado.destaqueRolado && $('.candidatos > li.destaque, .sel-fixado + .candidatos > li', raiz);
