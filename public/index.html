@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apuração das eleições</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d4ed8'/%3E%3Cpath d='M8 17l5 5 11-12' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="banner-demo" class="banner-demo" role="alert" hidden>
+    <strong>MODO DEMONSTRAÇÃO</strong> — candidatos, partidos e votos exibidos são <strong>fictícios</strong>, gerados por simulação. Nada aqui é resultado de eleição.
+  </div>
+
+  <header class="topo">
+    <div class="topo-titulo">
+      <h1>Apuração <span id="ano"></span></h1>
+      <p id="subtitulo" class="muted"></p>
+    </div>
+    <div class="estado" aria-live="polite">
+      <span id="pulso" class="pulso" data-estado="conectando"></span>
+      <div>
+        <div id="estado-texto" class="estado-texto">Conectando…</div>
+        <div id="estado-detalhe" class="muted pequeno"></div>
+      </div>
+    </div>
+  </header>
+
+  <nav id="abas" class="abas" aria-label="Cargos"></nav>
+
+  <main id="principal" class="principal">
+    <section id="mapa" class="mapa" aria-label="Unidades da Federação">
+      <div id="grade" class="grade-uf"></div>
+      <div id="especiais" class="especiais"></div>
+      <p class="muted pequeno legenda">Cada quadrado é uma UF (posições aproximadas). A barra mostra o quanto da UF já foi totalizado.</p>
+    </section>
+    <section id="detalhe" class="detalhe" aria-label="Resultado"></section>
+  </main>
+
+  <footer class="rodape muted pequeno">
+    Fonte: arquivos públicos de resultado do TSE (resultados.tse.jus.br). Painel independente e sem vínculo com o TSE;
+    em caso de divergência, vale o resultado oficial. Percentuais parciais mudam conforme novas seções são totalizadas.
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

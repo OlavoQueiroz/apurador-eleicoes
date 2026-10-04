@@ -1,0 +1,15 @@
+{
+  "name": "apurador-eleicoes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Painel local de apuração em tempo real a partir dos arquivos públicos de resultado do TSE",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node server.js --demo",
+    "test": "node --test"
+  }
+}
