@@ -63,6 +63,26 @@ test('focoHtml: cartões, cláusula só na Câmara e aviso quando o partido não
   assert.match(focoHtml(modelo, { partido: 'missao', detalhes: undefined }, ajuda), /Carregando/);
 });
 
+test('analisePartido: posição na lista, quem está dentro e a distância do corte', () => {
+  const lista = { id: 7, sigla: 'MISSÃO', partidos: ['MISSÃO'], votos: 100, vagas: 0, vagasPrevistas: 2, faltamParaVaga: 15, folgaDaVaga: 4 };
+  const todos = [cand('PL', 'Kim', 90), cand('MISSÃO', 'Ana', 60), cand('MISSÃO', 'Bia', 55), cand('MISSÃO', 'Caio', 20)].map((c) => ({ ...c, agrupamentoId: 7 }));
+  const d = new Map([['sp', dados(10, 50, 1000, todos, [lista])]]);
+  const l = analisePartido({ alvo: 'missao', detalhes: d, resumos: new Map() }).linhas[0];
+  assert.equal(l.vagasLista, 2);
+  assert.deepEqual(l.ranking.map((c) => [c.pos, c.dentro, c.meu]), [[1, true, false], [2, true, true], [3, false, true], [4, false, true]]);
+  assert.equal(l.faltamParaVaga, 15);
+  assert.equal(l.distFora.nomeUrna, 'Bia');
+  assert.equal(l.distFora.faltam, 5); // 60 (último dentro) − 55
+  assert.equal(l.folgaDentro.nomeUrna, 'Ana');
+  assert.equal(l.folgaDentro.folga, 5); // 60 − 55 (primeiro de fora)
+  const ajuda = { esc: (s) => String(s), fmtInt: (n) => String(n), corPartido: () => '#123456', nomeUf: (u) => u.toUpperCase() };
+  const html = focoHtml({ cargo: { codigo: 6 }, uf: null, base: null }, { partido: 'missao', detalhes: d, resumos: new Map() }, ajuda);
+  assert.match(html, /Mais perto de uma vaga extra/);
+  assert.match(html, /Bia é o 3º da lista, 5 votos atrás do corte/);
+  assert.match(html, /Ranking das listas perto do corte/);
+  assert.match(html, /<tr class="par-meu par-corte">/);
+});
+
 test('hashPartidos: a aba "Um partido" leva o partido no endereço', () => {
   assert.equal(hashPartidos(6, 'foco', 'ideologia', null, 'missao'), '#/6/br/analise/foco/p-missao');
   assert.equal(hashPartidos(7, 'foco', 'ideologia', 'rj', 'missao'), '#/7/rj/analise/foco/p-missao');

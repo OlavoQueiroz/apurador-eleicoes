@@ -8,7 +8,7 @@ import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
   CARGOS_PARTIDOS, agrupar, situacaoGovernador, hashAntigoParaNovo, hashPartidos, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
-import { distribuirVagas, resumir } from '../src/normalize.js';
+import { anotarVagasPrevistas, distribuirVagas, resumir } from '../src/normalize.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const raiz = path.resolve(aqui, '..');
@@ -412,4 +412,29 @@ test('placar: nota de estimativa quando as vagas na frente dos deputados são es
   assert.match(placarHtml(m, ajuda), /estimativa pelo quociente eleitoral/);
   const real = criarModelo({ cargo: cargo(6), historico, itens: [{ ...itens[0], cadeirasEstimadas: false }], ufs: [] });
   assert.doesNotMatch(placarHtml(real, ajuda), /estimativa pelo quociente/);
+});
+
+test('anotarVagasPrevistas: distância em votos até ganhar ou perder uma vaga, conferida pela própria distribuição', () => {
+  const votos = [100000, 80000, 30000, 20000];
+  const dados = {
+    cargo: { vagas: 8 },
+    candidatos: [],
+    agrupamentos: votos.map((v, i) => ({ id: i + 1, votos: v, vagas: 0 })), // o TSE ainda não distribuiu: vale a estimativa
+  };
+  anotarVagasPrevistas(dados);
+  assert.deepEqual(dados.agrupamentos.map((a) => a.vagasPrevistas), [4, 3, 1, 0]);
+  assert.equal(dados.vagasEstimadas, true);
+  const com = (i, x) => distribuirVagas(votos.map((v, j) => (j === i ? v + x : v)), 8)[i];
+  dados.agrupamentos.forEach((a, i) => {
+    const base = distribuirVagas(votos, 8)[i];
+    assert.ok(a.faltamParaVaga > 0);
+    assert.ok(com(i, a.faltamParaVaga) > base, `lista ${i}: com os votos que faltam ganha uma vaga`);
+    assert.ok(com(i, a.faltamParaVaga - 1) <= base, `lista ${i}: com um voto a menos ainda não ganha`);
+    if (base > 0) {
+      assert.ok(com(i, -(a.folgaDaVaga + 1)) < base, `lista ${i}: perdendo a folga mais um voto, perde a vaga`);
+      assert.ok(com(i, -a.folgaDaVaga) >= base, `lista ${i}: perdendo só a folga, mantém a vaga`);
+    } else {
+      assert.equal(a.folgaDaVaga, null);
+    }
+  });
 });
