@@ -186,7 +186,13 @@ let recarga = null;
 // Mapa da projeção: o vencedor projetado de cada UF, pelo modelo escolhido. Só nos majoritários, que têm um vencedor por UF.
 const querMapaProjecao = () => estado.visao === 'projecao' && ehMajoritario(estado.cargo) && cargoMeta().abrangencias.length > 1;
 // Modelos que servem ao cargo aberto e estão disponíveis; os outros ficam fora do seletor.
-const modelosDoCargo = (cargo = estado.cargo) => estado.meta.modelos.filter((m) => m.disponivel && (!m.cargos || m.cargos.includes(cargo)));
+// A extrapolação simples vai por último: é a pior nos ensaios (erro de 3 a 5 pp aos 5-50% apurados, contra ~0,2 a 1,3 pp do swing) e
+// fica só como ponto de comparação. O modelo aberto por padrão é o melhor disponível para o cargo.
+const modelosDoCargo = (cargo = estado.cargo) => estado.meta.modelos
+  .filter((m) => m.disponivel && (!m.cargos || m.cargos.includes(cargo)))
+  .sort((a, b) => (a.id === 'ingenuo') - (b.id === 'ingenuo'));
+const MODELO_PADRAO = { 1: 'swing', 3: 'estratificado', 5: 'estratificado' };
+const modeloPadrao = (cargo) => (modelosDoCargo(cargo).some((m) => m.id === MODELO_PADRAO[cargo]) ? MODELO_PADRAO[cargo] : 'ingenuo');
 const chaveMapaProj = () => `${estado.cargo}:${estado.modelo}`;
 let recargaMapaProj = null;
 async function carregarMapaProjecao() {
@@ -388,7 +394,7 @@ function lerHash() {
     estado.partidos.agrupar = extras.includes('partido') ? 'partido' : 'ideologia';
   }
   // Modelo que não vale para o cargo aberto (ex.: swing em governador) volta para o simples.
-  estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : 'ingenuo';
+  estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : modeloPadrao(meta.codigo);
   const ufPedida = m?.[2];
   const valida = ufPedida && (meta.abrangencias.includes(ufPedida) || (ufPedida === 'br' && meta.codigo !== 1 && meta.codigo !== 7));
   estado.uf = valida ? ufPedida : ufPadrao(meta.codigo);

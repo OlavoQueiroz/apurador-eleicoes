@@ -143,8 +143,10 @@ Só presidente. Compara o que cada candidato tem agora com o que o **campo polí
 lugares (os mesmos grandes municípios e o resto do estado do modelo anterior):
 
 1. O prior de cada lugar é o resultado de 2022, traduzido para os candidatos de 2026 pelo mapeamento de herança.
-2. O **swing** de cada candidato é a média, ponderada pelo tamanho, de (% atual − % herdado) nos lugares com pelo menos
-   50% das seções apuradas (se não houver nenhum, nos que tiverem algum voto).
+2. O **swing** de cada candidato é a média, ponderada, de (% atual − % herdado) nos lugares já apurados. O peso de cada lugar
+   é o tamanho dele vezes (fração apurada ÷ 50%)², até 1: ele entra aos poucos, sem salto quando cruza 50% (`pesoGradual`;
+   com `pesoGradual: false`, o corte seco antigo, só os lugares com 50% ou mais). No ensaio (`--oscilacao`) isso reduz o
+   salto médio da projeção entre atualizações sem piorar o erro; não foi validado com votos reais.
 3. O % esperado de cada lugar é o % herdado mais o swing, normalizado para somar 100%.
 4. O que falta de cada lugar é dividido entre o % já visto ali e o esperado, na proporção da apuração dele.
 5. O tamanho de um lugar sem votos é o total de 2022 vezes o crescimento medido nos lugares já apurados.
