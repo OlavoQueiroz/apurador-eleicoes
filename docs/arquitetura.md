@@ -173,6 +173,14 @@ fração (peso de 0 a 1). Por padrão só o **mesmo partido** herda (PT→Lula, 
 pequenos que repetiram). É uma **decisão política editável**: reinicie o painel depois de mudar. O painel avisa se a
 herança de um candidato de 2022 passar de 100%.
 
+### Histórico de 2018
+
+`dados-historicos/presidente-2018-t1.json` tem o mesmo formato, para o 1º turno de 2018, e é gerado por
+`node scripts/gerar-historico-2018.js` (também lê só a entrada da presidência do zip dos dados abertos do TSE). Os totais
+conferem com a apuração oficial (Bolsonaro 49.277.010, Haddad 31.342.051, 107.050.749 votos válidos; há um teste para isso).
+`dados-historicos/mapeamento-presidente-2018.json` liga os candidatos de 2022 e 2026 aos de 2018 para o comparativo:
+PT→Haddad (13) e PL→Bolsonaro, que em 2018 concorreu pelo PSL com o número 17. O comparativo usa só essas duas ligações.
+
 Governador e senador não têm swing: exigiriam os arquivos de 2022 por UF (~290 MB, porque cada um traz todos os cargos).
 
 ## Histórico da apuração
