@@ -112,3 +112,15 @@ export function elegiveisPelaConta({ votos, k, primeiroTurno = false, validos = 
   };
   return votos.map((_, i) => garantia[i] ?? (provavel(i) ? 'provavel' : null));
 }
+
+// Quem a conta do painel dá como eleito entre os colocados de uma UF (resumo com `colocados`, `vagas`, `turno`, `validos`,
+// `eleitorado` e `secoes`): um valor por colocado (null, 'matematica', 'pratica' ou 'provavel'). Governador e Senado. Quem o
+// TSE já marcou como eleito não entra: ele já conta como eleito.
+export function flagsEleitoPelaConta(item, codigo) {
+  const colocados = item.colocados ?? [];
+  return elegiveisPelaConta({
+    votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: codigo, vagas: item.vagas, turno: item.turno }),
+    primeiroTurno: [1, 3].includes(codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
+    pctSecoes: item.secoes?.pctTotalizadas ?? null, votosPorEleitor: codigo === 5 ? item.vagas : 1,
+  }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
+}

@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { avaliarChances, elegiveisPelaConta, quantosClassificam } from './chances.js';
+import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -968,17 +968,6 @@ function agregadoSecoes() {
   const total = itens.reduce((s, { item }) => s + item.secoes.total, 0);
   const totalizadas = itens.reduce((s, { item }) => s + item.secoes.totalizadas, 0);
   return { total, totalizadas, pct: total ? (100 * totalizadas) / total : 0 };
-}
-
-// Quem a conta do painel dá como eleito (public/chances.js) entre os três primeiros de uma UF: um valor por colocado (null, 'matematica',
-// 'pratica' ou 'provavel'). Quem o TSE já marcou como eleito não entra: ele já conta como eleito.
-function flagsEleitoPelaConta(item, codigo) {
-  const colocados = item.colocados ?? [];
-  return elegiveisPelaConta({
-    votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: codigo, vagas: item.vagas, turno: item.turno }),
-    primeiroTurno: [1, 3].includes(codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
-    pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: codigo === 5 ? item.vagas : 1,
-  }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
 }
 
 // Quantos eleitos uma UF tem: os que o TSE marcou e os dados como eleitos pela conta do painel (governador e Senado).
