@@ -3,8 +3,8 @@
 Painel local que acompanha a apuração em tempo real a partir dos **arquivos públicos de resultado do TSE**
 (`resultados.tse.jus.br`). Não conta votos: lê o que o TSE publica, normaliza e mostra.
 
-Cargos: presidente, governador, senador e deputado federal.
-Deputado estadual e deputado distrital (DF) ficam de fora por padrão (ver [Opções](#opções)).
+Cargos: presidente, governador, senador, deputado federal e deputado estadual (este só em SP e RJ).
+Deputado distrital (DF) fica de fora por padrão (ver [Opções](#opções)).
 
 Além do resultado oficial, o painel tem uma aba separada de **projeção do resultado final** (três modelos, sempre
 rotulados como estimativa), o mapa de municípios de cada UF, um gráfico de **evolução da apuração** gravado ao vivo, busca
@@ -75,7 +75,7 @@ Ctrl+C continua valendo.
 | `--porta N` (`PORT`) | 3000 | Porta do painel. |
 | `--intervalo S` (`INTERVALO`) | 60 | Segundos entre consultas ao TSE. Mínimo de 30, para não sobrecarregar o servidor. |
 | `--turno N` (`TURNO`) | 1 | `2` acompanha o 2º turno (só presidente e governador). |
-| `--cargos LISTA` (`CARGOS`) | `1,3,5,6` | Códigos: 1 presidente, 3 governador, 5 senador, 6 dep. federal, 7 dep. estadual, 8 dep. distrital. Use `1,3,5,6,7,8` para incluir estaduais e distrital. |
+| `--cargos LISTA` (`CARGOS`) | `1,3,5,6,7` | Códigos: 1 presidente, 3 governador, 5 senador, 6 dep. federal, 7 dep. estadual (só SP e RJ), 8 dep. distrital. Use `1,3,5,6,7,8` para incluir também o distrital. |
 | `--demo` (`DEMO=1`) | desligado | Modo demonstração (dados fictícios). |
 | `--demo-minutos N` | 8 | Duração da simulação. |
 | `--sem-abrir` (`ABRIR=0`) | abre sozinho em terminal interativo | Não abre o navegador ao iniciar. `--abrir` (ou `ABRIR=1`) força a abertura mesmo fora de um terminal interativo. |
@@ -135,9 +135,9 @@ do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios
 `/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
 municípios ficam o exterior (sem geometria) e o DF (um município só).
 
-### Aba Partidos
+### Aba Análises (partidos e ideologia)
 
-Ao lado dos cargos, a aba **Partidos** mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
+Ao lado dos cargos, a aba **Análises** reúne o Comparativo da presidência (abaixo) e mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
 Direita, Independente) e por partido, em quatro análises: **Placar** (cartões com a variação de cadeiras desde a eleição
 anterior e o hemiciclo), **Ganhos e perdas** (barras por partido), **Viradas por estado** (mapa de Governadores e Câmara em
 que cada UF é dividida ao meio quando mudou de bloco: esquerda = eleição anterior, direita = 2026) e **Série histórica**
@@ -157,10 +157,10 @@ blocos) e **Partido** (os maiores partidos e as cores de cada um). O endereço g
 
 ### Comparativo com eleições anteriores
 
-Na tela de Presidente, ao lado de "Apuração" e "Projeção", a visão **Comparativo** compara o PT (Lula ou Haddad) com ele
+Na aba **Análises**, em **Presidente**, o **Comparativo** compara o PT (Lula ou Haddad) com ele
 mesmo e o campo de Bolsonaro (Flávio ou Bolsonaro) com Bolsonaro, no 1º turno. O seletor do painel escolhe o período:
 **2026 × 2022**, **2026 × 2018** (a apuração de 2026 ao vivo) e **2022 × 2018** (as duas encerradas: serve para testar a
-página com dados reais antes da apuração). O endereço guarda a escolha (`#/1/br/comparativo/2022x2018`).
+página com dados reais antes da apuração). O endereço guarda a escolha (`#/partidos/1/comparativo/2022x2018`, com a UF no fim se houver uma aberta); o endereço antigo (`#/1/br/comparativo`) redireciona.
 
 A informação principal é o **impacto no saldo nacional**, não a variação dentro da UF: o saldo da UF é a variação do PT
 menos a do campo de Bolsonaro (em pontos percentuais dos votos válidos) e o impacto é o saldo multiplicado pelo peso da UF
@@ -234,7 +234,7 @@ final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos município
   testado com dados sintéticos construídos sobre a estrutura real. Nos primeiros minutos da apuração, compare com
   o app oficial do TSE.
 - Conselheiro Distrital (Fernando de Noronha) não é acompanhado: o TSE ainda não publica esse arquivo.
-- Deputado estadual: suportado (`--cargos 1,3,5,6,7,8`), mas é volumoso e menos testado na interface.
+- Deputado estadual: só SP e RJ (`CARGOS[7]` em `src/tse.js`), sem projeção nem gráfico de evolução; é volumoso e menos testado na interface.
 - O modo demonstração simplifica o desfecho (não aplica quociente eleitoral).
 - **As projeções não foram validadas com votos reais.** Os cálculos foram testados com dados sintéticos; o descompasso
   entre os arquivos do TSE só aparece ao vivo. A validação deve usar o histórico gravado, depois da eleição.

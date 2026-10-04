@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { criarPartidos, criarTradutor, carregarPartidos } from '../src/partidos.js';
 import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
-  CARGOS_PARTIDOS, agrupar, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, estadosHtml, ganhosHtml, partidosHtml, placarHtml, serieHtml,
+  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, estadosHtml, ganhosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
 import { resumir } from '../src/normalize.js';
 
@@ -129,7 +129,7 @@ test('telas: todas as abas renderizam, com e sem histórico', () => {
     for (const agrupar of ['ideologia', 'partido']) {
       for (const aba of ['placar', 'ganhos', 'estados', 'serie']) {
         const html = partidosHtml(m, { aba, agrupar }, ajuda);
-        assert.match(html, /par-abas/);
+        assert.match(html, /aria-label="Análise"/);
         assert.ok(!html.includes('undefined') && !html.includes('NaN'), `${c.nome}/${aba}/${agrupar}`);
       }
     }
@@ -183,4 +183,12 @@ test('por partido: o mapa lidera pelo partido, não pelo bloco, e os endereços 
   assert.match(html, /#\/partidos\/3\/placar\/partido/);
   assert.match(html, /Bastiões \(mesmo partido/);
   assert.match(partidosHtml(m, { aba: 'placar' }, ajuda), /#\/partidos\/3\/ganhos"/);
+});
+
+test('Presidente na aba Análises: o endereço é o do comparativo e o seletor de cargo o inclui', () => {
+  assert.equal(hashPartidos(1, 'placar', 'partido'), '#/partidos/1/comparativo');
+  assert.equal(hashPartidos(6, 'ganhos', 'partido'), '#/partidos/6/ganhos/partido');
+  const html = seletorCargosHtml({ cargos: [PRESIDENTE, ...CARGOS_PARTIDOS], atual: 1, aba: 'placar', modo: 'ideologia', esc: (t) => t });
+  assert.match(html, /href="#\/partidos\/1\/comparativo" aria-current="page">Presidente/);
+  assert.match(html, /href="#\/partidos\/6\/placar"/);
 });
