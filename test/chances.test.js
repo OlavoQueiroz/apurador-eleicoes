@@ -119,3 +119,11 @@ test('elegiveisPelaConta no Senado (2 votos por eleitor): os 2 primeiros isolado
   // 3º colado no 2º: o 2º não está garantido
   assert.deepEqual(elegiveisPelaConta({ votos: [300000, 250000, 245000], k: 2, validos: 1000000, pctSecoes: 85, votosPorEleitor: 2 }), ['provavel', null, null]);
 });
+
+test('elegiveisPelaConta: com 47% das seções ninguém é dado como eleito, por maior que seja a vantagem', () => {
+  for (const lider of [55, 60, 70, 80]) {
+    const votos = [lider * 10000, (100 - lider) * 6000, (100 - lider) * 3000];
+    assert.deepEqual(elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 47 }), [null, null, null], `líder com ${lider}%`);
+    assert.deepEqual(elegiveisPelaConta({ votos, k: 2, validos: 1000000, pctSecoes: 47, votosPorEleitor: 2 }), [null, null, null], `Senado, 1º com ${lider}%`);
+  }
+});
