@@ -4,6 +4,7 @@
 
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 
+const MARGEM = 22; // folga em volta do desenho para os pontos das bordas não serem cortados
 const LARGURA = 600;
 const ALTURA = 322;
 const RAIO_EXTERNO = 290;
@@ -38,7 +39,7 @@ export function posicoesHemiciclo(n) {
   });
   pontos.sort((a, b) => b.angulo - a.angulo || a.r - b.r);
   const lado = melhor.filas > 1 ? Math.min(arco, passo) : arco;
-  return { pontos, raio: Math.max(2, Math.min(lado * 0.42, 20)) };
+  return { pontos, raio: Math.max(2, Math.min(lado * 0.42, 16)) };
 }
 
 // `partidos`: { sigla: { eleitos, ocupadas } } → bancadas em ordem de exibição, com o grupo de cada uma.
@@ -151,7 +152,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
       <div class="gr-seg" role="group" aria-label="Agrupar cadeiras">${modo('partido', 'Por partido')}${modo('ideologia', 'Por ideologia')}</div>
     </div>
     <div class="cad-dica" hidden></div>
-    <svg class="cad-svg" viewBox="0 0 ${LARGURA} ${ALTURA}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
+    <svg class="cad-svg" viewBox="${-MARGEM} ${-MARGEM} ${LARGURA + 2 * MARGEM} ${ALTURA + 2 * MARGEM}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
     ${aviso}${ocupadas}${naoDefinido}
     <p class="muted pequeno">Ideologia é uma classificação aproximada do painel, não um dado do TSE; veja <code>public/ideologia.js</code>.</p>
