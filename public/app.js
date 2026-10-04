@@ -956,16 +956,46 @@ function agregadoSecoes() {
   return { total, totalizadas, pct: total ? (100 * totalizadas) / total : 0 };
 }
 
+// Quem a conta do painel dá como eleito (public/chances.js) entre os três primeiros de uma UF: um valor por colocado (null, 'matematica',
+// 'pratica' ou 'provavel'). Quem o TSE já marcou como eleito não entra: ele já conta como eleito.
+function flagsEleitoPelaConta(item, codigo) {
+  const colocados = item.colocados ?? [];
+  return elegiveisPelaConta({
+    votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: codigo, vagas: item.vagas, turno: item.turno }),
+    primeiroTurno: [1, 3].includes(codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
+    pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: codigo === 5 ? item.vagas : 1,
+  }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
+}
+
+// Governador e Senado, visão Brasil: partido → [{ nome, uf, conta: true }] dos eleitos pela conta do painel.
+function eleitosPelaContaDoCargo(codigo) {
+  const mapa = new Map();
+  if (codigo !== 3 && codigo !== 5) return mapa;
+  for (const { uf, item } of itensDoCargo()) {
+    const flags = flagsEleitoPelaConta(item, codigo);
+    (item.colocados ?? []).forEach((c, i) => {
+      if (!flags[i]) return;
+      if (!mapa.has(c.partido)) mapa.set(c.partido, []);
+      mapa.get(c.partido).push({ nome: c.nomeUrna, uf, conta: true });
+    });
+  }
+  return mapa;
+}
+
 // Mapa de cadeiras do Senado (5) e da Câmara (6): eleitos até agora por partido + cadeiras ainda em aberto.
 function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
   if (codigo !== 5 && codigo !== 6) return '';
   const partidos = {};
   let inferidas = 0;
-  for (const sigla of new Set([...Object.keys(porPartido), ...(estado.inferidos?.keys() ?? [])])) {
+  const conta = eleitosPelaContaDoCargo(codigo); // dados como eleitos pela conta do painel (Senado)
+  const contaChave = new Set([...conta.values()].flat().map((p) => `${p.uf}|${p.nome}`));
+  const contaTotal = [...conta.values()].reduce((s, l) => s + l.length, 0);
+  for (const sigla of new Set([...Object.keys(porPartido), ...(estado.inferidos?.keys() ?? []), ...conta.keys()])) {
     const nomeados = estado.eleitos?.get(sigla) ?? [];
     const inferidos = estado.inferidos?.get(sigla) ?? [];
+    const daConta = conta.get(sigla) ?? [];
     inferidas += inferidos.length;
-    partidos[sigla] = { eleitos: (porPartido[sigla] ?? 0) + inferidos.length, pessoasEleitas: [...nomeados, ...inferidos] };
+    partidos[sigla] = { eleitos: (porPartido[sigla] ?? 0) + inferidos.length + daConta.length, pessoasEleitas: [...nomeados, ...daConta, ...inferidos] };
   }
   let ocupadas = false;
   if (codigo === 5 && estado.senadoOcupadas) {
@@ -980,11 +1010,13 @@ function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
     }
   }
   let naFrente = 0;
-  for (const [sigla, pessoas] of estado.lideres ?? []) {
+  for (const [sigla, todas] of estado.lideres ?? []) {
+    const pessoas = todas.filter((p) => !contaChave.has(`${p.uf}|${p.nome}`)); // quem já foi dado como eleito não é só "na frente"
+    if (!pessoas.length) continue;
     naFrente += pessoas.length;
     partidos[sigla] = { ...partidos[sigla], lideres: pessoas.length, pessoasLideres: pessoas };
   }
-  const eleitos = Object.values(porPartido).reduce((s, n) => s + n, 0);
+  const eleitos = Object.values(porPartido).reduce((s, n) => s + n, 0) + contaTotal;
   return cadeirasHtml({
     titulo: codigo === 5 ? 'Composição do Senado' : 'Composição da Câmara',
     total: vagas,
@@ -1009,15 +1041,20 @@ function detalheAgregadoHtml() {
   for (const { item } of itens) {
     for (const [partido, n] of Object.entries(item.eleitosPorPartido ?? {})) porPartido[partido] = (porPartido[partido] ?? 0) + n;
   }
-  const partidos = Object.entries(porPartido).sort((a, b) => b[1] - a[1]);
+  const conta = eleitosPelaContaDoCargo(meta.codigo);
+  const contaN = (p) => conta.get(p)?.length ?? 0;
+  const partidos = [...new Set([...Object.keys(porPartido), ...conta.keys()])]
+    .map((p) => [p, (porPartido[p] ?? 0) + contaN(p)]).sort((a, b) => b[1] - a[1]);
   const maior = partidos[0]?.[1] ?? 0;
+  const totalConta = [...conta.values()].reduce((s, l) => s + l.length, 0);
 
   const barras = partidos.length
     ? `<h3 class="secao">Eleitos por partido</h3>
        <ol class="candidatos">${partidos.map(([p, n], i) => `<li class="${i === 0 ? 'lider' : ''}" style="--cor:${corPartido(p)}">
          <div class="cand-topo"><span class="cand-pos">${i + 1}</span><div class="cand-nome"><strong>${esc(p)}</strong></div>
-         <div class="cand-votos"><b>${fmtInt(n)}</b></div></div>
-         <div class="barra"><i style="width:${(n / maior) * 100}%"></i></div></li>`).join('')}</ol>`
+         <div class="cand-votos"><b>${fmtInt(n)}</b>${contaN(p) ? `<small title="${esc(`${contaN(p)} dado(s) como eleito(s) pela conta do painel (${[...conta.get(p)].map((x) => `${x.nome}, ${x.uf.toUpperCase()}`).join('; ')}); o TSE ainda não marcou`)}">${fmtInt(contaN(p))} pela conta*</small>` : ''}</div></div>
+         <div class="barra"><i style="width:${(n / maior) * 100}%"></i></div></li>`).join('')}</ol>
+       ${totalConta ? '<p class="muted pequeno">* Dados como eleitos pela conta do painel; o TSE ainda não os marcou. O selo oficial de eleito é só o do TSE.</p>' : ''}`
     : '<p class="aviso-bloco espera">Nenhum candidato eleito ainda.</p>';
 
   let tabela = '';
@@ -1045,11 +1082,7 @@ function detalheAgregadoHtml() {
         primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: meta.codigo === 5 ? item.vagas : 1,
       }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
       if (fora.some(Boolean)) comSemChance += 1;
-      const eleitos = elegiveisPelaConta({
-        votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }),
-        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
-        pctSecoes: item.secoes.pctTotalizadas, votosPorEleitor: meta.codigo === 5 ? item.vagas : 1,
-      }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
+      const eleitos = flagsEleitoPelaConta(item, meta.codigo);
       const [a, b, c] = colocados;
       return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0])}${celula(b, fora[1], eleitos[1])}${celula(c, fora[2], eleitos[2])}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
