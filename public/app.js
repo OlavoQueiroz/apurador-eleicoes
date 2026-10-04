@@ -788,8 +788,8 @@ function detalheAgregadoHtml() {
 
   let tabela = '';
   const porNome = (a, b) => nomeUf(a.uf).localeCompare(nomeUf(b.uf), 'pt-BR');
-  if (meta.codigo === 5) {
-    // Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
+  if (meta.codigo === 3 || meta.codigo === 5) {
+    // Governador e Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
     const celula = (c) => (c
       ? `<td><div class="colocado-nome">${esc(c.nomeUrna)}</div>
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
@@ -803,22 +803,6 @@ function detalheAgregadoHtml() {
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
         <thead><tr><th>UF</th><th>1º</th><th>2º</th><th>3º</th><th class="num">Totalizadas</th></tr></thead>
-        <tbody>${linhas}</tbody></table></div>`;
-  } else if (ehMajoritario(meta.codigo)) {
-    const linhas = itens
-      .slice()
-      .sort(porNome)
-      .map(({ uf, item }) => `<tr class="clicavel" data-uf="${uf}">
-        <td>${esc(nomeUf(uf))}</td>
-        <td>${item.lider ? esc(item.lider.nomeUrna) : '—'}</td>
-        <td>${item.lider ? `<span class="partido" style="--cor:${corPartido(item.lider.partido)}">${esc(item.lider.partido)}</span>` : ''}</td>
-        <td class="num">${item.lider ? fmtPct(item.lider.pct) : '—'}</td>
-        <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td>
-      </tr>`)
-      .join('');
-    tabela = `<h3 class="secao">Mais votado em cada UF</h3>
-      <div class="tabela-rolagem"><table class="tabela">
-        <thead><tr><th>UF</th><th>Candidato</th><th>Partido</th><th class="num">% válidos</th><th class="num">Totalizadas</th></tr></thead>
         <tbody>${linhas}</tbody></table></div>`;
   }
 
