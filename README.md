@@ -6,6 +6,14 @@ Painel local que acompanha a apuração em tempo real a partir dos **arquivos p�
 Cargos: presidente, governador, senador e deputado federal.
 Deputado estadual e deputado distrital (DF) ficam de fora por padrão (ver [Opções](#opções)).
 
+Além do resultado oficial, o painel tem uma aba separada de **projeção do resultado final** (três modelos, sempre
+rotulados como estimativa), o mapa de municípios de cada UF, um gráfico de **evolução da apuração** gravado ao vivo, busca
+global e o mapa de cadeiras do Senado e da Câmara.
+
+**Documentação:** [docs/arquitetura.md](docs/arquitetura.md) explica o projeto de ponta a ponta (fontes de dados,
+camadas, projeções, histórico, operação e riscos); [docs/modelos-simulacao.md](docs/modelos-simulacao.md) é o plano
+original dos modelos de projeção, com o que foi implementado.
+
 ## Como rodar
 
 Precisa de **Node.js 20 ou mais novo**. Não há dependências para instalar.
@@ -75,6 +83,9 @@ Ctrl+C continua valendo.
 | `--verboso` (`VERBOSO=1`) | desligado | Loga todo ciclo de consultas. Por padrão o terminal só mostra o primeiro ciclo e variações de erros ou de arquivos indisponíveis. |
 | `--host H` (`HOST`) | `127.0.0.1` | Use `0.0.0.0` só se quiser abrir o painel para outros aparelhos da sua rede. |
 | `--ano A` (`ANO`) | 2026 | Ciclo eleitoral. |
+| `--sem-municipios` (`MUNICIPIOS=0`) | carga ligada | Desliga a carga, em segundo plano, dos municípios da presidência (usada na projeção do Brasil). Os municípios de uma UF ainda carregam sob demanda. |
+| `--municipios-minimo N` (`MUNICIPIOS_MINIMO`) | 30000 | Só municípios com pelo menos N eleitores (mais o maior de cada UF) têm o arquivo baixado; o resto da UF vem do arquivo da UF. |
+| `--municipios-todos` | desligado | Baixa todos os municípios (~5,7 mil arquivos), em vez de só os grandes. |
 
 ## Como funciona
 
@@ -89,7 +100,12 @@ TSE (JSON estático, CDN)  →  poller  →  normalização  →  memória  → 
   São 110 arquivos no 1º turno: presidente (Brasil, 27 UFs e exterior), governador, senador e deputado federal
   (27 UFs cada).
 - **Polling educado**: o TSE serve esses arquivos por CDN com `max-age` de ~1 min e `ETag`. O painel reenvia o
-  `ETag` (GET condicional) e só reprocessa o que mudou; com no máximo 6 requisições simultâneas.
+  `ETag` (GET condicional) e só reprocessa o que mudou; com no máximo 6 requisições simultâneas. Um limitador de
+  ritmo, compartilhado com a camada de municípios, dá **prioridade ao dado por UF** e faz tudo recuar se o TSE
+  responder 429 (limite de requisições).
+- **Camada de municípios** (só para o mapa e as projeções): separada do ciclo principal, lenta e descartável. Baixa só os
+  municípios grandes, guiada pelo arquivo de acompanhamento do TSE, com cache em disco. Detalhes em
+  [docs/arquitetura.md](docs/arquitetura.md).
 - **Tempo real no navegador**: o servidor avisa a página por SSE (`/events`) a cada ciclo, com a lista de arquivos
   que mudaram. A página só rebusca e redesenha quando algo mudou.
 - **Antes da apuração**: os arquivos já existem, mas com votos zerados; o painel mostra "Aguardando apuração".
@@ -124,7 +140,14 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
 - `GET /api/meta` — configuração, cargos e estado do último ciclo.
 - `GET /api/resumo` — uma linha por cargo × abrangência (líder, seções, eleitos).
 - `GET /api/resultado/{cargo}/{uf}` — resultado completo (ex.: `/api/resultado/1/br`).
+- `GET /api/municipios/{cargo}/{uf}` — líder e apuração de cada município de uma UF (cargos 1, 3 e 5).
+- `GET /api/projecao/{modelo}/{cargo}/{uf}` — projeção (`ingenuo`, `estratificado`, `swing`); pode vir
+  `disponivel: false` com o motivo, ou `carregando: true`.
+- `GET /api/historico/{cargo}/{uf}?modelo=` — série gravada da evolução da apuração (404 se não houver).
+- `GET /api/busca?q=&cargo=&uf=` — busca global de candidatos e municípios.
 - `GET /events` — SSE, evento `ciclo`.
+
+`/api/meta` também traz `requisicoes`: pedidos ao TSE por prioridade, por minuto e quantos 429/503.
 
 ### Como ler os números
 
@@ -133,30 +156,40 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
   painel mostra sempre o quanto já foi totalizado e avisa que o resultado é parcial.
 - A visão **Apuração** **não faz projeção** nem declara vencedor por conta própria. "Eleito", "2º turno" e
   "matematicamente definido" vêm do TSE.
-- A visão **Projeção (estimativa)** é separada e sempre rotulada como estimativa do painel, não dado do TSE.
-  Há dois modelos (plano completo em `docs/modelos-simulacao.md`):
-  - **Extrapolação simples**: mantém o percentual atual e projeta o total pela fração de seções totalizadas,
-    ignorando o viés geográfico da ordem de apuração.
-  - **Estratificação por município** (presidente, governador e senador, uma UF por vez): projeta cada município
-    pela fração das seções dele já apuradas e soma. Municípios ainda sem votos entram pelo eleitorado e pela média
-    da UF; a tela mostra quanto da projeção depende disso. Os arquivos dos municípios são buscados só quando
-    alguém abre essa projeção (até ~645 por UF) e atualizados no ritmo do ciclo, com GET condicional.
-    Na presidência, o painel também baixa os municípios do país **em segundo plano** ao ligar (~5,7 mil
-    arquivos, ~5 por segundo, uns 20 minutos na primeira vez; municípios já 100% apurados deixam de ser
-    consultados; e uma UF cujo arquivo (ciclo principal) não mudou desde a última carga é pulada, com revisita
-    de segurança a cada 10 minutos). Isso soma o Brasil na projeção. O resultado fica em `.cache/` e um reinício não rebaixa tudo.
-    `--sem-municipios` desliga a carga em segundo plano. Se o TSE responder 429 (limite de requisições), o
-    painel recua sozinho; o ritmo é deliberadamente baixo.
+- A visão **Projeção (estimativa)** é separada e sempre rotulada como estimativa do painel, não dado do TSE. Há três
+  modelos, que usam votos válidos e a fração de seções totalizadas (fórmulas em
+  [docs/arquitetura.md](docs/arquitetura.md)):
+  - **Extrapolação simples**: mantém o percentual atual e projeta o total pela fração de seções; ignora o viés
+    geográfico da ordem de apuração, então no começo pode ser uma miragem.
+  - **Estratificação por município** (presidente, governador e senador): projeta os **municípios grandes** um a um e o
+    **resto do estado** em bloco (arquivo da UF menos os grandes). Estratos ainda sem votos entram pelo eleitorado e
+    pela média do medido; a tela mostra quanto da projeção depende disso. Se os arquivos da UF e dos municípios
+    estiverem em momentos diferentes (conferência de sincronia), a UF volta para a extrapolação simples e a tela avisa.
+    Na presidência soma também o Brasil, depois que as 28 UFs carregam.
   - **Swing histórico (2022)** (só presidente): mede quanto cada candidato está acima ou abaixo do que o campo dele
-    teve em 2022 nos lugares já bem apurados e aplica essa variação ao que falta, lugar por lugar (os mesmos grandes
-    municípios e o resto do estado do modelo anterior). Quem herda os votos de cada candidato de 2022 está em
-    `dados-historicos/mapeamento-presidente.json` (por padrão só o mesmo partido; edite e reinicie). Os votos de 2022
-    por município estão em `dados-historicos/presidente-2022-t1.json`, gerado por
-    `node scripts/gerar-historico-2022.js` (lê só ~2 MB de um zip dos dados abertos do TSE).
-  A "faixa possível" são os extremos matemáticos, não um intervalo de confiança.
-  API: `GET /api/projecao/{modelo}/{cargo}/{uf}`.
+    teve em 2022 nos lugares já bem apurados e aplica a variação ao que falta, lugar por lugar. Quem herda os votos
+    de cada candidato de 2022 está em `dados-historicos/mapeamento-presidente.json` (por padrão só o mesmo partido;
+    edite e reinicie). Os votos de 2022 por município (`presidente-2022-t1.json`) são gerados por
+    `node scripts/gerar-historico-2022.js`, que lê só ~2 MB de um zip dos dados abertos do TSE.
+  A "faixa possível" são os extremos matemáticos, não um intervalo de confiança. O modelo bayesiano com pesquisas
+  não está implementado. **Nenhum modelo foi validado com votos reais ainda.**
 - Para cargos sem arquivo nacional (governador, senador, deputados), "Brasil" é a **soma das UFs** calculada
   localmente.
+
+### Evolução da apuração (histórico gravado)
+
+O painel só guarda o último estado de cada arquivo, então **grava** cada atualização de presidente, governador e senador
+em `dados/historico/ele2026-t1.jsonl` (uma linha JSON por arquivo novo do TSE: o % de cada candidato e a projeção de
+cada modelo calculada naquele instante). Alimenta o gráfico de evolução e permite comparar os modelos com o resultado
+final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos municípios) ficam fora do git.
+
+## Na noite da apuração
+
+- Rode com **`npm start`**, não `npm run dev`: o `dev` reinicia o servidor a cada arquivo salvo.
+- Mantenha **uma instância só** apontando para o TSE; várias somam requisições.
+- Ligue **antes** de a apuração começar: a carga inicial dos municípios leva alguns minutos e é melhor em horário morto.
+- Se o TSE responder 429, o painel recua sozinho; acompanhe `requisicoes.limitadas` em `/api/meta`. Não tente contornar o
+  limite com várias máquinas ou IPs: o caminho é pedir menos.
 
 ## Limitações conhecidas
 
@@ -168,6 +201,13 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
 - Conselheiro Distrital (Fernando de Noronha) não é acompanhado: o TSE ainda não publica esse arquivo.
 - Deputado estadual: suportado (`--cargos 1,3,5,6,7,8`), mas é volumoso e menos testado na interface.
 - O modo demonstração simplifica o desfecho (não aplica quociente eleitoral).
+- **As projeções não foram validadas com votos reais.** Os cálculos foram testados com dados sintéticos; o descompasso
+  entre os arquivos do TSE só aparece ao vivo. A validação deve usar o histórico gravado, depois da eleição.
+- O swing só existe para presidente; governador e senador exigiriam os dados de 2022 por UF (~290 MB).
+- Na estratificação, a unidade é o município (não a zona); em capitais grandes a ordem de apuração dentro da cidade
+  ainda distorce. O resto do estado supõe que as seções que faltam votam como as que já abriram.
+- No auge da apuração a carga dos municípios (~5 req/s) pode deixar um município até ~20 minutos sem atualizar; o dado por
+  UF não é afetado.
 
 ## Testes
 
@@ -176,7 +216,8 @@ node --test
 ```
 
 Cobrem normalização (com fixtures reais do TSE), regra de situação do candidato, motor de polling (ETag, erros,
-recuperação, concorrência), simulação, configuração e o servidor HTTP/SSE. Os testes do `dev` e do `stop` usam
+recuperação, concorrência), limitador, camada de municípios, projeções e swing, histórico, simulação, configuração e o
+servidor HTTP/SSE. O GitHub Actions roda a suíte em Node 20 e 22 a cada push na `main` e em pull requests. Os testes do `dev` e do `stop` usam
 processos de verdade em pastas temporárias, incluindo um "estranho" que precisa sobreviver ao `stop`.
 
 As fixtures em `test/fixtures/` são cópias de arquivos públicos de resultado publicados pelo TSE em
@@ -187,18 +228,28 @@ nomes de candidatos e partidos reais, mas **todos os votos zerados**.
 
 ```
 server.js            ponto de entrada
-src/tse.js           URLs, descoberta das eleições, fonte real (GET condicional)
+src/tse.js           URLs, descoberta das eleições, fontes reais (GET condicional)
 src/normalize.js     JSON bruto do TSE → formato interno
-src/apuracao.js      motor de acompanhamento
+src/apuracao.js      ciclo principal (arquivos por UF)
+src/municipios.js    camada de municípios (seleção dos grandes, acompanhamento, cache)
+src/cache-disco.js   cache dos municípios em .cache/
+src/limitador.js     ritmo único ao TSE: prioridade da UF, recuo em 429, contadores
+src/projecao.js      extrapolação simples, estratificação por município, soma do Brasil
+src/swing.js         swing histórico (2022)
+src/anterior.js      resultado de 2022 traduzido pelo mapeamento de herança
+src/historico.js     gravador do histórico da apuração e leitura da série
+src/busca.js         busca global
 src/servidor.js      HTTP, API e SSE
 src/demo.js          simulação com dados fictícios
 src/config.js        opções e variáveis de ambiente
 src/abrir.js         abre o painel no navegador ao iniciar
 src/supervisor.js    npm run dev: reinicia o servidor quando o código muda
 src/parar.js         npm run stop: acha e encerra só o painel deste projeto
-public/              interface (HTML, CSS e JS sem build); mapa-brasil.js é gerado
-scripts/gerar-mapa.js  baixa as malhas do IBGE e gera public/mapa-brasil.js
-scripts/dev.js       npm run dev (usa src/supervisor.js)
-scripts/stop.js      npm run stop (usa src/parar.js)
+public/              interface (HTML, CSS e JS sem build); mapa-brasil.js e municipios/ são gerados
+dados-historicos/    2022 por município e mapeamento de herança (versionados)
+dados/               histórico da apuração gravado (fora do git)
+.cache/              cache dos municípios (fora do git)
+scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-historico-2022), dev e stop
+docs/                arquitetura.md e modelos-simulacao.md
 test/                testes e fixtures
 ```
