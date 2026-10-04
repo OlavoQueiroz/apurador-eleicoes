@@ -4,6 +4,7 @@
 
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
+import { elegiveisPelaConta, quantosClassificam } from './chances.js';
 import { focoHtml } from './partido-foco.js';
 
 // Cargos com análise de bancadas (a presidência tem o comparativo, em comparativo-eleicoes.js). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
@@ -28,13 +29,14 @@ export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
 const PENDENTE = { id: 'pendente', nome: '2026 ainda não definido', cor: 'var(--vazio)' }; // metade cinza do mapa
 const DESCRICAO_SITUACAO = {
   eleito: 'eleito',
+  'eleito-conta': 'eleito* pela conta do painel, o TSE ainda não marcou',
   'segundo-turno': '2º turno',
   'provavel-1t': 'na frente com mais de 50%, pode fechar no 1º turno',
   'provavel-2t': 'na frente com 50% ou menos, provável 2º turno',
 };
 // Como lê a metade de 2026 no mapa de governadores (a cor é a do bloco ou partido; aqui, em cinza neutro).
 const LEGENDA_SITUACAO = [
-  { id: 'st-eleito', nome: 'eleito', cor: '#6b7585' },
+  { id: 'st-eleito', nome: 'eleito (ou eleito* pela conta do painel)', cor: '#6b7585' },
   { id: 'st-claro', nome: 'na frente com mais de 50%', cor: '#6b7585', fundo: 'rgba(107,117,133,0.5)' },
   { id: 'st-lis', nome: 'na frente com 50% ou menos / 2º turno', cor: '#6b7585', fundo: 'repeating-linear-gradient(45deg,#6b7585 0 2px,transparent 2px 4px)' },
 ];
@@ -93,12 +95,18 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 // A apuração de 2026 a partir do resumo de cada UF (itens de /api/resumo do cargo, sem "br").
 //   confirmados: eleitos que o TSE já marcou · naFrente: vagas que ainda não têm eleito marcado, atribuídas por ora a
 //   quem lidera (Câmara: vagas já conquistadas pelo partido ou federação) · ocupadas: cadeiras do Senado fora de disputa.
-// Situação de um governador em 2026, pelo que o TSE já publicou: 'eleito' (marcado), 'segundo-turno' (marcado), 'provavel-1t'
-// (lidera com mais de 50% dos válidos, ainda sem marca), 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
+// Situação de um governador em 2026: 'eleito' (marcado pelo TSE), 'segundo-turno' (marcado pelo TSE), 'eleito-conta' (o TSE ainda
+// não marcou, mas a conta do painel dá como vencedor sem 2º turno, o "Eleito*" de chances.js), 'provavel-1t' (lidera com mais de
+// 50% dos válidos, sem a conta fechar), 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
 export function situacaoGovernador(item) {
   const colocados = item.colocados ?? [];
   if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
   if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
+  const [daConta] = elegiveisPelaConta({
+    votos: colocados.map((c) => c.votos), k: quantosClassificam({ cargo: 3, vagas: item.vagas, turno: item.turno }), primeiroTurno: item.turno !== 2,
+    validos: item.validos ?? 0, eleitorado: item.eleitorado ?? null, pctSecoes: item.secoes?.pctTotalizadas ?? null,
+  });
+  if (daConta) return 'eleito-conta';
   const lider = colocados.find((c) => c.votos > 0);
   if (!lider) return 'sem-dado';
   return lider.pct > 50 ? 'provavel-1t' : 'provavel-2t';
@@ -494,7 +502,7 @@ export function estadosHtml(modelo, ajuda) {
     legenda = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => infoGrupo(id, modo, ajuda));
   }
   const alvoCor = modo === 'partido' ? 'do partido' : 'do bloco';
-  const regra = `Cada UF recebe a cor ${alvoCor} do governador. Em 2026: cor cheia = eleito; clara = na frente com mais de 50% dos válidos (pode fechar no 1º turno); listrada = na frente com 50% ou menos, ou 2º turno.`;
+  const regra = `Cada UF recebe a cor ${alvoCor} do governador. Em 2026: cor cheia = eleito (o TSE marcou, ou eleito* pela conta do painel); clara = na frente com mais de 50% dos válidos (pode fechar no 1º turno); listrada = na frente com 50% ou menos, ou 2º turno.`;
   return `<div class="par-estados"><div class="par-caixa"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: ${anterior} → 2026</h3>
       <svg class="par-mapa" viewBox="0 0 ${mapa.largura} ${mapa.altura}" role="img" aria-label="Mapa de UFs por ${modo === 'partido' ? 'partido' : 'bloco'}"><defs>${defs.join('')}</defs>${formas}<g class="rotulos">${rotulos}</g></svg>
       ${legendaGrupos([...legenda, PENDENTE], ajuda, `<span class="par-meio"><i></i>${anterior} | 2026</span>`)}
