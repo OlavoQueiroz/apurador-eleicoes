@@ -300,7 +300,7 @@ async function carregarMunicipios() {
 
 // ---------- evolução da apuração (gráfico) ----------
 
-const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && estado.visao === 'apuracao';
+const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && ['apuracao', 'projecao'].includes(estado.visao);
 const chaveHistorico = () => `${chaveAtual()}:${estado.modelo ?? 'ingenuo'}`;
 
 async function buscarHistorico() {
@@ -317,11 +317,11 @@ async function buscarHistorico() {
 // Insere o gráfico logo abaixo dos números do arquivo aberto.
 function montarGraficoEvolucao(raiz) {
   const h = estado.historico;
-  const ancora = raiz.querySelector('.mais-num');
+  const ancora = raiz.querySelector(estado.visao === 'projecao' ? '.numeros' : '.mais-num'); // na projeção, logo abaixo dos votos projetados
   if (!querHistorico() || !h || h.chave !== chaveHistorico() || !ancora) return;
   const secao = document.createElement('section');
   secao.className = 'grafico';
-  secao.innerHTML = '<h3 class="secao">Evolução da apuração</h3><div class="gr-corpo"></div>';
+  secao.innerHTML = `<h3 class="secao">${estado.visao === 'projecao' ? 'Evolução da projeção' : 'Evolução da apuração'}</h3><div class="gr-corpo"></div>`;
   ancora.after(secao);
   const modelo = estado.modelo ?? 'ingenuo';
   montarGrafico(secao.querySelector('.gr-corpo'), h.dados, {
