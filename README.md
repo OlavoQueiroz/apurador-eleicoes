@@ -181,7 +181,7 @@ página com dados reais antes da apuração). O endereço guarda a escolha (`#/1
 A informação principal é o **impacto no saldo nacional**, não a variação dentro da UF: o saldo da UF é a variação do PT
 menos a do campo de Bolsonaro (em pontos percentuais dos votos válidos) e o impacto é o saldo multiplicado pelo peso da UF
 (votos válidos da eleição base ÷ total). Assim o Acre, que varia muito e pesa 0,4%, quase não aparece, e São Paulo domina.
-Só entram na soma as UFs com pelo menos 50% das seções totalizadas (em 2026), porque as regiões chegam em ordens diferentes.
+Só entram na soma as UFs com pelo menos 30% das seções totalizadas (em 2026), porque as regiões chegam em ordens diferentes.
 O mapa é pintado pelo saldo de cada UF; clicar numa região do painel destaca ela e lista as UFs. **Variação não é
 transferência de votos**: com dados por UF não dá para saber de quem veio cada voto.
 

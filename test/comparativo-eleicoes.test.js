@@ -21,7 +21,7 @@ const base = { vivo: true, ufs: {
   zz: { validos: 100, herdados: { 13: 50, 22: 40 } },
 } };
 const item = (pct, validos, pt, pl) => ({ secoes: { pctTotalizadas: pct }, validos, votosPorNumero: { 13: pt, 22: pl } });
-const itens = { ba: item(80, 1100, 700, 240), sp: item(30, 900, 400, 400) };
+const itens = { ba: item(80, 1100, 700, 240), sp: item(20, 900, 400, 400) };
 const modelo = calcular(base, (uf) => itens[uf]);
 
 test('regiaoDaUf: cinco regiões; o exterior fica de fora', () => {
@@ -91,7 +91,7 @@ test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, r
   assert.match(html, /1 de 2 UFs com apuração suficiente/);
   assert.match(html, /data-comp-regiao="Nordeste"/);
   assert.match(html, /href="#\/1\/ba\/comparativo"/); // a região de maior impacto (Nordeste, com a BA pronta) já vem aberta
-  assert.match(comparativoHtml(modelo, { uf: 'br', regiao: 'Sudeste' }, ajuda), /30% apurado/); // SP ainda abaixo do mínimo
+  assert.match(comparativoHtml(modelo, { uf: 'br', regiao: 'Sudeste' }, ajuda), /20% apurado/); // SP ainda abaixo do mínimo
   assert.match(html, /Lula contra Lula 2022 · Flávio Bolsonaro contra Bolsonaro 2022/);
   assert.match(html, /não é transferência de votos/i);
 });
@@ -143,7 +143,7 @@ test('comparativoHtml (UF): cartões das duas candidaturas, variação e impacto
   assert.match(ba, /2022 · Bolsonaro/);
   assert.match(ba, /Impacto no Brasil/);
   const sp = comparativoHtml(modelo, { uf: 'sp', regiao: null }, ajuda);
-  assert.match(sp, /Apuração em 30%: abaixo de 50%/);
+  assert.match(sp, /Apuração em 20%: abaixo de 30%/);
   assert.doesNotMatch(sp, /Impacto no Brasil/);
 });
 

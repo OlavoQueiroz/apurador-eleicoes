@@ -23,7 +23,7 @@ const UFS_DA_REGIAO = {
 const REGIAO_DA_UF = Object.fromEntries(Object.entries(UFS_DA_REGIAO).flatMap(([regiao, ufs]) => ufs.map((uf) => [uf, regiao])));
 export const regiaoDaUf = (uf) => REGIAO_DA_UF[uf] ?? null; // o exterior ("zz") fica de fora
 
-export const FRACAO_MINIMA = 50; // % das seções totalizadas para a UF entrar na soma
+export const FRACAO_MINIMA = 30; // % das seções totalizadas para a UF entrar na soma
 export const ESCALA_SALDO = 8; // saldo (p.p.) mínimo que pinta a cor cheia no mapa; se algum saldo for maior, a escala cresce (ver `escala`)
 
 // `pt` e `pl` são os dois campos (as cores são as do PT e do PL em todo o painel); `numero` é o do período ATUAL, o
