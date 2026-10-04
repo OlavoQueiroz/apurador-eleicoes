@@ -103,6 +103,10 @@ node --test
 Cobrem normalização (com fixtures reais do TSE), regra de situação do candidato, motor de polling (ETag, erros,
 recuperação, concorrência), simulação, configuração e o servidor HTTP/SSE.
 
+As fixtures em `test/fixtures/` são cópias de arquivos públicos de resultado publicados pelo TSE em
+`resultados.tse.jus.br`, usadas só para testar a leitura do formato. Foram colhidas antes da votação, então trazem
+nomes de candidatos e partidos reais, mas **todos os votos zerados**.
+
 ## Estrutura
 
 ```
