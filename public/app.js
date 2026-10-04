@@ -1128,7 +1128,6 @@ async function iniciar() {
   const { meta } = estado;
   document.title = `${meta.demo ? '[DEMO] ' : ''}Apuração ${meta.ano}`;
   $('#ano').textContent = meta.ano;
-  $('#subtitulo').textContent = `${meta.turno}º turno`;
   $('#banner-demo').hidden = !meta.demo;
 
   fetch('/senado-ocupadas.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
