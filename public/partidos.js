@@ -6,7 +6,7 @@ import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
 import { elegiveisPelaConta, quantosClassificam } from './chances.js';
 import { focoHtml } from './partido-foco.js';
-import { flagsEleitoPelaConta } from './chances.js';
+import { flagsEleitoPelaConta, segundoTurnoDoGovernador } from './chances.js';
 
 // Cargos com análise de bancadas (a presidência tem o comparativo, em comparativo-eleicoes.js). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
 // Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes, então 2014 fica de fora).
@@ -32,6 +32,7 @@ const DESCRICAO_SITUACAO = {
   eleito: 'eleito',
   'eleito-conta': 'eleito* pela conta do painel, o TSE ainda não marcou',
   'segundo-turno': '2º turno',
+  'segundo-turno-conta': '2º turno* pela conta do painel (o líder não passa de 50% nem com todos os votos que faltam)',
   'provavel-1t': 'na frente com mais de 50%, pode fechar no 1º turno',
   'provavel-2t': 'na frente com 50% ou menos, provável 2º turno',
 };
@@ -97,12 +98,14 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 //   confirmados: eleitos que o TSE já marcou · naFrente: vagas que ainda não têm eleito marcado, atribuídas por ora a
 //   quem lidera (Câmara: vagas já conquistadas pelo partido ou federação) · ocupadas: cadeiras do Senado fora de disputa.
 // Situação de um governador em 2026: 'eleito' (marcado pelo TSE), 'segundo-turno' (marcado pelo TSE), 'eleito-conta' (o TSE ainda
-// não marcou, mas a conta do painel dá como vencedor sem 2º turno, o "Eleito*" de chances.js), 'provavel-1t' (lidera com mais de
+// não marcou, mas a conta do painel dá como vencedor sem 2º turno, o "Eleito*" de chances.js), 'segundo-turno-conta' (o 2º turno é
+// inevitável pela conta do painel: o líder não passa de 50% nem com todos os votos que faltam), 'provavel-1t' (lidera com mais de
 // 50% dos válidos, sem a conta fechar), 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
 export function situacaoGovernador(item) {
   const colocados = item.colocados ?? [];
   if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
   if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
+  if (segundoTurnoDoGovernador(item)) return 'segundo-turno-conta'; // o líder não passa de 50% nem com todos os votos que faltam (conta do painel)
   const [daConta] = elegiveisPelaConta({
     votos: colocados.map((c) => c.votos), k: quantosClassificam({ cargo: 3, vagas: item.vagas, turno: item.turno }), primeiroTurno: item.turno !== 2,
     validos: item.validos ?? 0, eleitorado: item.eleitorado ?? null, pctSecoes: item.secoes?.pctTotalizadas ?? null,
@@ -486,7 +489,7 @@ export function estadosHtml(modelo, ajuda) {
     // de 2026 conta o que o TSE já publicou: cor cheia (eleito), clara (na frente com mais de 50%, pode fechar no 1º turno) ou
     // listrada (na frente com 50% ou menos, ou 2º turno confirmado).
     const sit = s.situacao;
-    const listrado = Boolean(d) && (sit === 'segundo-turno' || sit === 'provavel-2t');
+    const listrado = Boolean(d) && (sit === 'segundo-turno' || sit === 'segundo-turno-conta' || sit === 'provavel-2t');
     const claro = Boolean(d) && sit === 'provavel-1t';
     const fill = !listrado && (a === d || (!a && !d)) ? cor(d ?? a) : `url(#par-${uf})`;
     if (fill.startsWith('url')) {

@@ -398,6 +398,17 @@ test('situacaoGovernador: "Eleito*" só pela garantia da conta do painel, sem pa
   assert.equal(situacaoGovernador(item(46, [c('PSD', 4000, 40, 'segundo-turno'), c('UNIÃO', 3900, 39, 'segundo-turno')])), 'segundo-turno');
 });
 
+test('situacaoGovernador: 2º turno inevitável pela conta do painel vira "segundo-turno-conta" (listrado no mapa)', () => {
+  const c = (partido, votos, pct, situacao = 'nenhuma') => ({ partido, votos, pct, situacao });
+  const item = (pctSecoes, colocados) => ({ vagas: 1, eleitosPorPartido: {}, validos: 1000, secoes: { pctTotalizadas: pctSecoes }, colocados });
+  assert.equal(situacaoGovernador(item(80, [c('PT', 300, 30), c('PL', 250, 25)])), 'segundo-turno-conta');
+  assert.equal(situacaoGovernador(item(20, [c('PT', 380, 38), c('PL', 300, 30)])), 'provavel-2t'); // cedo demais para ser inevitável
+  const m = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'ba', ...item(80, [c('PT', 300, 30), c('PL', 250, 25)]) }], ufs: ['ba'] });
+  const html = estadosHtml(m, { ...ajuda, mapa: { largura: 100, altura: 100, ufs: { ba: { d: 'M0 0Z' } } } });
+  assert.match(html, /class="par-lis"/);
+  assert.match(html, /2º turno\* pela conta do painel/);
+});
+
 test('mapa de governadores: 2026 listrado (50% ou menos / 2º turno), claro (mais de 50%) e cheio (eleito)', () => {
   const c = (partido, pct, situacao = 'nenhuma') => ({ partido, pct, situacao, votos: 100 });
   const itens = [

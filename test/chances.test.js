@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { elegiveisPelaConta, garantidosNoTopo, vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
+import { elegiveisPelaConta, garantidosNoTopo, segundoTurnoGarantido, segundoTurnoDoGovernador, vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
 
 test('quantosClassificam: Senado = vagas; presidente e governador = 2 no 1º turno e 1 no 2º', () => {
   assert.equal(quantosClassificam({ cargo: 5, vagas: 2, turno: 1 }), 2);
@@ -125,4 +125,27 @@ test('elegiveisPelaConta: com 47% das seções ninguém é dado como eleito, por
     const votos = [lider * 10000, (lider - 5) * 10000, (lider - 15) * 10000];
     assert.deepEqual(elegiveisPelaConta({ votos, k: 2, validos: 1000000, pctSecoes: 47, votosPorEleitor: 2 }), [null, null, null], `Senado, 1º com ${lider}%`);
   }
+});
+
+test('segundoTurnoGarantido: o líder não passa de 50% nem com todos os votos que faltam (2V + R ≤ válidos)', () => {
+  const eleitorado = { total: 1200, comparecimento: 900, abstencao: 100 }; // teto de votos que faltam: 200
+  // 40% dos 1000 válidos: com os 200 que faltam todos dele, 600 de 1200 = 50%, não passa de 50%: inevitável (matemática)
+  assert.equal(segundoTurnoGarantido({ votos: [400, 300, 200], validos: 1000, eleitorado }), 'matematica');
+  // 41%: 410 + 200 = 610 de 1200 = 50,8%: dá para fechar no 1º turno no pior caso para o 2º turno
+  assert.equal(segundoTurnoGarantido({ votos: [410, 300, 200], validos: 1000, eleitorado }), null);
+  // sem o eleitorado, pela proporção de seções: 30% dos válidos aos 80% apurado (faltam ~287 pela margem de 15%): inevitável
+  assert.equal(segundoTurnoGarantido({ votos: [300, 250], validos: 1000, pctSecoes: 80 }), 'pratica');
+  // cedo (20% apurado), 38% ainda pode virar 1º turno
+  assert.equal(segundoTurnoGarantido({ votos: [380, 300], validos: 1000, pctSecoes: 20 }), null);
+  assert.equal(segundoTurnoGarantido({ votos: [0, 0], validos: 0, pctSecoes: 50 }), null);
+});
+
+test('segundoTurnoDoGovernador: TSE marcou 2º turno, conta do painel, ou nada; quem já tem eleito não vai ao 2º turno', () => {
+  const c = (votos, situacao = 'nenhuma') => ({ votos, situacao });
+  const base = { validos: 1000, secoes: { pctTotalizadas: 80 }, eleitosPorPartido: {} };
+  assert.equal(segundoTurnoDoGovernador({ ...base, colocados: [c(300, 'segundo-turno'), c(250, 'segundo-turno')] }), 'tse');
+  assert.equal(segundoTurnoDoGovernador({ ...base, colocados: [c(300), c(250)] }), 'pratica');
+  assert.equal(segundoTurnoDoGovernador({ ...base, colocados: [c(560), c(300)] }), null);
+  assert.equal(segundoTurnoDoGovernador({ ...base, colocados: [c(600, 'eleito'), c(300)] }), null);
+  assert.equal(segundoTurnoDoGovernador({ ...base, turno: 2, colocados: [c(300), c(250)] }), null);
 });
