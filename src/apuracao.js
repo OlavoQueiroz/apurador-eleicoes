@@ -4,6 +4,7 @@
 import { EventEmitter } from 'node:events';
 import { resumir } from './normalize.js';
 import { pedeCalma, recuoDoErro } from './limitador.js';
+import { melhorNacional } from './nacional.js';
 
 export class Apuracao extends EventEmitter {
   constructor({ alvos, fonte, intervaloMs = 60_000, concorrencia = 6, limitador = null, agora = Date.now }) {
@@ -43,10 +44,12 @@ export class Apuracao extends EventEmitter {
     }
 
     if (r.status === 'indisponivel') {
-      // Sem dado nenhum ainda: é o estado normal antes da apuração (ou UF sem esse cargo).
-      if (!item.dados) {
-        const mudou = item.status !== 'indisponivel';
-        item.status = 'indisponivel';
+      // Sem dado nenhum do TSE ainda: é o estado normal antes da apuração (ou UF sem esse cargo). Se o nacional de
+      // presidente já veio da soma das UFs (reconciliarNacional), segue valendo e não é um problema.
+      if (!item.dadosTse || item.dados?.fonte === 'soma-ufs') {
+        const novo = item.dados ? 'ok' : 'indisponivel';
+        const mudou = item.status !== novo;
+        item.status = novo;
         return mudou;
       }
       // Já tínhamos dado e o arquivo sumiu: mantém o último e sinaliza o problema.
@@ -57,6 +60,7 @@ export class Apuracao extends EventEmitter {
 
     const mudou = !item.dados || item.dados.geracao !== r.dados.geracao || item.etag !== (r.etag ?? null);
     item.dados = r.dados;
+    item.dadosTse = r.dados;
     item.resumo = resumir(r.dados);
     item.etag = r.etag ?? null;
     item.status = 'ok';
@@ -85,6 +89,8 @@ export class Apuracao extends EventEmitter {
     };
     await Promise.all(Array.from({ length: Math.min(this.concorrencia, fila.length) }, trabalhador));
 
+    this.reconciliarNacional(chavesAlteradas);
+
     const itens = [...this.estado.values()];
     this.ultimoCiclo = {
       iniciadoEm,
@@ -97,6 +103,23 @@ export class Apuracao extends EventEmitter {
     };
     this.emit('ciclo', this.ultimoCiclo);
     return this.ultimoCiclo;
+  }
+
+  // O arquivo nacional de presidente costuma sair bem depois dos estaduais. Compara o dado oficial com a soma das UFs
+  // e fica com o que tiver mais votos válidos (ver nacional.js). O dado oficial fica guardado em `dadosTse`.
+  reconciliarNacional(chavesAlteradas) {
+    const itens = [...this.estado.values()];
+    const nacional = itens.find((i) => i.alvo.cargo === 1 && i.alvo.uf === 'br');
+    if (!nacional) return;
+    const ufs = itens.filter((i) => i.alvo.cargo === 1 && i.alvo.uf !== 'br').map((i) => i.dadosTse);
+    const escolhido = melhorNacional(nacional.dadosTse ?? null, ufs);
+    if (!escolhido || escolhido.geracao === nacional.dados?.geracao) return;
+    nacional.dados = escolhido;
+    nacional.resumo = resumir(escolhido);
+    nacional.status = 'ok';
+    nacional.erro = null;
+    nacional.alteradoEm = this.agora();
+    if (!chavesAlteradas.includes(nacional.alvo.chave)) chavesAlteradas.push(nacional.alvo.chave);
   }
 
   // Roda um ciclo, espera o intervalo e repete (setTimeout em vez de setInterval para que um
