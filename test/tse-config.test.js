@@ -132,6 +132,10 @@ test('acompanhamento: detalhes de tamanho e seções por município, e opções 
   assert.equal(lerConfig([], {}).municipiosMinimo, 30000);
   assert.equal(lerConfig(['--municipios-minimo', '50000'], {}).municipiosMinimo, 50000);
   assert.equal(lerConfig(['--municipios-todos'], {}).municipiosMinimo, null);
+  assert.equal(lerConfig([], {}).municipiosRitmoMs, 120);
+  assert.equal(lerConfig(['--municipios-ritmo-ms', '200'], {}).municipiosRitmoMs, 200);
+  assert.equal(lerConfig([], { MUNICIPIOS_RITMO_MS: '150' }).municipiosRitmoMs, 150);
+  for (const ruim of ['10', '5000', 'x']) assert.throws(() => lerConfig(['--municipios-ritmo-ms', ruim], {}), /municipios-ritmo-ms/);
   assert.throws(() => lerConfig(['--municipios-minimo', 'x'], {}), /municipios-minimo/);
 });
 

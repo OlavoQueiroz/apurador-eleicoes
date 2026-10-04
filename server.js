@@ -47,7 +47,7 @@ const fonteTse = criarFonteTse();
 const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
 // Ritmo único para tudo que vai ao TSE: o dado por UF (ciclo principal) tem prioridade sobre os municípios, e um
 // 429 de qualquer lado faz os dois recuarem. Na demonstração nada de município vai ao TSE.
-const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: 200 });
+const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: cfg.municipiosRitmoMs });
 const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador });
 const fonteMunicipiosTse = criarFonteMunicipiosTse();
 const raiz = path.dirname(fileURLToPath(import.meta.url));
@@ -59,7 +59,7 @@ const municipios = new Municipios({
   // Dado de demonstração é inventado e não deve ir para o cache. No real, o ciclo dos municípios é mais
   // lento que o das UFs: são milhares de arquivos.
   cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'municipios')),
-  // Municípios: ~5 req/s e sempre atrás do dado por UF (5,7 mil arquivos levam uns 20 min na primeira vez).
+  // Municípios: ~8 req/s (--municipios-ritmo-ms) e sempre atrás do dado por UF (5,7 mil arquivos levam uns 15 min na primeira vez).
   limitador,
   validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
 });

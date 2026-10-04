@@ -85,6 +85,7 @@ Ctrl+C continua valendo.
 | `--ano A` (`ANO`) | 2026 | Ciclo eleitoral. |
 | `--sem-municipios` (`MUNICIPIOS=0`) | carga ligada | Desliga a carga, em segundo plano, dos municípios da presidência (usada na projeção do Brasil). Os municípios de uma UF ainda carregam sob demanda. |
 | `--municipios-minimo N` (`MUNICIPIOS_MINIMO`) | 30000 | Só municípios com pelo menos N eleitores (mais o maior de cada UF) têm o arquivo baixado; o resto da UF vem do arquivo da UF. |
+| `--municipios-ritmo-ms N` (`MUNICIPIOS_RITMO_MS`) | 120 | Milissegundos entre dois pedidos de município ao TSE (120 ≈ 8 por segundo; 200 era o ritmo anterior, ≈ 5 por segundo). Entre 50 e 2000. Se o TSE responder 429, o painel dobra o intervalo sozinho; se acontecer, volte a `200`. |
 | `--municipios-todos` | desligado | Baixa todos os municípios (~5,7 mil arquivos), em vez de só os grandes. |
 
 ## Como funciona
@@ -277,7 +278,7 @@ final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos município
 - O swing só existe para presidente; governador e senador exigiriam os dados de 2022 por UF (~290 MB).
 - Na estratificação, a unidade é o município (não a zona); em capitais grandes a ordem de apuração dentro da cidade
   ainda distorce. O resto do estado supõe que as seções que faltam votam como as que já abriram.
-- No auge da apuração a carga dos municípios (~5 req/s) pode deixar um município até ~20 minutos sem atualizar; o dado por
+- No auge da apuração a carga dos municípios (~8 req/s por padrão) pode deixar um município até ~20 minutos sem atualizar; o dado por
   UF não é afetado.
 
 ## Testes

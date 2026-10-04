@@ -289,7 +289,7 @@ test/                        testes e fixtures
 - **No resto do estado** a projeção supõe que as seções que faltam votam como as que já abriram. Em capitais grandes a
   ordem de apuração dentro da cidade ainda distorce (a unidade é o município, não a zona).
 - **Swing só para presidente**, e a herança de votos é uma escolha editorial.
-- **Atraso na carga dos municípios no auge** da apuração: o teto de ~5 req/s significa que um município pode ficar até
+- **Atraso na carga dos municípios no auge** da apuração: o teto de ~8 req/s (`--municipios-ritmo-ms`, 120 ms; era ~5 req/s) significa que um município pode ficar até
   ~20 minutos sem atualizar; o dado por UF não é afetado.
 - **A visão Análise não foi vista com votos reais.** Duas partes dependem de como o TSE publica durante a contagem: a
   prévia das vagas de deputado (estimada pelo quociente eleitoral se o TSE ainda não distribuiu as vagas entre as listas;
