@@ -86,12 +86,13 @@ export function garantidosNoTopo({ votos, k, validos = 0, eleitorado = null, pct
 }
 
 // Folga, em pontos percentuais, que se desconta do % atual de cada candidato para dizer que ele "provavelmente" fica onde está:
-// o % final pode se afastar do atual porque as regiões chegam em ordens diferentes. Nos ensaios (scripts/ensaio-apuracao.js) o
-// erro do % projetado simplesmente mantendo o atual foi de até ~4,6 pp aos 2-5% apurados, ~3,9 aos 10%, ~2 aos 20%, ~1,5 aos
-// 35% e ~1 aos 50%; a folga abaixo é de 3 a 5 vezes isso. Não foi validada com votos reais.
-export const PISO_FOLGA_PP = 3;
-export const FOLGA_INICIAL_PP = 12;
-export const APURACAO_MINIMA_PROVAVEL = 30; // abaixo disso (% de seções) só vale a garantia: o início da apuração é enganoso demais
+// o % final pode se afastar do atual porque as regiões chegam em ordens diferentes (interior antes das capitais, por exemplo).
+// Nos ensaios simulados (scripts/ensaio-apuracao.js) o erro de manter o % atual foi de até ~4,6 pp aos 2-5% apurados e ~2 pp aos
+// 20%, mas numa disputa real a ordem de chegada pode pesar muito mais, então a folga é bem maior (cerca de 5 vezes) e o
+// "provável" só vale com boa parte da apuração. Não foi validada com votos reais: é a parte mais frágil da conta.
+export const PISO_FOLGA_PP = 4;
+export const FOLGA_INICIAL_PP = 25;
+export const APURACAO_MINIMA_PROVAVEL = 60; // abaixo disso (% de seções) só vale a garantia
 export const folgaProvavel = (pctSecoes) => (pctSecoes > 0 ? Math.max(PISO_FOLGA_PP, FOLGA_INICIAL_PP * (1 - Math.min(100, pctSecoes) / 100)) : null);
 
 // Quem o painel dá como eleito (ou, no 1º turno de presidente e governador, como vencedor sem 2º turno): array com 'matematica',

@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam } from './chances.js';
+import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, folgaProvavel, quantosClassificam } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -800,6 +800,10 @@ const DICA_ELEITO = {
   pratica: 'Eleito pela conta do painel: mesmo sem receber mais nenhum voto, pela abstenção medida (com margem), os adversários não o alcançam. O TSE ainda não marcou.',
   provavel: 'Eleito pela conta do painel: mantido o % atual, com uma folga que diminui conforme a apuração avança, ele fica eleito. Estimativa não validada com votos reais. O TSE ainda não marcou.',
 };
+// Dica de "Eleito*": a explicação do tipo e, no "provável", a conta usada (para o usuário conferir).
+const dicaEleito = (tipo, pct, pctSecoes) => (tipo === 'provavel'
+  ? `${DICA_ELEITO.provavel} Conta: ${fmtPct(pct)} atual − folga de ${fmtPct(folgaProvavel(pctSecoes), 1)} (com ${fmtPct(pctSecoes, 0)} das seções); no Senado, a folga entra na distância para os adversários.`
+  : DICA_ELEITO[tipo]);
 const DICA_CHANCE = {
   matematica: 'Sem chance matemática: mesmo com todos os votos que ainda podem entrar, não alcança os classificados.',
   pratica: 'Sem chance pela abstenção, brancos e nulos já medidos nas seções apuradas (com margem de segurança). Pode mudar se as seções que faltam votarem muito diferente.',
@@ -817,7 +821,7 @@ function candidatoHtml(c, posicao, largura, semVotos = false, fora = false, gara
   return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${garantido ? `<span class="pill eleito" title="${esc(DICA_ELEITO[garantido])}">Eleito*</span>` : ''}${fora ? `<span class="pill" title="${esc(fora === 'matematica' ? DICA_CHANCE.matematica : DICA_CHANCE.pratica)}">${fora === 'matematica' ? 'Sem chance matemática' : 'Sem chance'}</span>` : ''}</div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${garantido ? `<span class="pill eleito" title="${esc(dicaEleito(garantido, c.pct, estado.detalhe?.dados?.secoes?.pctTotalizadas))}">Eleito*</span>` : ''}${fora ? `<span class="pill" title="${esc(fora === 'matematica' ? DICA_CHANCE.matematica : DICA_CHANCE.pratica)}">${fora === 'matematica' ? 'Sem chance matemática' : 'Sem chance'}</span>` : ''}</div>
       <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
     ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
@@ -1046,7 +1050,7 @@ function eleitosNomeANomeHtml(codigo, itens) {
     const flags = flagsEleitoPelaConta(item, codigo);
     (item.colocados ?? []).forEach((c, i) => {
       if (c.situacao === 'eleito') linhas.push({ uf, c, conta: false });
-      else if (flags[i]) linhas.push({ uf, c, conta: flags[i] });
+      else if (flags[i]) linhas.push({ uf, c, conta: flags[i], pctSecoes: item.secoes?.pctTotalizadas });
     });
   }
   if (!linhas.length) return '';
@@ -1055,10 +1059,10 @@ function eleitosNomeANomeHtml(codigo, itens) {
   const rotulo = codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
   return `<h3 class="secao">${rotulo} (${linhas.length}${codigo === 3 ? ' de 27' : ''})</h3>
     <div class="tabela-rolagem"><table class="tabela tabela-eleitos"><thead><tr><th>UF</th><th>${codigo === 3 ? 'Governador' : 'Senador'}</th><th class="num">% dos válidos</th><th>Situação</th></tr></thead><tbody>
-    ${linhas.map(({ uf, c, conta }) => `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>
+    ${linhas.map(({ uf, c, conta, pctSecoes }) => `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>
       <td><div class="colocado-nome">${esc(c.nomeUrna)}</div><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></td>
       <td class="num">${fmtPct(c.pct)}</td>
-      <td>${conta ? `<span class="pill eleito" title="${esc(DICA_ELEITO[conta])}">Eleito*</span>` : '<span class="pill eleito">Eleito (TSE)</span>'}</td></tr>`).join('')}
+      <td>${conta ? `<span class="pill eleito" title="${esc(dicaEleito(conta, c.pct, pctSecoes))}">Eleito*</span>` : '<span class="pill eleito">Eleito (TSE)</span>'}</td></tr>`).join('')}
     </tbody></table></div>
     <p class="muted pequeno">${fmtInt(nTse)} confirmado(s) pelo TSE e ${fmtInt(linhas.length - nTse)} pela conta do painel* (o TSE ainda não os marcou).</p>`;
 }
@@ -1099,12 +1103,12 @@ function detalheAgregadoHtml() {
   if (meta.codigo === 3 || meta.codigo === 5) {
     // Governador e Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
     // `fora`: sem chance matemática de classificação (public/chances.js); a célula fica apagada e com o aviso.
-    const celula = (c, fora, vence = null) => (!c ? '<td class="muted">—</td>'
+    const celula = (c, fora, vence = null, pctSecoes = null) => (!c ? '<td class="muted">—</td>'
       : fora && !estado.mostrarSemChance
         ? `<td class="sem-chance muted pequeno" title="${esc(`${c.nomeUrna} (${c.partido}, ${fmtPct(c.pct)}). ${DICA_CHANCE[fora]}`)}">sem chance</td>`
         : `<td${fora ? ` class="sem-chance" title="${esc(DICA_CHANCE[fora])}"` : ''}><div class="colocado-nome">${esc(c.nomeUrna)}</div>
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
-          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? ` · <b class="eleito-conta" title="${esc(DICA_ELEITO[vence])}">eleito*</b>` : ''}</span></div></td>`);
+          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? ` · <b class="eleito-conta" title="${esc(dicaEleito(vence, c.pct, pctSecoes))}">eleito*</b>` : ''}</span></div></td>`);
     const { campo, dir } = estado.ordemUfs;
     const ordenado = itens.slice().sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
@@ -1121,7 +1125,7 @@ function detalheAgregadoHtml() {
       if (fora.some(Boolean)) comSemChance += 1;
       const eleitos = flagsEleitoPelaConta(item, meta.codigo);
       const [a, b, c] = colocados;
-      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0])}${celula(b, fora[1], eleitos[1])}${celula(c, fora[2], eleitos[2])}
+      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0], item.secoes.pctTotalizadas)}${celula(b, fora[1], eleitos[1], item.secoes.pctTotalizadas)}${celula(c, fora[2], eleitos[2], item.secoes.pctTotalizadas)}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>
