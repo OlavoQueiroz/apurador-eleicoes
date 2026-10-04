@@ -45,15 +45,28 @@ export function votosRestantesEstimados({ total, comparecimento, abstencao, vali
 //
 // Sem os dados do eleitorado (servidor antigo, ainda sem o campo), só o nível 'pratica' é calculado, e os votos que faltam saem
 // da proporção de seções apuradas: `validos × (100 − p) ÷ p`, com a mesma margem. `pctSecoes` = % de seções totalizadas.
+const restantesPorSecoes = (validos, pctSecoes) => (pctSecoes > 0 ? (pctSecoes >= 100 ? 0 : (validos * (100 - pctSecoes) * MARGEM_SEGURANCA) / pctSecoes) : null);
+
+// O líder já fecha o 1º turno? Verdadeiro se ele passa de 50% dos válidos mesmo que todos os votos que faltam fossem dos
+// outros (ele não recebe mais nenhum). 'matematica' (teto de todos os eleitores aptos que faltam) ou 'pratica' (votos que faltam
+// estimados pela abstenção medida, com margem); `null` se ainda não. É uma conta do painel: quem declara o eleito é o TSE.
+export function vitoriaNoPrimeiroTurno({ votos, validos = 0, eleitorado = null, pctSecoes = null }) {
+  if (!(votos[0] > 0)) return null;
+  const decide = (restantes) => restantes != null && 2 * votos[0] > validos + restantes;
+  if (eleitorado && decide(votosRestantes(eleitorado))) return 'matematica';
+  const estimados = eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes(validos, pctSecoes);
+  return decide(estimados) ? 'pratica' : null;
+}
+
 export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null }) {
-  const restantesPorSecoes = pctSecoes > 0 ? (pctSecoes >= 100 ? 0 : (validos * (100 - pctSecoes) * MARGEM_SEGURANCA) / pctSecoes) : null;
-  if (!eleitorado && restantesPorSecoes === null) return votos.map(() => null);
+  const restantesSecoes = restantesPorSecoes(validos, pctSecoes);
+  if (!eleitorado && restantesSecoes === null) return votos.map(() => null);
   const fora = (restantes) => {
     const porLugar = semChanceMatematica(votos, k, restantes);
     const liderDecide = primeiroTurno && restantes != null && votos[0] > 0 && 2 * votos[0] > validos + restantes;
     return porLugar.map((f, i) => f || (liderDecide && i >= 1));
   };
   const estrito = eleitorado ? fora(votosRestantes(eleitorado)) : votos.map(() => false);
-  const pratico = fora(eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes);
+  const pratico = fora(eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesSecoes);
   return votos.map((_, i) => (estrito[i] ? 'matematica' : pratico[i] ? 'pratica' : null));
 }

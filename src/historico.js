@@ -113,7 +113,17 @@ export async function projecoesDoMomento(item, municipios, apuracao, anterior = 
     ingenuo: ingenuo.disponivel ? compacto(ingenuo.candidatos) : null,
     estratificado: estratificado?.disponivel ? compacto(estratificado.candidatos) : null,
     swing: swing?.disponivel ? compacto(swing.candidatos) : null,
+    // Como cada projeção foi calculada: permite saber depois se um pulo veio de uma troca de plano (ver planoDaProjecao).
+    planos: { estratificado: planoDaProjecao(estratificado), swing: planoDaProjecao(swing) },
   };
+}
+
+// Plano usado numa projeção: 'normal', 'extrapolacao' (plano B: arquivos fora de sincronia, UF caiu na extrapolação simples)
+// ou, no Brasil (soma das UFs), quantas UFs caíram no plano B e quantas entraram sem apuração. `null` se não houve projeção.
+export function planoDaProjecao(r) {
+  if (!r?.disponivel) return null;
+  if (r.ufs) return { plano: r.ufs.planoB > 0 ? 'parcial' : 'normal', planoB: r.ufs.planoB ?? 0, semVotos: r.ufs.semVotos ?? 0, comVotos: r.ufs.comVotos ?? null };
+  return { plano: r.plano === 'extrapolacao' ? 'extrapolacao' : 'normal', planoB: r.plano === 'extrapolacao' ? 1 : 0 };
 }
 
 // Grava um ponto para cada chave alterada que tenha votos apurados. Nunca lança: o histórico não pode derrubar o ciclo.
@@ -152,6 +162,7 @@ export function lerSerie(historico, chave, modelo = 'ingenuo') {
       const proj = new Map((p.proj?.[modelo] ?? []).map((x) => [x.numero, x.pct]));
       return {
         t: p.t,
+        plano: p.proj?.planos?.[modelo] ?? null,
         secoes: { ...p.secoes, pct: p.secoes.total > 0 ? (100 * p.secoes.totalizadas) / p.secoes.total : 0 },
         candidatos: p.candidatos.map((c) => ({
           numero: c.numero, nomeUrna: c.nomeUrna, partido: c.partido, pct: c.pct, projPct: proj.get(c.numero) ?? null,
