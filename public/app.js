@@ -515,7 +515,7 @@ function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
     if (unidade === 'UF' && estado.visao === 'projecao') {
       const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
       const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-      return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado</span>${itens || '<span class="muted">calculando…</span>'}</div>
+      return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
         <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
     }
     return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
