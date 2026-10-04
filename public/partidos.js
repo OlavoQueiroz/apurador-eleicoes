@@ -10,6 +10,8 @@ import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
 export const CARGOS_PARTIDOS = [
   { codigo: 5, chave: 'senador', nome: 'Senado', total: 81, anos: [2018, 2022], mapa: false },
   { codigo: 6, chave: 'deputadoFederal', nome: 'Câmara', total: 513, anos: [2014, 2018, 2022], mapa: false },
+  // Deputado estadual só existe no painel para SP e RJ (CARGOS[7] em src/tse.js); `ufs` dá as cadeiras de cada Assembleia.
+  { codigo: 7, chave: 'deputadoEstadual', nome: 'Dep. estadual', total: null, anos: [2014, 2018, 2022], mapa: false, ufs: { sp: 94, rj: 70 } },
   { codigo: 3, chave: 'governador', nome: 'Governadores', total: 27, anos: [2014, 2018, 2022], mapa: true },
 ];
 export const cargoPartidos = (codigo) => CARGOS_PARTIDOS.find((c) => c.codigo === Number(codigo));
@@ -18,10 +20,8 @@ export const PRESIDENTE = { codigo: 1, nome: 'Presidente' };
 
 export const ABAS = [
   { id: 'placar', nome: 'Placar' },
-  { id: 'estados', nome: 'Viradas por estado' },
   { id: 'serie', nome: 'Série histórica' },
 ];
-export const abasDoCargo = (cargo) => ABAS.filter((a) => a.id !== 'estados' || cargo.mapa);
 
 export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
 const ORDEM_BLOCOS = GRUPOS.map((g) => g.id);
@@ -41,14 +41,15 @@ export function blocosDe(porPartido) {
   return blocos;
 }
 
-// Partidos dos eleitos de uma eleição: { partido: cadeiras }. Null se o ano não existe no arquivo.
-export function eleitosPorPartido(historico, ano, chave) {
+// Partidos dos eleitos de uma eleição: { partido: cadeiras }. Null se o ano não existe no arquivo. Com `uf`, só dessa UF.
+export function eleitosPorPartido(historico, ano, chave, uf = null) {
   const dados = historico?.anos?.[ano]?.[chave];
   if (!dados) return null;
+  const valores = Object.entries(dados).filter(([u]) => !uf || u === uf).map(([, v]) => v);
   const saida = {};
-  if (chave === 'governador') for (const sigla of Object.values(dados)) soma(saida, sigla);
-  else if (chave === 'senador') for (const siglas of Object.values(dados)) for (const sigla of siglas) soma(saida, sigla);
-  else for (const u of Object.values(dados)) for (const [sigla, n] of Object.entries(u)) soma(saida, sigla, n);
+  if (chave === 'governador') for (const sigla of valores) soma(saida, sigla);
+  else if (chave === 'senador') for (const siglas of valores) for (const sigla of siglas) soma(saida, sigla);
+  else for (const u of valores) for (const [sigla, n] of Object.entries(u)) soma(saida, sigla, n);
   return saida;
 }
 
@@ -59,11 +60,11 @@ const juntar = (a, b) => {
 };
 
 // Bancada logo depois da eleição de `ano`. No Senado são os eleitos de `ano` mais os de quatro anos antes.
-export function bancadaDoAno(historico, ano, chave) {
-  const atual = eleitosPorPartido(historico, ano, chave);
+export function bancadaDoAno(historico, ano, chave, uf = null) {
+  const atual = eleitosPorPartido(historico, ano, chave, uf);
   if (!atual) return null;
   if (chave !== 'senador') return atual;
-  const anterior = eleitosPorPartido(historico, ano - 4, chave);
+  const anterior = eleitosPorPartido(historico, ano - 4, chave, uf);
   return anterior ? juntar(anterior, atual) : null;
 }
 
@@ -78,7 +79,7 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 // A apuração de 2026 a partir do resumo de cada UF (itens de /api/resumo do cargo, sem "br").
 //   confirmados: eleitos que o TSE já marcou · naFrente: vagas que ainda não têm eleito marcado, atribuídas por ora a
 //   quem lidera (Câmara: vagas já conquistadas pelo partido ou federação) · ocupadas: cadeiras do Senado fora de disputa.
-export function aoVivo(cargo, itens, ocupadas = []) {
+export function aoVivo(cargo, itens, ocupadas = [], totalPadrao = cargo.total) {
   const confirmados = {};
   const naFrente = {};
   const porUf = {};
@@ -86,7 +87,7 @@ export function aoVivo(cargo, itens, ocupadas = []) {
   for (const item of itens) {
     const c = item.eleitosPorPartido ?? {};
     const f = {};
-    if (cargo.codigo === 6) {
+    if (cargo.codigo === 6 || cargo.codigo === 7) {
       for (const [sigla, n] of Object.entries(item.cadeirasPorPartido ?? c)) if (n > (c[sigla] ?? 0)) f[sigla] = n - (c[sigla] ?? 0);
     } else {
       const abertas = Math.max(0, item.vagas - somaValores(c));
@@ -99,7 +100,7 @@ export function aoVivo(cargo, itens, ocupadas = []) {
   }
   const fixas = {};
   for (const o of ocupadas) soma(fixas, o.partido);
-  const total = itens.length ? vagas + ocupadas.length : cargo.total;
+  const total = itens.length ? vagas + ocupadas.length : totalPadrao;
   const definidas = somaValores(confirmados) + somaValores(naFrente) + ocupadas.length;
   return { total, confirmados, naFrente, ocupadas: fixas, porUf, definidas, pendentes: Math.max(0, total - definidas) };
 }
@@ -128,11 +129,11 @@ export function blocoDaBancada(porPartido, modo = 'ideologia') {
 }
 
 // Tudo o que as telas precisam, de uma vez. `historico` = /api/partidos; `itens` = resumos das UFs; `ocupadas` = Senado.
-export function criarModelo({ cargo, historico, itens, ocupadas = [], ufs = [] }) {
-  const vivo = aoVivo(cargo, itens, ocupadas);
+export function criarModelo({ cargo, historico, itens, ocupadas = [], ufs = [], uf = null }) {
+  const vivo = aoVivo(cargo, itens, ocupadas, cargo.ufs?.[uf] ?? cargo.total);
   const atualPorPartido = unir(vivo.confirmados, vivo.naFrente, vivo.ocupadas);
   const series = cargo.anos
-    .map((ano) => ({ ano, porPartido: bancadaDoAno(historico, ano, cargo.chave) }))
+    .map((ano) => ({ ano, porPartido: bancadaDoAno(historico, ano, cargo.chave, uf) }))
     .filter((s) => s.porPartido);
   const base = series.length ? series[series.length - 1] : null; // a eleição anterior: o ponto de comparação
 
@@ -147,7 +148,8 @@ export function criarModelo({ cargo, historico, itens, ocupadas = [], ufs = [] }
     return { uf, bancadas, blocos, provisorio: !u || somaValores(u.confirmados) < u.vagas, vagas: u?.vagas ?? 0 };
   });
 
-  return { cargo, historico: Boolean(series.length), vivo, atual: { porPartido: atualPorPartido, blocos: blocosDe(atualPorPartido) }, base, series, estados };
+  const rotulo = uf && cargo.ufs ? `${cargo.nome} · ${uf.toUpperCase()}` : cargo.nome; // nos títulos
+  return { cargo, uf, rotulo, historico: Boolean(series.length), vivo, atual: { porPartido: atualPorPartido, blocos: blocosDe(atualPorPartido) }, base, series, estados };
 }
 
 // ---------- desenho ----------
@@ -345,7 +347,8 @@ export function placarHtml(modelo, ajuda) {
   const cartao = cartaoDe(ajuda);
   const nomes = { 2022: base ? String(base.ano) : '—', 2026: '2026', delta: 'Variação' };
   const seletor = `<div class="par-cartoes"><span>Cartões</span><div class="seg seg-modelo" role="group" aria-label="Cartões">${CARTOES.map((id) =>
-    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, 'placar', modo, id)}" ${id === cartao ? 'aria-current="page"' : ''}>${esc(nomes[id])}</a>`).join('')}</div></div>`;
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, 'placar', modo, id, modelo.uf)}" ${id === cartao ? 'aria-current="page"' : ''}>${esc(nomes[id])}</a>`).join('')}</div></div>`;
+  if (modelo.cargo.mapa) return `${seletor}<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>${estadosHtml(modelo, ajuda)}`; // governadores: mapa no lugar dos hemiciclos
   const parcial = vivo.pendentes > 0
     ? `<p class="par-nota">Apuração em andamento: ${fmtInt(vivo.pendentes)} de ${fmtInt(vivo.total)} cadeiras ainda sem definição. Contorno = vaga na frente, ainda sem eleito marcado pelo TSE.</p>`
     : '';
@@ -355,7 +358,7 @@ export function placarHtml(modelo, ajuda) {
   const figura = (rotulo, fonte) => `<figure class="par-fig"><figcaption>${esc(rotulo)}</figcaption>${hemiciclo(fonte, modelo, ajuda)}</figure>`;
   const hemiciclos = `<div class="par-duplo">${base ? figura(`Eleição de ${base.ano}`, fonteBase(modelo)) : ''}${figura(vivo.pendentes > 0 ? '2026 · em apuração' : '2026', fonteAoVivo(modelo))}</div>`;
   return `${seletor}<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>
-    <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
+    <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
     <p class="par-nota">${fmtInt(confirmadas)} confirmadas pelo TSE em 2026${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
 }
 
@@ -404,7 +407,7 @@ export function serieHtml(modelo, ajuda) {
       ${xs.map((pt, i) => `<circle cx="${pt[0]}" cy="${pt[1]}" r="3.5" fill="${g.cor}"/>${rotulo(pt, i)}`).join('')}`;
   }).join('');
   const nota = pontos.some((p) => p.parcial) ? '<p class="par-nota">* 2026 parcial: participação entre as cadeiras já definidas.</p>' : '';
-  return `<div class="par-caixa"><h3 class="par-h">${esc(modelo.cargo.nome)}: participação ${modo === 'partido' ? 'dos maiores partidos' : 'de cada bloco'} nas cadeiras</h3>
+  return `<div class="par-caixa"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: participação ${modo === 'partido' ? 'dos maiores partidos' : 'de cada bloco'} nas cadeiras</h3>
     <svg class="par-serie" viewBox="0 0 ${W} ${H}" role="img" aria-label="Série histórica">${grade}${anos}${linhas}</svg>${legendaGrupos(ids.map((id) => infoGrupo(id, modo, ajuda)), ajuda)}${nota}</div>`;
 }
 
@@ -446,7 +449,7 @@ export function estadosHtml(modelo, ajuda) {
   }
   const alvoCor = modo === 'partido' ? 'do partido' : 'do bloco';
   const regra = `Cada UF recebe a cor ${alvoCor} do governador (na frente, enquanto não eleito, em tom mais claro).`;
-  return `<div class="par-estados"><div class="par-caixa"><h3 class="par-h">${esc(modelo.cargo.nome)}: ${anterior} → 2026</h3>
+  return `<div class="par-estados"><div class="par-caixa"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: ${anterior} → 2026</h3>
       <svg class="par-mapa" viewBox="0 0 ${mapa.largura} ${mapa.altura}" role="img" aria-label="Mapa de UFs por ${modo === 'partido' ? 'partido' : 'bloco'}"><defs>${defs.join('')}</defs>${formas}<g class="rotulos">${rotulos}</g></svg>
       ${legendaGrupos(legenda, ajuda, `<span class="par-meio"><i></i>${anterior} | 2026</span>`)}
       <p class="par-nota">${esc(regra)} Esquerda da UF = ${anterior}; direita = 2026.</p></div>
@@ -455,15 +458,16 @@ export function estadosHtml(modelo, ajuda) {
 }
 
 export const MODOS = [{ id: 'ideologia', nome: 'Ideologia' }, { id: 'partido', nome: 'Partido' }];
-// Endereço de uma visão da aba; o agrupamento por ideologia e os cartões de 2026 são o padrão e não vão no endereço.
-export const hashPartidos = (cargo, aba, agrupar, cartoes) => (Number(cargo) === PRESIDENTE.codigo
+// Endereço de uma visão da aba; o agrupamento por ideologia e os cartões de 2026 são o padrão e não vão no endereço. A UF
+// só entra nos cargos que a escolhem (deputado estadual).
+export const hashPartidos = (cargo, aba, agrupar, cartoes, uf) => (Number(cargo) === PRESIDENTE.codigo
   ? '#/partidos/1/comparativo'
-  : `#/partidos/${cargo}/${aba}${agrupar === 'partido' ? '/partido' : ''}${CARTOES.includes(cartoes) && cartoes !== '2026' ? `/${cartoes}` : ''}`);
+  : `#/partidos/${cargo}/${aba}${cargoPartidos(cargo)?.ufs && uf ? `/${uf}` : ''}${agrupar === 'partido' ? '/partido' : ''}${CARTOES.includes(cartoes) && cartoes !== '2026' ? `/${cartoes}` : ''}`);
 
 // Seletor de cargo da aba (o mesmo switch do resto do app); `atual` é o código do cargo aberto.
-export function seletorCargosHtml({ cargos, atual, aba, modo, cartoes, esc }) {
+export function seletorCargosHtml({ cargos, atual, aba, modo, cartoes, uf, esc }) {
   const itens = cargos.map((c) =>
-    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo, cartoes)}" ${c.codigo === atual ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
+    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo, cartoes, uf)}" ${c.codigo === atual ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
   return `<div class="seg seg-modelo" role="group" aria-label="Cargo">${itens}</div>`;
 }
 
@@ -471,18 +475,22 @@ export function seletorCargosHtml({ cargos, atual, aba, modo, cartoes, esc }) {
 export function partidosHtml(modelo, ui, ajuda) {
   const { esc } = ajuda;
   const modo = ui.agrupar === 'partido' ? 'partido' : 'ideologia';
-  const aba = abasDoCargo(modelo.cargo).some((a) => a.id === ui.aba) ? ui.aba : 'placar';
-  const cargos = seletorCargosHtml({ cargos: ui.cargos ?? CARGOS_PARTIDOS, atual: modelo.cargo.codigo, aba, modo, cartoes: ui.cartoes, esc });
+  const aba = ABAS.some((a) => a.id === ui.aba) ? ui.aba : 'placar';
+  const cargos = seletorCargosHtml({ cargos: ui.cargos ?? CARGOS_PARTIDOS, atual: modelo.cargo.codigo, aba, modo, cartoes: ui.cartoes, uf: modelo.uf, esc });
   const agrupar = MODOS.map((m) =>
-    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id, ui.cartoes)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
-  const abas = abasDoCargo(modelo.cargo).map((a) =>
-    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo, ui.cartoes)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id, ui.cartoes, modelo.uf)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
+  const abas = ABAS.map((a) =>
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo, ui.cartoes, modelo.uf)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
   const aj = { ...ajuda, modo, cartoes: ui.cartoes };
   const corpo = !modelo.historico && aba !== 'placar'
     ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
-    : { placar: placarHtml, serie: serieHtml, estados: estadosHtml }[aba](modelo, aj);
+    : { placar: placarHtml, serie: serieHtml }[aba](modelo, aj);
   // Os três seletores na mesma linha (quebra em telas estreitas); o agrupamento fica na ponta direita.
-  return `<div class="par-topo">${cargos}
+  const ufs = modelo.cargo.ufs
+    ? `<div class="seg seg-modelo" role="group" aria-label="UF">${(ui.ufs ?? Object.keys(modelo.cargo.ufs)).map((u) =>
+      `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, modo, ui.cartoes, u)}" ${u === modelo.uf ? 'aria-current="page"' : ''}>${esc(u.toUpperCase())}</a>`).join('')}</div>`
+    : '';
+  return `<div class="par-topo">${cargos}${ufs}
     <div class="seg seg-modelo" role="group" aria-label="Análise">${abas}</div>
     <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>${corpo}
     <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;

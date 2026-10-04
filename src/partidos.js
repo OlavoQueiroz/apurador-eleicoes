@@ -18,7 +18,7 @@ export function criarTradutor(sucessao = {}) {
 const somar = (mapa, sigla, n = 1) => { mapa[sigla] = (mapa[sigla] ?? 0) + n; };
 
 // Devolve o conteúdo de /api/partidos: por ano, o partido de cada governador, os partidos dos senadores de cada UF e a
-// bancada de deputados federais de cada UF (partido → cadeiras), todos já traduzidos.
+// bancada de deputados federais e estaduais de cada UF (partido → cadeiras), todos já traduzidos.
 export function criarPartidos(eleitos, sucessao) {
   const traduzir = criarTradutor(sucessao);
   const anos = {};
@@ -27,12 +27,15 @@ export function criarPartidos(eleitos, sucessao) {
     for (const [uf, sigla] of Object.entries(e.governador)) governador[uf] = traduzir(sigla);
     const senador = {};
     for (const [uf, siglas] of Object.entries(e.senador)) senador[uf] = siglas.map(traduzir);
-    const deputadoFederal = {};
-    for (const [uf, porPartido] of Object.entries(e.deputadoFederal)) {
-      const u = (deputadoFederal[uf] = {});
-      for (const [sigla, n] of Object.entries(porPartido)) somar(u, traduzir(sigla), n);
-    }
-    anos[ano] = { governador, senador, deputadoFederal };
+    const bancadas = (porUf = {}) => {
+      const saida = {};
+      for (const [uf, porPartido] of Object.entries(porUf)) {
+        const u = (saida[uf] = {});
+        for (const [sigla, n] of Object.entries(porPartido)) somar(u, traduzir(sigla), n);
+      }
+      return saida;
+    };
+    anos[ano] = { governador, senador, deputadoFederal: bancadas(e.deputadoFederal), deputadoEstadual: bancadas(e.deputadoEstadual) };
   }
   return { disponivel: true, fonte: eleitos.fonte, anos };
 }

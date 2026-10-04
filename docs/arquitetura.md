@@ -175,9 +175,9 @@ herança de um candidato de 2022 passar de 100%.
 
 ### Eleitos de 2014, 2018 e 2022 (aba Análises)
 
-`dados-historicos/eleitos.json` guarda o partido de cada governador, senador e deputado federal eleito (por UF), a partir dos zips
+`dados-historicos/eleitos.json` guarda o partido de cada governador, senador, deputado federal e deputado estadual eleito (por UF), a partir dos zips
 `consulta_cand_AAAA.zip` dos dados abertos do TSE (~4,5 MB cada, baixados inteiros). É gerado por
-`node scripts/gerar-eleitos.js`, que confere as contagens (27 governadores, 513 deputados, 27 ou 54 senadores por eleição).
+`node scripts/gerar-eleitos.js`, que confere as contagens (27 governadores, 513 deputados federais, 1.035 estaduais, 27 ou 54 senadores por eleição).
 Só a eleição ordinária conta, com uma exceção no Senado: em MT 2018 a eleita (Selma Arruda, PSL) teve a votação anulada e
 a cadeira é de Carlos Fávaro (PSD), eleito em suplementar. `src/partidos.js` aplica `partidos-sucessao.json` (renomeações
 e fusões) e serve o resultado em `/api/partidos`. O PSL não entra na tabela de propósito: em 2018 era o partido de Bolsonaro.
