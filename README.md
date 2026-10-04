@@ -156,6 +156,11 @@ de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as c
   disputando, como decidiu o STF) e mostra essas vagas como "na frente". É uma estimativa e muda até o fim: as regiões
   chegam em ordens diferentes. Os nomes dentro de cada lista vão pelo ranking. Quando o TSE publica a distribuição, vale a dele.
 - **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
+- **Um partido** (só Deputado Federal e Estadual): escolha um partido (o padrão é o **Missão**) e veja quantos deputados ele tem
+  até agora: eleitos confirmados pelo TSE, vagas na frente (estimativa pelo quociente, quando for o caso), o total e a
+  bancada de 2022. Na Câmara há a tabela por UF (votos da lista, % dos válidos, cadeiras, mais votados do partido) e a distância até a
+  **cláusula de desempenho de 2026** (13 deputados em 9 UFs, ou 2,5% dos votos válidos com pelo menos 1,5% em 9 UFs); nas
+  Assembleias de SP e RJ, os candidatos mais votados do partido. Endereço: `#/6/br/analise/foco/p-missao`. Federações contam como um partido.
 - **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece na linha de seletores): é a Assembleia Legislativa,
   com 94 e 70 cadeiras.
 
