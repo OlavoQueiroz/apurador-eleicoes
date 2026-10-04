@@ -97,3 +97,20 @@ test('legenda: três maiores à vista e o resto em "Outros"; poucos partidos apa
   assert.deepEqual(visiveis(poucos), ['PT', 'PSD', 'PP', 'PL']);
   assert.doesNotMatch(poucos, /cad-outros/);
 });
+
+test('vaga do partido: preenchimento claro com borda, separada do eleito marcado, com chave de leitura e contagem', () => {
+  const dados = {
+    titulo: 'Câmara', total: 6, pendentes: 1,
+    partidos: { PT: { eleitos: 3, pessoasEleitas: [{ nome: 'Ana', uf: 'sp' }, { nome: 'Bia', uf: 'sp', inferido: true }, { nome: 'Caio', uf: 'rj', inferido: true }] }, PL: { eleitos: 2 } },
+    ocupadas: false,
+  };
+  const html = cadeirasHtml(dados, { modo: 'partido', foco: null }, ajuda);
+  assert.equal(html.match(/<circle/g).length, 6);
+  assert.equal(html.match(/stroke-width:1\.6/g).length, 2);
+  assert.match(html, /Bia \(SP\) · PT · vaga do partido/);
+  assert.doesNotMatch(html, /Ana \(SP\) · PT · vaga do partido/);
+  assert.match(html, /Eleito \(marcado pelo TSE\) <b>3<\/b>/);
+  assert.match(html, /Vaga do partido \(eleito ainda não marcado\) <b>2<\/b>/);
+  assert.match(html, /Em apuração <b>1<\/b>/);
+  assert.doesNotMatch(html, /Na frente, ainda não eleito <b>/);
+});
