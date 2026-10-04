@@ -47,9 +47,18 @@ export const PERIODOS = {
     pt: { numero: '13', nome: 'Lula', titulo: 'PT (Haddad em 2018, Lula em 2022)', curto: 'PT', nomeBase: 'Haddad', partido: 'PT' },
     pl: { numero: '22', nome: 'Bolsonaro', curto: 'Bolsonaro', nomeBase: 'Bolsonaro', partido: 'PL' },
     nota: 'Lula não concorreu em 2018 (estava inelegível): o PT lançou Haddad, então a comparação é entre as candidaturas do PT, Haddad em 2018 e Lula em 2022. Bolsonaro concorreu pelo PSL, com o número 17; em 2022, pelo PL, com o 22.',
+    outros: [
+      { id: 'ciro', nome: 'Ciro Gomes', partido: 'PDT', numeroBase: '12', numeroAtual: '12', padrao: true },
+      { id: 'alckmin', nome: 'Geraldo Alckmin', partido: 'PSDB', numeroBase: '45' }, // só concorreu em 2018
+      { id: 'tebet', nome: 'Simone Tebet', partido: 'MDB', numeroAtual: '15' }, // só concorreu em 2022
+    ],
   },
 };
+for (const periodo of Object.values(PERIODOS)) periodo.outros ??= []; // terceiros candidatos que o painel sabe mostrar (hoje só 2022 × 2018)
 export const periodoPorId = (id) => PERIODOS[id] ?? PERIODOS[PADRAO];
+// Terceiros mostrados nas barras: o que o usuário marcou (ui.terceiros) ou, sem escolha, os `padrao` do período.
+export const terceirosSelecionados = (periodo, ui) =>
+  (ui?.terceiros ?? periodo.outros.filter((o) => o.padrao).map((o) => o.id)).filter((id) => periodo.outros.some((o) => o.id === id));
 const candidatosDe = (periodo) => [{ id: 'pt', ...periodo.pt }, { id: 'pl', ...periodo.pl }];
 const curto = (c) => c.curto ?? c.nome;
 export const tituloDe = (c) => c.titulo ?? c.nome; // quando o nome muda entre as eleições (Haddad → Lula), o título diz as duas
@@ -89,24 +98,45 @@ export function calcular(base, itemDe, { periodo = PERIODOS[PADRAO], fracaoMinim
       const pAtual = validosAtual ? (100 * vAtual) / validosAtual : 0;
       return [c.id, { vBase, pBase, vAtual, pAtual, d: pronto ? pAtual - pBase : null }];
     }));
+    const outros = Object.fromEntries(periodo.outros.map((o) => {
+      const vBase = (o.numeroBase && b.votos?.[o.numeroBase]) || 0;
+      const vAtual = (o.numeroAtual && item?.votosPorNumero?.[o.numeroAtual]) || 0;
+      return [o.id, { vBase, vAtual, pBase: b.validos ? (100 * vBase) / b.validos : 0, pAtual: validosAtual ? (100 * vAtual) / validosAtual : 0 }];
+    }));
     const saldo = pronto ? cand.pt.d - cand.pl.d : null;
-    return { uf, regiao: regiaoDaUf(uf), peso, fracao, validosBase: b.validos, validosAtual, temNumeros, pronto, pt: cand.pt, pl: cand.pl, saldo, impacto: pronto ? (peso / 100) * saldo : null };
+    return { uf, regiao: regiaoDaUf(uf), peso, fracao, validosBase: b.validos, validosAtual, temNumeros, pronto, pt: cand.pt, pl: cand.pl, outros, saldo, impacto: pronto ? (peso / 100) * saldo : null };
   });
+  // Soma de UFs numa linha só (região): só entram as UFs com apuração suficiente, as duas eleições sobre as mesmas UFs;
+  // sem nenhuma pronta, a base aparece inteira e o atual fica vazio.
+  const agregar = (lista) => {
+    const prontas = lista.filter((u) => u.pronto);
+    const usadas = prontas.length ? prontas : lista;
+    const validosBase = soma(usadas.map((u) => u.validosBase));
+    const validosAtual = soma(prontas.map((u) => u.validosAtual));
+    const lado = (get) => {
+      const vBase = soma(usadas.map((u) => get(u).vBase));
+      const vAtual = soma(prontas.map((u) => get(u).vAtual));
+      return { vBase, vAtual, pBase: validosBase ? (100 * vBase) / validosBase : 0, pAtual: validosAtual ? (100 * vAtual) / validosAtual : 0 };
+    };
+    return { validosBase, validosAtual, pt: lado((u) => u.pt), pl: lado((u) => u.pl), outros: Object.fromEntries(periodo.outros.map((o) => [o.id, lado((u) => u.outros[o.id])])) };
+  };
   const regioes = REGIOES.map((nome) => {
     const lista = ufs.filter((u) => u.regiao === nome);
     const prontas = lista.filter((u) => u.pronto);
-    return { nome, peso: soma(lista.map((u) => u.peso)), impacto: prontas.length ? soma(prontas.map((u) => u.impacto)) : null, prontas: prontas.length, total: lista.length };
+    return { nome, ...agregar(lista), peso: soma(lista.map((u) => u.peso)), impacto: prontas.length ? soma(prontas.map((u) => u.impacto)) : null, prontas: prontas.length, total: lista.length };
   });
   const prontas = ufs.filter((u) => u.pronto);
   // Total do 1º turno em cada eleição, no Brasil inteiro (com o exterior). No período ao vivo, o atual é o que já chegou.
   const todas = Object.keys(base.ufs);
   const nacional = (eleicao) => {
     const validos = soma(todas.map((uf) => (eleicao === 'base' ? base.ufs[uf].validos : itemDe(uf)?.validos ?? 0)));
-    const cand = Object.fromEntries(candidatos.map((c) => {
-      const votos = soma(todas.map((uf) => (eleicao === 'base' ? base.ufs[uf].herdados?.[c.numero] : itemDe(uf)?.votosPorNumero?.[c.numero]) ?? 0));
-      return [c.id, { votos, pct: validos ? (100 * votos) / validos : 0 }];
+    const lado = (votos) => ({ votos, pct: validos ? (100 * votos) / validos : 0 });
+    const cand = Object.fromEntries(candidatos.map((c) => [c.id, lado(soma(todas.map((uf) => (eleicao === 'base' ? base.ufs[uf].herdados?.[c.numero] : itemDe(uf)?.votosPorNumero?.[c.numero]) ?? 0)))]));
+    const outros = Object.fromEntries(periodo.outros.map((o) => {
+      const numero = eleicao === 'base' ? o.numeroBase : o.numeroAtual;
+      return [o.id, lado(numero ? soma(todas.map((uf) => (eleicao === 'base' ? base.ufs[uf].votos?.[numero] : itemDe(uf)?.votosPorNumero?.[numero]) ?? 0)) : 0)];
     }));
-    return { validos, pt: cand.pt, pl: cand.pl };
+    return { validos, pt: cand.pt, pl: cand.pl, outros };
   };
   const maiorSaldo = prontas.length ? Math.max(...prontas.map((u) => Math.abs(u.saldo))) : 0;
   return {
@@ -132,27 +162,6 @@ export function seletorPeriodoHtml(periodoId, hrefPeriodo) {
   return `<div class="seg seg-periodo" role="group" aria-label="Período comparado">${itens}</div>`;
 }
 
-// Total do 1º turno em cada eleição: votos válidos e a votação das duas candidaturas, lado a lado (Brasil ou uma UF).
-// `bloco` = { rotulo, base: {validos, pt:{votos,pct}, pl}, atual: {…}, parcial }.
-function totaisHtml(p, { base, atual, parcial }, { esc, fmtInt, corPartido }) {
-  const cel = (x, c) => (x.validos ? `<b>${pc(x[c.id].pct)}</b><small>${fmtInt(Math.round(x[c.id].votos))} votos</small>` : '<span class="muted">—</span>');
-  const linha = (c) => `<span class="nome" style="--cor:${corPartido(c.partido)}"><i></i>${esc(curto(c))}</span><span class="num">${cel(base, c)}</span><span class="num">${cel(atual, c)}</span>`;
-  const [pt, pl] = candidatosDe(p);
-  return `<div class="comp-totais" role="group" aria-label="Total do 1º turno em cada eleição">
-      <span class="cab"></span><span class="cab num">${p.anoBase}</span><span class="cab num">${p.anoAtual}${parcial ? ' <small>parcial</small>' : ''}</span>
-      ${linha(pt)}${linha(pl)}
-      <span class="nome muted">Votos válidos</span><span class="num"><b>${fmtInt(Math.round(base.validos))}</b></span><span class="num">${atual.validos ? `<b>${fmtInt(Math.round(atual.validos))}</b>` : '<span class="muted">—</span>'}</span>
-    </div>`;
-}
-
-// Linha com barra centrada no zero: à esquerda o campo de Bolsonaro, à direita o PT.
-function barra(valor, maximo, cores) {
-  if (valor == null) return '<span class="comp-barra"><span class="neg"></span><span class="pos"></span></span>';
-  const largura = `${Math.min(100, (100 * Math.abs(valor)) / maximo).toFixed(1)}%`;
-  const cor = valor >= 0 ? cores.pt : cores.pl;
-  return `<span class="comp-barra"><span class="neg">${valor < 0 ? `<i style="width:${largura};--cor:${cor}"></i>` : ''}</span><span class="pos">${valor >= 0 ? `<i style="width:${largura};--cor:${cor}"></i>` : ''}</span></span>`;
-}
-
 // `ui`: { uf: 'br' | sigla, regiao: null | nome }  ·  `ajuda`: { esc, fmtInt, corPartido, nomeUf, hrefUf, hrefPeriodo, demo }
 export function comparativoHtml(modelo, ui, ajuda) {
   return ui.uf === 'br' ? brasilHtml(modelo, ui, ajuda) : ufHtml(modelo, ui, ajuda);
@@ -165,67 +174,76 @@ function cabecalho(modelo, ajuda, subtitulo) {
       <p class="muted pequeno">${subtitulo}</p></div></div>${seletorPeriodoHtml(p.id, hrefPeriodo)}`;
 }
 
+// Barra de uma eleição para uma linha: PT | terceiros escolhidos | demais (cinza) | campo de Bolsonaro, em % dos votos
+// válidos. O número só aparece nos segmentos largos; o título (hover) traz todos.
+function barraEleicao(x, lado, p, extras, ajuda) {
+  const { esc, corPartido } = ajuda;
+  if (!(lado === 'Base' ? x.validosBase : x.validosAtual)) return '<span class="muted">—</span>';
+  const pct = (c) => c[`p${lado}`];
+  const segs = [{ nome: curto(p.pt), cor: corPartido(p.pt.partido), v: pct(x.pt) }, ...extras.map((o) => ({ nome: o.nome, cor: corPartido(o.partido), v: pct(x.outros[o.id]) }))];
+  const demais = Math.max(0, 100 - soma(segs.map((s) => s.v)) - pct(x.pl));
+  const todos = [...segs, { nome: 'demais', cor: null, v: demais }, { nome: curto(p.pl), cor: corPartido(p.pl.partido), v: pct(x.pl) }];
+  const titulo = todos.filter((s) => s.v >= 0.05).map((s) => `${s.nome} ${pc(s.v)}`).join(' · ');
+  return `<span class="comp-eleicao" title="${esc(titulo)}">${todos.filter((s) => s.v > 0).map((s) =>
+    `<i style="width:${s.v.toFixed(2)}%;${s.cor ? `--cor:${s.cor}` : ''}" class="${s.cor ? '' : 'demais'}">${s.cor && s.v >= 18 ? fmt(s.v, 1) : ''}</i>`).join('')}</span>`;
+}
+
 function brasilHtml(modelo, ui, ajuda) {
   const { esc, corPartido, nomeUf, hrefUf } = ajuda;
   const p = modelo.periodo;
-  const cores = { pt: corPartido('PT'), pl: corPartido('PL') };
   const t = modelo.total;
-  const valores = [...modelo.ufs, ...modelo.regioes].map((x) => Math.abs(x.impacto ?? 0));
-  const maximo = Math.max(0.1, Math.ceil(Math.max(...valores) * 10) / 10);
-  const valorTexto = (v) => (v == null ? '<span class="muted">—</span>' : `<b>${sinal(v)}</b>`);
-
-  const linhaRegiao = (r) => {
-    const ativa = ui.regiao === r.nome;
-    return `<button type="button" class="comp-linha comp-regiao" data-comp-regiao="${esc(r.nome)}" aria-pressed="${ativa}">
-      <span class="nome">${esc(r.nome)}${r.prontas < r.total ? ` <small class="muted" title="UFs com apuração suficiente">${r.prontas}/${r.total}</small>` : ''}</span>
-      <span class="peso">${pc(r.peso)}</span>${barra(r.impacto, maximo, cores)}<span class="valor">${valorTexto(r.impacto)}</span></button>`;
+  const cores = { pt: corPartido(p.pt.partido), pl: corPartido(p.pl.partido) };
+  const selecionados = terceirosSelecionados(p, ui);
+  const extras = p.outros.filter((o) => selecionados.includes(o.id));
+  const n = modelo.nacional;
+  const brasil = {
+    validosBase: n.base.validos, validosAtual: n.atual.validos,
+    pt: { pBase: n.base.pt.pct, pAtual: n.atual.pt.pct }, pl: { pBase: n.base.pl.pct, pAtual: n.atual.pl.pct },
+    outros: Object.fromEntries(p.outros.map((o) => [o.id, { pBase: n.base.outros[o.id].pct, pAtual: n.atual.outros[o.id].pct }])),
   };
-  const linhaUf = (u) => `<a class="comp-linha" href="${hrefUf(u.uf)}">
-      <span class="nome">${esc(nomeUf(u.uf))}${u.pronto ? '' : ` <small class="muted">${u.temNumeros ? `${fmt(u.fracao, 0)}% apurado` : 'sem dados'}</small>`}</span>
-      <span class="peso">${pc(u.peso)}</span>${barra(u.impacto, maximo, cores)}<span class="valor">${valorTexto(u.impacto)}</span></a>`;
+  const parcial = p.vivo && n.atual.validos > 0;
 
-  // UFs: as da região escolhida (todas), ou as de maior impacto no Brasil e o resto somado.
-  const ordem = (a, b) => (b.pronto - a.pronto) || (Math.abs(b.impacto ?? 0) - Math.abs(a.impacto ?? 0)) || (b.peso - a.peso);
-  let ufsHtml;
-  let tituloUfs;
-  if (ui.regiao) {
-    tituloUfs = `UFs do ${esc(ui.regiao)}`;
-    ufsHtml = modelo.ufs.filter((u) => u.regiao === ui.regiao).sort(ordem).map(linhaUf).join('');
-  } else {
-    tituloUfs = t.prontas === 0 ? 'Maiores UFs, por peso' : 'Maiores impactos';
-    const ordenadas = [...modelo.ufs].sort(ordem);
-    const topo = ordenadas.slice(0, 8);
-    const resto = ordenadas.slice(8);
-    const restoProntas = resto.filter((u) => u.pronto);
-    const impactoResto = restoProntas.length ? soma(restoProntas.map((u) => u.impacto)) : null;
-    ufsHtml = topo.map(linhaUf).join('') + (resto.length
-      ? `<div class="comp-linha comp-resto"><span class="nome">outras ${resto.length} UFs</span><span class="peso">${pc(soma(resto.map((u) => u.peso)))}</span>${barra(impactoResto, maximo, cores)}<span class="valor">${valorTexto(impactoResto)}</span></div>`
-      : '');
-  }
+  // Regiões e UFs: do maior para o menor impacto (em módulo); sem apuração suficiente vêm depois, por peso.
+  const porImpacto = (a, b) => ((b.impacto != null) - (a.impacto != null)) || (Math.abs(b.impacto ?? 0) - Math.abs(a.impacto ?? 0)) || (b.peso - a.peso);
+  const regioes = [...modelo.regioes].sort(porImpacto);
+  const aberta = ui.regiao ?? regioes[0]?.nome; // sem escolha, a de maior impacto fica aberta (o mapa só recua com escolha explícita)
+  const maximo = Math.max(0.1, ...[...modelo.ufs, ...modelo.regioes].map((x) => Math.abs(x.impacto ?? 0)));
+  const impacto = (v, barra = true) => (v == null ? '<span class="muted">—</span>'
+    : `<span class="comp-imp">${barra ? `<span class="b"><i style="width:${Math.min(100, (100 * Math.abs(v)) / maximo).toFixed(1)}%;--cor:${v >= 0 ? cores.pt : cores.pl}"></i></span>` : ''}<b>${sinal(v)}</b></span>`);
+  const celulas = (x, peso, valor, barra) => `<td class="peso">${pc(peso)}</td><td>${barraEleicao(x, 'Base', p, extras, ajuda)}</td><td>${barraEleicao(x, 'Atual', p, extras, ajuda)}</td><td>${impacto(valor, barra)}</td>`;
 
-  const margem = t.impacto >= 0 ? `Positivo: a margem foi para ${esc(curto(p.pt))}.` : `Negativo: a margem foi para ${esc(curto(p.pl))}.`;
+  const linhaBrasil = `<tr class="comp-brasil"${ui.regiao ? ' data-comp-limpar role="button" tabindex="0" title="Voltar a ver o Brasil"' : ''}>
+      <td class="nm"><b>Brasil</b><small class="muted">${n.atual.validos ? `${fmt(n.base.validos / 1e6, 1)} → ${fmt(n.atual.validos / 1e6, 1)} mi votos válidos${parcial ? ' (parcial)' : ''}` : `${fmt(n.base.validos / 1e6, 1)} mi votos válidos em ${p.anoBase}`}</small></td>${celulas(brasil, 100, t.impacto, false)}</tr>`;
+  const linhaUf = (u) => `<tr class="comp-uf"><td class="nm"><a href="${hrefUf(u.uf)}">${esc(nomeUf(u.uf))}</a>${u.pronto ? '' : ` <small class="muted">${u.temNumeros ? `${fmt(u.fracao, 0)}% apurado` : 'sem dados'}</small>`}</td>${celulas(u, u.peso, u.impacto)}</tr>`;
+  const linhaRegiao = (r) => {
+    const aberto = r.nome === aberta;
+    const ufs = aberto ? modelo.ufs.filter((u) => u.regiao === r.nome).sort(porImpacto).map(linhaUf).join('') : '';
+    return `<tr class="comp-regiao" data-comp-regiao="${esc(r.nome)}" role="button" tabindex="0" aria-expanded="${aberto}">
+      <td class="nm"><span class="seta">${aberto ? '▾' : '▸'}</span>${esc(r.nome)}${r.prontas < r.total ? ` <small class="muted" title="UFs com apuração suficiente">${r.prontas}/${r.total}</small>` : ''}</td>${celulas(r, r.peso, r.impacto)}</tr>${ufs}`;
+  };
+
+  const chips = p.outros.length
+    ? `<div class="comp-terceiros" role="group" aria-label="Terceiros candidatos nas barras" data-sel="${esc(selecionados.join(','))}"><span class="muted">Terceiro candidato:</span>${p.outros.map((o) =>
+      `<button type="button" class="comp-chip" data-comp-terceiro="${esc(o.id)}" aria-pressed="${selecionados.includes(o.id)}" style="--cor:${corPartido(o.partido)}"><i></i>${esc(o.nome)}</button>`).join('')}</div>`
+    : '';
+  const legenda = [{ nome: curto(p.pt), cor: cores.pt }, ...extras.map((o) => ({ nome: o.nome, cor: corPartido(o.partido), nota: o.numeroBase && o.numeroAtual ? `${pc(n.base.outros[o.id].pct)} → ${pc(n.atual.outros[o.id].pct)} no Brasil` : o.numeroBase ? `${pc(n.base.outros[o.id].pct)} no Brasil, só em ${p.anoBase}` : `${pc(n.atual.outros[o.id].pct)} no Brasil, só em ${p.anoAtual}` })), { nome: curto(p.pl), cor: cores.pl }];
+
   const resumo = t.prontas === 0
-    ? `<p class="aviso-bloco espera">Aguardando apuração suficiente: o comparativo usa as UFs com pelo menos ${modelo.fracaoMinima}% das seções totalizadas (0 de ${t.total} até agora). Enquanto isso, a coluna “peso” mostra o tamanho de cada UF em ${p.anoBase}.</p>`
-    : `<div class="comp-resumo"><div class="comp-hero"><span class="muted pequeno">Impacto no saldo nacional</span><b>${sinal(t.impacto)} <small>p.p.</small></b></div>
-        <p class="muted pequeno">${t.prontas} de ${t.total} UFs com apuração suficiente, ${pc(t.cobertura)} dos votos válidos de ${p.anoBase}. ${margem}</p></div>`;
+    ? `<p class="aviso-bloco espera">Aguardando apuração suficiente: o comparativo usa as UFs com pelo menos ${modelo.fracaoMinima}% das seções totalizadas (0 de ${t.total} até agora). Enquanto isso, as barras de ${p.anoBase} e o peso de cada UF já aparecem.</p>`
+    : '';
   const aviso = ajuda.demo && p.vivo ? '<p class="aviso-bloco">Modo demonstração: os candidatos são fictícios e não têm relação com a eleição real; o comparativo não faz sentido aqui.</p>' : '';
   const frase = (c) => (c.titulo ? esc(c.titulo) : `${esc(c.nome)} contra ${esc(c.nomeBase)} ${p.anoBase}`);
   const subtitulo = `1º turno, % dos votos válidos · ${frase(p.pt)} · ${frase(p.pl)}`;
+  const margem = t.impacto == null ? '' : ` ${t.prontas} de ${t.total} UFs com apuração suficiente, ${pc(t.cobertura)} dos votos válidos de ${p.anoBase}. ${t.impacto >= 0 ? `Impacto positivo: a margem foi para ${esc(curto(p.pt))}.` : `Impacto negativo: a margem foi para ${esc(curto(p.pl))}.`}`;
 
-  const parcial = p.vivo && modelo.nacional.atual.validos > 0;
-  const totais = totaisHtml(p, { ...modelo.nacional, parcial }, ajuda);
   return `${cabecalho(modelo, ajuda, subtitulo)}
-    ${aviso}${resumo}
-    <p class="comp-titulo-bloco">Total do 1º turno, Brasil${parcial ? ' (o que já foi apurado em ' + p.anoAtual + ')' : ''}</p>${totais}
-    <div class="comp-tabela">
-      <div class="comp-cabeca"><span>Por região</span><span>peso</span><span class="comp-escala"><span>${esc(curto(p.pl))}</span><span>${esc(curto(p.pt))}</span></span><span>impacto</span></div>
-      ${modelo.regioes.map(linhaRegiao).join('')}
-    </div>
-    <div class="comp-tabela">
-      <div class="comp-cabeca"><span>${tituloUfs}${ui.regiao ? ' <button type="button" class="comp-limpar" data-comp-limpar>ver o Brasil</button>' : ''}</span><span>peso</span><span></span><span></span></div>
-      ${ufsHtml}
-    </div>
-    <p class="muted pequeno comp-nota">Impacto = peso da UF nos votos válidos de ${p.anoBase} × saldo da UF (variação de ${esc(p.pt.nome)} − variação de ${esc(curto(p.pl))}, em pontos percentuais). ${p.vivo ? `UFs com menos de ${modelo.fracaoMinima}% das seções totalizadas ficam de fora: as regiões chegam em ordens diferentes e o resultado parcial engana.` : `${p.anoAtual} já terminou, então todas as UFs entram.`}</p>
+    ${aviso}${resumo}${chips}
+    <table class="comp-tab">
+      <thead><tr><th class="nm">${ui.regiao ? 'Região / UF' : 'Região'}</th><th class="peso">peso</th><th>${p.anoBase}</th><th>${p.anoAtual}${parcial ? ' <small>parcial</small>' : ''}</th><th>impacto (p.p.)</th></tr></thead>
+      <tbody>${linhaBrasil}${regioes.map(linhaRegiao).join('')}</tbody>
+    </table>
+    <div class="comp-legenda">${legenda.map((l) => `<span style="--cor:${l.cor}"><i></i>${esc(l.nome)}${l.nota ? ` <small class="muted">${esc(l.nota)}</small>` : ''}</span>`).join('')}<span><i class="demais"></i>demais</span></div>
+    <p class="muted pequeno comp-nota">Impacto = peso da UF nos votos válidos de ${p.anoBase} × saldo da UF (variação de ${esc(p.pt.nome)} − variação de ${esc(curto(p.pl))}, em pontos percentuais); a linha Brasil é a soma.${margem} ${p.vivo ? `UFs com menos de ${modelo.fracaoMinima}% das seções totalizadas ficam de fora: as regiões chegam em ordens diferentes e o resultado parcial engana.` : `${p.anoAtual} já terminou, então todas as UFs entram.`}</p>
     <p class="muted pequeno comp-nota">Variação não é transferência de votos: com dados por UF não dá para saber de quem veio cada voto, nem separar o efeito de outros candidatos e da abstenção.</p>`;
 }
 
@@ -256,11 +274,20 @@ function ufHtml(modelo, ui, ajuda) {
     <p class="muted pequeno comp-nota">${esc(p.nota)} A variação mostra o que mudou, não de onde vieram os votos.</p>`;
 }
 
-// Liga os botões de região e o "ver o Brasil" ao estado da interface.
+// Liga as regiões, o "Brasil" (limpa a região) e os chips de terceiro candidato ao estado da interface.
 export function ligarComparativo(raiz, ui, aoMudar) {
-  raiz.querySelectorAll('[data-comp-regiao]').forEach((b) => b.addEventListener('click', () => {
-    ui.regiao = ui.regiao === b.dataset.compRegiao ? null : b.dataset.compRegiao;
+  const aoAtivar = (el, fn) => {
+    el.addEventListener('click', fn);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+  };
+  raiz.querySelectorAll('[data-comp-regiao]').forEach((el) => aoAtivar(el, () => {
+    ui.regiao = ui.regiao === el.dataset.compRegiao ? null : el.dataset.compRegiao;
     aoMudar();
   }));
-  raiz.querySelector('[data-comp-limpar]')?.addEventListener('click', () => { ui.regiao = null; aoMudar(); });
+  raiz.querySelectorAll('[data-comp-limpar]').forEach((el) => aoAtivar(el, () => { ui.regiao = null; aoMudar(); }));
+  raiz.querySelectorAll('[data-comp-terceiro]').forEach((b) => b.addEventListener('click', () => {
+    const atuais = (b.closest('[data-sel]').dataset.sel || '').split(',').filter(Boolean);
+    ui.terceiros = atuais.includes(b.dataset.compTerceiro) ? atuais.filter((id) => id !== b.dataset.compTerceiro) : [...atuais, b.dataset.compTerceiro];
+    aoMudar();
+  }));
 }

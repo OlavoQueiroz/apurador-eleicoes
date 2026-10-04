@@ -22,7 +22,7 @@ export function criarAnterior(historico, mapeamento) {
   return {
     avisos,
     fonte: historico.fonte,
-    // Votos de 2022 por UF: { uf: { validos, herdados: { numero 2026 → votos herdados } } }. É a base do comparativo
+    // Votos de 2022 por UF: { uf: { validos, votos: { numero 2022 → votos }, herdados: { numero 2026 → votos herdados } } }. É a base do comparativo
     // 2026 × 2022 (mesma tradução do swing: PT→Lula, PL→Flávio...). Calculado uma vez.
     porUf() {
       if (!porUfCache) {
@@ -36,6 +36,7 @@ export function criarAnterior(historico, mapeamento) {
         }
         porUfCache = Object.fromEntries(Object.entries(ufs).map(([uf, u]) => [uf, {
           validos: u.validos,
+          votos: u.votos, // brutos, por número do ano da base: dá o terceiro candidato (Ciro, Alckmin...) no comparativo
           herdados: Object.fromEntries(herdeiros.map(([numero, fontes]) => [numero, fontes.reduce((s, f) => s + f.peso * (u.votos[f.de] ?? 0), 0)])),
         }]));
       }
