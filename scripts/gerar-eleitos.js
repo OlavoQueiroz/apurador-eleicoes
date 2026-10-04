@@ -16,11 +16,11 @@ const URL_ZIP = (ano) => `https://cdn.tse.jus.br/estatistica/sead/odsele/consult
 const SAIDA = fileURLToPath(new URL('../dados-historicos/eleitos.json', import.meta.url));
 const UA = 'apurador-local/0.1 (gerador de eleitos)';
 // Cargo no TSE → chave no arquivo, e quantos eleitos devem existir (conferência).
-const CARGOS = { GOVERNADOR: 'governador', SENADOR: 'senador', 'DEPUTADO FEDERAL': 'deputadoFederal' };
+const CARGOS = { GOVERNADOR: 'governador', SENADOR: 'senador', 'DEPUTADO FEDERAL': 'deputadoFederal', 'DEPUTADO ESTADUAL': 'deputadoEstadual' };
 const ESPERADO = {
-  2014: { governador: 27, senador: 27, deputadoFederal: 513 },
-  2018: { governador: 27, senador: 54, deputadoFederal: 513 },
-  2022: { governador: 27, senador: 27, deputadoFederal: 513 },
+  2014: { governador: 27, senador: 27, deputadoFederal: 513, deputadoEstadual: 1035 },
+  2018: { governador: 27, senador: 54, deputadoFederal: 513, deputadoEstadual: 1035 },
+  2022: { governador: 27, senador: 27, deputadoFederal: 513, deputadoEstadual: 1035 },
 };
 
 // Lê uma entrada de um zip já em memória (diretório central → entrada local → inflate).
@@ -69,12 +69,12 @@ export function lerCsv(texto) {
   return resto.filter((l) => l.length === cab.length).map((l) => Object.fromEntries(cab.map((k, j) => [k, l[j]])));
 }
 
-// Eleitos de um ano: governador { uf: sigla }, senador { uf: [siglas] }, deputadoFederal { uf: { sigla: n } }.
+// Eleitos de um ano: governador { uf: sigla }, senador { uf: [siglas] }, deputadoFederal e deputadoEstadual { uf: { sigla: n } }.
 // Só quem aparece como eleito. A eleição ordinária basta, com uma exceção: no Senado, uma suplementar vale quando
 // ocupa a cadeira de quem teve a votação anulada (MT 2018: Selma Arruda, PSL, foi cassada e Carlos Fávaro, PSD, eleito
 // em 2020). Nos outros cargos as suplementares repetem a UF (AM, GO e TO em 2014) e ficam de fora.
 export function eleitosDoAno(linhas) {
-  const saida = { governador: {}, senador: {}, deputadoFederal: {} };
+  const saida = { governador: {}, senador: {}, deputadoFederal: {}, deputadoEstadual: {} };
   const vistos = new Set();
   for (const l of linhas) {
     const chave = CARGOS[l.DS_CARGO];
@@ -87,7 +87,7 @@ export function eleitosDoAno(linhas) {
     if (chave === 'governador') saida.governador[uf] = sigla;
     else if (chave === 'senador') (saida.senador[uf] ??= []).push(sigla);
     else {
-      const u = (saida.deputadoFederal[uf] ??= {});
+      const u = (saida[chave][uf] ??= {});
       u[sigla] = (u[sigla] ?? 0) + 1;
     }
   }
@@ -98,6 +98,7 @@ export const contar = (eleitos) => ({
   governador: Object.keys(eleitos.governador).length,
   senador: Object.values(eleitos.senador).reduce((s, a) => s + a.length, 0),
   deputadoFederal: Object.values(eleitos.deputadoFederal).reduce((s, u) => s + Object.values(u).reduce((x, n) => x + n, 0), 0),
+  deputadoEstadual: Object.values(eleitos.deputadoEstadual).reduce((s, u) => s + Object.values(u).reduce((x, n) => x + n, 0), 0),
 });
 
 async function baixar(ano, dir) {
@@ -120,7 +121,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (n[cargo] !== esperado) throw new Error(`${ano}: esperava ${esperado} eleitos de ${cargo}, vieram ${n[cargo]}.`);
     }
     anos[ano] = eleitos;
-    console.log(`${ano}: ${n.governador} governadores, ${n.senador} senadores, ${n.deputadoFederal} deputados federais`);
+    console.log(`${ano}: ${n.governador} governadores, ${n.senador} senadores, ${n.deputadoFederal} deputados federais, ${n.deputadoEstadual} estaduais`);
   }
   await writeFile(SAIDA, `${JSON.stringify({ fonte: 'TSE, dados abertos (consulta_cand)', geradoEm: new Date().toISOString(), anos })}\n`);
   console.log(`Gravado em ${SAIDA}`);
