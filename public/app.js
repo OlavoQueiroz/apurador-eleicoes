@@ -6,6 +6,7 @@ import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, i
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
+import { CARGOS_PARTIDOS, cargoPartidos, criarModelo, hashPartidos, partidosHtml } from './partidos.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -67,6 +68,7 @@ const estado = {
   lideres: null, // Senado: Map partido → [{ nome, uf }] dos mais votados que ainda não foram eleitos
   eleitos: null, // nomes dos eleitos do cargo aberto no Brasil (hover do mapa de cadeiras): Map partido → [{ nome, uf }]
   senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
+  partidos: { ativo: false, cargo: 6, aba: 'placar', agrupar: 'ideologia', historico: undefined }, // aba Partidos (#/partidos/cargo/aba); historico: undefined = carregando, null = indisponível
   conexao: 'conectando',
   ultimoCicloEm: null,
 };
@@ -333,8 +335,12 @@ async function atualizar() {
   try {
     do {
       atualizarDeNovo = false;
-      await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico(), carregarMapaProjecao()]);
-      await carregarEleitos();
+      if (estado.partidos.ativo) {
+        await Promise.all([carregarResumo(), carregarHistoricoPartidos()]); // a aba Partidos só usa os resumos das UFs
+      } else {
+        await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico(), carregarMapaProjecao(), carregarHistoricoPartidos()]);
+        await carregarEleitos();
+      }
       render();
     } while (atualizarDeNovo);
   } catch (erro) {
@@ -352,6 +358,15 @@ function ufPadrao(cargo) {
 }
 
 function lerHash() {
+  const p = /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?(?:\/(ideologia|partido))?$/.exec(location.hash);
+  estado.partidos.ativo = Boolean(p) && cargosDePartidos().length > 0;
+  if (estado.partidos.ativo) {
+    const pedido = Number(p[1]);
+    estado.partidos.cargo = cargosDePartidos().some((c) => c.codigo === pedido) ? pedido : cargosDePartidos()[0].codigo;
+    estado.partidos.aba = p[2] ?? 'placar';
+    estado.partidos.agrupar = p[3] === 'partido' ? 'partido' : 'ideologia';
+    return;
+  }
   const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao|comparativo)(?:\/([a-z0-9]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
   const modeloPedido = m?.[4];
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
@@ -435,15 +450,19 @@ function municipioSelecionadoHtml() {
 // Navegação entre cargos: controle segmentado.
 function renderAbas() {
   const itens = estado.meta.cargos
-    .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
+    .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo && !estado.partidos.ativo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
+  const abaPartidos = cargosDePartidos().length
+    ? `<a class="aba" href="${hashPartidos(estado.partidos.cargo, estado.partidos.aba, estado.partidos.agrupar)}" ${estado.partidos.ativo ? 'aria-current="page"' : ''}>Partidos</a>`
+    : '';
+  if (estado.partidos.ativo) { $('#abas').innerHTML = `<div class="seg">${itens}${abaPartidos}</div>`; return; }
   // Seletor global Apuração | Projeção: vale para a página toda e acompanha a troca de cargo e de UF. Fica na ponta
   // direita da linha dos cargos. O seletor de modelo fica dentro do painel da projeção.
   const visao = (id, rotulo) =>
     `<a class="aba" href="${hashPara(estado.cargo, estado.uf, id)}" ${estado.visao === id ? 'aria-current="page"' : ''}>${rotulo}</a>`;
   const comparativo = estado.cargo === 1 ? visao('comparativo', 'Comparativo') : '';
   const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}${comparativo}</div>`;
-  $('#abas').innerHTML = `<div class="seg">${itens}</div>${modo}`;
+  $('#abas').innerHTML = `<div class="seg">${itens}${abaPartidos}</div>${modo}`;
 }
 
 // No mapa da projeção a UF ganha a cor do vencedor projetado, mais forte quanto maior a margem sobre o 2º.
@@ -1154,8 +1173,47 @@ function renderDetalhe() {
   }
 }
 
+// ---------- aba Partidos ----------
+
+// Cargos da aba que o servidor está acompanhando (governador, senador e deputado federal).
+const cargosDePartidos = () => CARGOS_PARTIDOS.filter((c) => cargoMeta(c.codigo));
+
+// Eleitos de 2014, 2018 e 2022 por partido; não mudam durante a apuração, então carrega uma vez.
+async function carregarHistoricoPartidos() {
+  if (!estado.partidos.ativo || estado.partidos.historico !== undefined) return;
+  try {
+    const h = await getJson('/api/partidos');
+    estado.partidos.historico = h.disponivel ? h : null;
+  } catch {
+    estado.partidos.historico = null;
+  }
+}
+
+function renderPartidos() {
+  const cargo = cargoPartidos(estado.partidos.cargo);
+  const meta = cargoMeta(cargo.codigo);
+  const ufs = meta.abrangencias.filter((uf) => uf !== 'br');
+  const itens = ufs.map((uf) => itemResumo(cargo.codigo, uf)).filter((item) => item?.secoes);
+  const modelo = criarModelo({
+    cargo,
+    historico: estado.partidos.historico,
+    itens: itens.map((item) => ({ ...item, uf: item.chave.split(':')[1] })),
+    ocupadas: cargo.codigo === 5 ? (estado.senadoOcupadas ?? []) : [],
+    ufs,
+  });
+  $('#detalhe').innerHTML = partidosHtml(modelo, { aba: estado.partidos.aba, agrupar: estado.partidos.agrupar, cargos: cargosDePartidos() }, {
+    esc, fmtInt, corPartido, nomeUf, mapa: MAPA, rotulos: rotulosMapaHtml(new Set(Object.keys(MAPA.ufs))),
+  });
+}
+
 function render() {
   renderAbas();
+  if (estado.partidos.ativo) {
+    $('#principal').classList.add('sem-mapa');
+    renderPartidos();
+    renderEstado();
+    return;
+  }
   renderGrade();
   renderDetalhe();
   renderEstado();
@@ -1244,7 +1302,7 @@ async function iniciar() {
   $('#banner-demo').hidden = !meta.demo;
 
   fetch('/senado-ocupadas.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))
-    .then((j) => { estado.senadoOcupadas = j?.cadeiras ?? null; if (estado.cargo === 5) renderDetalhe(); }).catch(() => {});
+    .then((j) => { estado.senadoOcupadas = j?.cadeiras ?? null; if (estado.partidos.ativo) renderPartidos(); else if (estado.cargo === 5) renderDetalhe(); }).catch(() => {});
   lerHash();
   iniciarDica();
   iniciarBusca({

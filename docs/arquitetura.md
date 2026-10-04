@@ -173,6 +173,17 @@ fração (peso de 0 a 1). Por padrão só o **mesmo partido** herda (PT→Lula, 
 pequenos que repetiram). É uma **decisão política editável**: reinicie o painel depois de mudar. O painel avisa se a
 herança de um candidato de 2022 passar de 100%.
 
+### Eleitos de 2014, 2018 e 2022 (aba Partidos)
+
+`dados-historicos/eleitos.json` guarda o partido de cada governador, senador e deputado federal eleito (por UF), a partir dos zips
+`consulta_cand_AAAA.zip` dos dados abertos do TSE (~4,5 MB cada, baixados inteiros). É gerado por
+`node scripts/gerar-eleitos.js`, que confere as contagens (27 governadores, 513 deputados, 27 ou 54 senadores por eleição).
+Só a eleição ordinária conta, com uma exceção no Senado: em MT 2018 a eleita (Selma Arruda, PSL) teve a votação anulada e
+a cadeira é de Carlos Fávaro (PSD), eleito em suplementar. `src/partidos.js` aplica `partidos-sucessao.json` (renomeações
+e fusões) e serve o resultado em `/api/partidos`. O PSL não entra na tabela de propósito: em 2018 era o partido de Bolsonaro.
+A interface (`public/partidos.js`) monta tudo a partir disso e de `/api/resumo`; para a Câmara o resumo traz
+`cadeirasPorPartido` (eleitos mais as vagas `vag` já dadas ao partido/federação, ver `normalize.js`).
+
 ### Histórico de 2018
 
 `dados-historicos/presidente-2018-t1.json` tem o mesmo formato, para o 1º turno de 2018, e é gerado por
@@ -211,6 +222,7 @@ com o resultado final.
 | `GET /api/municipios/{cargo}/{uf}` | Líder e apuração de cada município de uma UF (cargos 1, 3 e 5). Dispara a carga da UF se preciso. |
 | `GET /api/projecao/{modelo}/{cargo}/{uf}` | Projeção (`ingenuo`, `estratificado`, `swing`). Pode vir `disponivel: false` com o motivo, ou `carregando: true`. |
 | `GET /api/historico/{cargo}/{uf}?modelo=` | Série gravada para o gráfico; 404 se não houver gravação. |
+| `GET /api/partidos` | Eleitos de 2014, 2018 e 2022 por partido (governador, senador e deputado federal), com as siglas já traduzidas para o partido de hoje; `disponivel: false` sem `eleitos.json`. |
 | `GET /api/busca?q=&cargo=&uf=` | Busca global de candidatos e municípios. |
 | `GET /events` | SSE: evento `ciclo` a cada rodada de consultas, com os arquivos que mudaram. |
 

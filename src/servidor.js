@@ -38,7 +38,7 @@ const PERIODOS_COMPARATIVO = {
 };
 
 // `anterior` = 2022 (swing e comparativo); `historicos` = outras eleições já encerradas, por ano ({ 2018: anterior2018 }).
-export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, historicos = {} }) {
+export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, historicos = {}, partidos = null }) {
   const basesHistoricas = { ...(anterior ? { 2022: anterior } : {}), ...historicos };
   // O swing precisa dos dados de 2022; sem eles o modelo aparece como indisponível.
   const modelos = MODELOS.map((m) => (m.id === 'swing' && !anterior
@@ -197,6 +197,11 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
         atual = { ufs: encerrada.brutoPorUf() };
       }
       return enviarJson(res, 200, { disponivel: true, periodo, vivo, anoAtual: def.anoAtual, anoBase: def.anoBase, fonte: base.fonte, candidatos: base.candidatos22, ufs: base.porUf(), atual });
+    }
+
+    // Eleitos de eleições passadas por partido (aba de partidos e ideologia); a apuração de 2026 vem de /api/resumo.
+    if (pathname === '/api/partidos') {
+      return enviarJson(res, 200, partidos ?? { disponivel: false, motivo: 'Dados de eleitos não carregados (rode scripts/gerar-eleitos.js).' });
     }
 
     if (pathname === '/api/busca') {
