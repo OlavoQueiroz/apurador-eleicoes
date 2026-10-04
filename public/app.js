@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, folgaProvavel, quantosClassificam } from './chances.js';
+import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -798,12 +798,9 @@ function pilulaSituacao(c) {
 const DICA_ELEITO = {
   matematica: 'Eleito pela conta do painel: mesmo que todos os votos que faltam fossem dos adversários, ele continuaria eleito. O TSE ainda não marcou.',
   pratica: 'Eleito pela conta do painel: mesmo sem receber mais nenhum voto, pela abstenção medida (com margem), os adversários não o alcançam. O TSE ainda não marcou.',
-  provavel: 'Eleito pela conta do painel: mantido o % atual, com uma folga que diminui conforme a apuração avança, ele fica eleito. Estimativa não validada com votos reais. O TSE ainda não marcou.',
 };
-// Dica de "Eleito*": a explicação do tipo e, no "provável", a conta usada (para o usuário conferir).
-const dicaEleito = (tipo, pct, pctSecoes) => (tipo === 'provavel'
-  ? `${DICA_ELEITO.provavel} Conta: ${fmtPct(pct)} atual − folga de ${fmtPct(folgaProvavel(pctSecoes), 1)} (com ${fmtPct(pctSecoes, 0)} das seções); no Senado, a folga entra na distância para os adversários.`
-  : DICA_ELEITO[tipo]);
+// Dica de "Eleito*": a explicação do tipo (garantia matemática ou pela abstenção medida).
+const dicaEleito = (tipo) => DICA_ELEITO[tipo];
 const DICA_CHANCE = {
   matematica: 'Sem chance matemática: mesmo com todos os votos que ainda podem entrar, não alcança os classificados.',
   pratica: 'Sem chance pela abstenção, brancos e nulos já medidos nas seções apuradas (com margem de segurança). Pode mudar se as seções que faltam votarem muito diferente.',
