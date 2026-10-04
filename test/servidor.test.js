@@ -143,20 +143,18 @@ test('SSE: cliente que some de repente não atrapalha os outros nem derruba o se
 
 test('/api/projecao: modelo indisponível explica o motivo, e sem dados não projeta', async () => {
   const meta = await (await fetch(`${base}/api/meta`)).json();
-  assert.deepEqual(meta.modelos.map((m) => m.id), ['ingenuo', 'estratificado', 'swing', 'bayesiano']);
+  assert.deepEqual(meta.modelos.map((m) => m.id), ['estratificado', 'swing', 'bayesiano']);
   assert.equal(meta.modelos.find((m) => m.id === 'swing').disponivel, false, 'sem dados de 2022 carregados');
 
   const estratificado = await (await fetch(`${base}/api/projecao/estratificado/1/br`)).json();
   assert.equal(estratificado.disponivel, false);
   assert.ok(estratificado.motivo);
 
-  const semVotos = await (await fetch(`${base}/api/projecao/ingenuo/1/br`)).json();
-  assert.equal(semVotos.disponivel, false, 'arquivo existente mas sem votos');
-
-  const semArquivo = await (await fetch(`${base}/api/projecao/ingenuo/1/sp`)).json();
+  const semArquivo = await (await fetch(`${base}/api/projecao/estratificado/1/sp`)).json();
   assert.equal(semArquivo.disponivel, false);
 
-  assert.equal((await fetch(`${base}/api/projecao/ingenuo/9/br`)).status, 404);
+  assert.equal((await fetch(`${base}/api/projecao/estratificado/9/br`)).status, 404);
+  assert.equal((await fetch(`${base}/api/projecao/ingenuo/1/br`)).status, 404, 'a extrapolação simples não é mais um modelo');
 });
 
 test('/api/municipios: sem a camada de municípios, ou fora de presidente/governador/senador, responde 404', async () => {
