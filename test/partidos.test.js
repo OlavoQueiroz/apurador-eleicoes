@@ -456,3 +456,24 @@ test('anotarVagasPrevistas: distância em votos até ganhar ou perder uma vaga, 
     }
   });
 });
+
+test('aoVivo: quem a conta do painel dá como eleito (Senado e governador) entra como confirmado, não como "na frente"', () => {
+  const colocados = [
+    { partido: 'PL', votos: 400000, situacao: 'nenhuma' }, { partido: 'PT', votos: 350000, situacao: 'nenhuma' }, { partido: 'PSD', votos: 100000, situacao: 'nenhuma' },
+  ];
+  // Senado, 2 vagas, 90% apurado: PL e PT isolados dos demais → confirmados; PSD fica de fora
+  const item = { uf: 'sp', vagas: 2, turno: 1, validos: 1000000, secoes: { pctTotalizadas: 90 }, eleitosPorPartido: {}, colocados };
+  const senado = aoVivo(cargo(5), [item]);
+  assert.deepEqual(senado.confirmados, { PL: 1, PT: 1 });
+  assert.deepEqual(senado.naFrente, {});
+  assert.equal(senado.porConta, 2);
+  assert.equal(senado.pendentes, 0);
+  // Com pouca apuração, ninguém é dado como eleito: continuam só "na frente"
+  const cedo = aoVivo(cargo(5), [{ ...item, secoes: { pctTotalizadas: 10 } }]);
+  assert.deepEqual(cedo.confirmados, {});
+  assert.deepEqual(cedo.naFrente, { PL: 1, PT: 1 });
+  // Governador: líder com 65% aos 80% apurado é dado como eleito, e a situação do mapa vira "eleito"
+  const gov = { uf: 'ba', vagas: 1, turno: 1, validos: 1000000, secoes: { pctTotalizadas: 80 }, eleitosPorPartido: {}, colocados: [{ partido: 'PT', votos: 650000, situacao: 'nenhuma' }, { partido: 'PL', votos: 300000, situacao: 'nenhuma' }] };
+  assert.deepEqual(aoVivo(cargo(3), [gov]).confirmados, { PT: 1 });
+  assert.equal(situacaoGovernador(gov), 'eleito');
+});

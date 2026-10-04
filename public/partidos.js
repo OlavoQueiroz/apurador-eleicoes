@@ -6,6 +6,7 @@ import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
 import { elegiveisPelaConta, quantosClassificam } from './chances.js';
 import { focoHtml } from './partido-foco.js';
+import { flagsEleitoPelaConta } from './chances.js';
 
 // Cargos com análise de bancadas (a presidência tem o comparativo, em comparativo-eleicoes.js). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
 // Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes, então 2014 fica de fora).
@@ -101,6 +102,7 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 export function situacaoGovernador(item) {
   const colocados = item.colocados ?? [];
   if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
+  if (flagsEleitoPelaConta(item, 3)[0]) return 'eleito'; // dado como eleito pela conta do painel (public/chances.js)
   if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
   const [daConta] = elegiveisPelaConta({
     votos: colocados.map((c) => c.votos), k: quantosClassificam({ cargo: 3, vagas: item.vagas, turno: item.turno }), primeiroTurno: item.turno !== 2,
@@ -116,15 +118,21 @@ export function aoVivo(cargo, itens, ocupadas = [], totalPadrao = cargo.total) {
   const confirmados = {};
   const naFrente = {};
   const porUf = {};
+  let porConta = 0; // eleitos dados pela conta do painel, ainda não marcados pelo TSE
   let vagas = 0;
   for (const item of itens) {
-    const c = item.eleitosPorPartido ?? {};
+    const c = { ...(item.eleitosPorPartido ?? {}) };
     const f = {};
     if (cargo.codigo === 6 || cargo.codigo === 7) {
       for (const [sigla, n] of Object.entries(item.cadeirasPorPartido ?? c)) if (n > (c[sigla] ?? 0)) f[sigla] = n - (c[sigla] ?? 0);
     } else {
+      // Governador e Senado: além dos eleitos que o TSE marcou, entram como confirmados os que a conta do painel dá como
+      // eleitos (flagsEleitoPelaConta); as vagas que sobram vão para quem lidera.
+      const flags = flagsEleitoPelaConta(item, cargo.codigo);
+      const colocados = item.colocados ?? [];
+      colocados.forEach((cand, i) => { if (flags[i]) { soma(c, cand.partido); porConta += 1; } });
       const abertas = Math.max(0, item.vagas - somaValores(c));
-      for (const cand of (item.colocados ?? []).filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, abertas)) soma(f, cand.partido);
+      for (const cand of colocados.filter((x, i) => x.situacao !== 'eleito' && !flags[i] && x.votos > 0).slice(0, abertas)) soma(f, cand.partido);
     }
     for (const [s, n] of Object.entries(c)) soma(confirmados, s, n);
     for (const [s, n] of Object.entries(f)) soma(naFrente, s, n);
@@ -137,7 +145,7 @@ export function aoVivo(cargo, itens, ocupadas = [], totalPadrao = cargo.total) {
   const definidas = somaValores(confirmados) + somaValores(naFrente) + ocupadas.length;
   // `estimativa`: as vagas "na frente" de deputados vêm de uma distribuição estimada pelo quociente (normalize.js), não do TSE.
   const estimativa = itens.some((i) => i.cadeirasEstimadas);
-  return { total, confirmados, naFrente, ocupadas: fixas, porUf, definidas, pendentes: Math.max(0, total - definidas), estimativa };
+  return { total, confirmados, naFrente, ocupadas: fixas, porUf, definidas, pendentes: Math.max(0, total - definidas), estimativa, porConta };
 }
 
 const unir = (...mapas) => mapas.reduce((a, b) => juntar(a, b), {});
@@ -398,7 +406,7 @@ export function placarHtml(modelo, ajuda) {
   const hemiciclos = `<div class="par-figs" style="--n:${figuras.length}">${figuras.join('')}</div>`;
   return `<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>
     <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}${chavesHtml(vivo, ajuda)}
-    <p class="par-nota">${fmtInt(confirmadas)} confirmadas pelo TSE em 2026${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
+    <p class="par-nota">${fmtInt(confirmadas)} confirmadas em 2026${vivo.porConta ? ` (${fmtInt(vivo.porConta)} dadas como eleitas pela conta do painel*, ainda sem marca do TSE)` : ' pelo TSE'}${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
 }
 
 // Câmara: maiores bancadas e números de governabilidade (maioria simples 257, 3/5 para emenda constitucional 308).
