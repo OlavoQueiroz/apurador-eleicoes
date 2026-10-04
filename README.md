@@ -72,6 +72,7 @@ Ctrl+C continua valendo.
 | `--demo-minutos N` | 8 | Duração da simulação. |
 | `--sem-abrir` (`ABRIR=0`) | abre sozinho em terminal interativo | Não abre o navegador ao iniciar. `--abrir` (ou `ABRIR=1`) força a abertura mesmo fora de um terminal interativo. |
 | `--navegador NOME` (`NAVEGADOR`) | `Safari` no macOS | App em que o painel abre, ex.: `"Google Chrome"`. Só vale no macOS; em outros sistemas abre o navegador padrão (não testado). |
+| `--verboso` (`VERBOSO=1`) | desligado | Loga todo ciclo de consultas. Por padrão o terminal só mostra o primeiro ciclo e variações de erros ou de arquivos indisponíveis. |
 | `--host H` (`HOST`) | `127.0.0.1` | Use `0.0.0.0` só se quiser abrir o painel para outros aparelhos da sua rede. |
 | `--ano A` (`ANO`) | 2026 | Ciclo eleitoral. |
 

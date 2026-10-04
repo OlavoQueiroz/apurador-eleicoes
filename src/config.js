@@ -1,6 +1,6 @@
 // Opções de linha de comando e variáveis de ambiente.
 //   node server.js [--demo [--demo-minutos 8]] [--turno 2] [--porta 3000] [--intervalo 60] [--cargos 1,3,5,6,8]
-//                  [--sem-abrir] [--navegador Safari]
+//                  [--sem-abrir] [--navegador Safari] [--verboso]
 // Equivalentes por ambiente: DEMO=1 TURNO PORT HOST INTERVALO CARGOS ANO DEMO_MINUTOS ABRIR NAVEGADOR
 
 import { CARGOS, CARGOS_PADRAO } from './tse.js';
@@ -30,6 +30,7 @@ export function lerConfig(
     cargos: env.CARGOS ?? null,
     demo: env.DEMO === '1',
     demoMinutos: Number(env.DEMO_MINUTOS) || 8,
+    verboso: env.VERBOSO === '1', // loga todo ciclo de consultas, mesmo sem novidade
     // Abre o navegador ao iniciar. Por padrão só num terminal interativo: execuções automatizadas
     // (testes, servidores de preview, scripts) não devem fazer janelas aparecerem sozinhas.
     abrir: env.ABRIR === '1' ? true : env.ABRIR === '0' ? false : ambiente.interativo,
@@ -51,6 +52,7 @@ export function lerConfig(
     else if (arg === '--intervalo') cfg.intervalo = Number(valor());
     else if (arg === '--cargos') cfg.cargos = valor();
     else if (arg === '--ano') cfg.ano = Number(valor());
+    else if (arg === '--verboso') cfg.verboso = true;
     else if (arg === '--demo-minutos') cfg.demoMinutos = Number(valor());
     else if (arg === '--abrir') cfg.abrir = true;
     else if (arg === '--sem-abrir') cfg.abrir = false;

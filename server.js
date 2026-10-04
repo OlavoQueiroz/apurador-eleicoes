@@ -41,7 +41,14 @@ const fonteTse = criarFonteTse();
 const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
 const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000 });
 
+// Por padrão o terminal fica quieto: loga o primeiro ciclo e só avisa quando erros ou arquivos
+// indisponíveis mudam (problema ou volta ao normal). Durante a apuração quase todo ciclo traz dados
+// novos, então logar "alterados" seria só ruído. --verboso loga todo ciclo.
+let anterior = null;
 apuracao.on('ciclo', (c) => {
+  const mudouEstado = !anterior || anterior.erros !== c.erros || anterior.indisponiveis !== c.indisponiveis;
+  anterior = c;
+  if (!cfg.verboso && !mudouEstado) return;
   log(
     `ciclo: ${c.total} arquivos · ${c.comDados} com dados · ${c.chavesAlteradas.length} alterados`
       + ` · ${c.indisponiveis} ainda indisponíveis · ${c.erros} erros`,
