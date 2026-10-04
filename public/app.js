@@ -743,6 +743,15 @@ function iniciarDica() {
     dica.style.top = `${evento.clientY - caixa.top + 16}px`;
   });
   area.addEventListener('pointerleave', esconder);
+  // Clicar num município o seleciona (contorno e cartão com o resultado, como na busca); clicar de novo no mesmo limpa a seleção.
+  area.addEventListener('click', (evento) => {
+    const mun = estado.mun && evento.target.closest?.('path.mun');
+    if (!mun) return;
+    const base = hashPara(estado.cargo, estado.uf);
+    const hash = estado.destaque?.tipo === 'm' && estado.destaque.id === mun.dataset.mun ? base : `${base}/m/${mun.dataset.mun}`;
+    if (location.hash === hash) aplicarHash();
+    else location.hash = hash;
+  });
 }
 
 // ---------- desenho: blocos do detalhe ----------
