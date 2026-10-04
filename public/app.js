@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { quantosClassificam, semChanceMatematica, votosRestantes } from './chances.js';
+import { avaliarChances, quantosClassificam } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -64,6 +64,7 @@ const estado = {
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
+  mostrarSemChance: false, // governador/senador: mostra também os candidatos sem chance (escondidos por padrão)
   ordemUfs: { campo: 'uf', dir: 1 }, // tabela de governador e senador: ordena por nome da UF ('uf') ou por % de seções totalizadas ('pct')
   numerosAbertos: false, // detalhe do arquivo: os quatro números (comparecimento etc.) abertos ou só o resumo
   cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
@@ -776,6 +777,11 @@ function pilulaSituacao(c) {
 }
 
 // Antes de qualquer voto não há o que mostrar: sem barra, sem líder e um traço no lugar de "0,00%" repetido.
+const DICA_CHANCE = {
+  matematica: 'Sem chance matemática: mesmo com todos os votos que ainda podem entrar, não alcança os classificados.',
+  pratica: 'Sem chance pela abstenção, brancos e nulos já medidos nas seções apuradas (com margem de segurança). Pode mudar se as seções que faltam votarem muito diferente.',
+};
+
 function candidatoHtml(c, posicao, largura, semVotos = false, fora = false) {
   const cor = corPartido(c.partido);
   const classes = [
@@ -788,7 +794,7 @@ function candidatoHtml(c, posicao, largura, semVotos = false, fora = false) {
   return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${fora ? '<span class="pill" title="Mesmo com todos os votos que faltam, não alcança os classificados">Sem chance matemática</span>' : ''}</div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}${fora ? `<span class="pill" title="${esc(fora === 'matematica' ? DICA_CHANCE.matematica : DICA_CHANCE.pratica)}">${fora === 'matematica' ? 'Sem chance matemática' : 'Sem chance'}</span>` : ''}</div>
       <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
     ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
@@ -893,8 +899,16 @@ function detalheArquivoHtml() {
       ${termo && filtrados.length > limite ? `<p class="muted pequeno">Mostrando ${limite} de ${fmtInt(filtrados.length)}. Refine a busca.</p>` : ''}
       ${agrupamentosHtml(d)}`;
   } else {
-    const fora = semChanceMatematica(candidatos.map((c) => c.votos), quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }), votosRestantes(d.eleitorado));
-    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos, fora[i] && c.situacao !== 'eleito')).join('')}</ol>`;
+    const chances = avaliarChances({
+      votos: candidatos.map((c) => c.votos), k: quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }),
+      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado,
+    }).map((x, i) => (candidatos[i].situacao === 'eleito' ? null : x)); // quem o TSE já marcou como eleito nunca é escondido
+    const escondidos = estado.mostrarSemChance ? 0 : chances.filter(Boolean).length;
+    const visiveisMaj = candidatos.map((c, i) => ({ c, i })).filter(({ i }) => estado.mostrarSemChance || !chances[i]);
+    const semChanceTotal = chances.filter(Boolean).length;
+    lista = `<ol class="candidatos">${visiveisMaj.map(({ c, i }) => candidatoHtml(c, i + 1, c.pct, semVotos, chances[i])).join('')}</ol>
+      ${semChanceTotal ? `<button class="botao" id="mostrar-sem-chance">${escondidos ? `Mostrar também os ${fmtInt(escondidos)} sem chance` : 'Esconder os sem chance'}</button>
+      <p class="muted pequeno">Sem chance de ${d.cargo.codigo === 5 ? 'ser eleito' : 'chegar ao 2º turno'}: estão fora mesmo que todos os votos que faltam (pela abstenção, brancos e nulos já medidos, com margem) fossem deles. É uma conta, não o resultado do TSE.</p>` : ''}`;
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
@@ -997,20 +1011,26 @@ function detalheAgregadoHtml() {
   if (meta.codigo === 3 || meta.codigo === 5) {
     // Governador e Senado: 1º, 2º e 3º colocados de cada UF, com o nome e a tag do partido na mesma célula.
     // `fora`: sem chance matemática de classificação (public/chances.js); a célula fica apagada e com o aviso.
-    const celula = (c, fora) => (c
-      ? `<td${fora ? ' class="sem-chance" title="Sem chance matemática: mesmo com todos os votos que faltam, não alcança os classificados"' : ''}><div class="colocado-nome">${esc(c.nomeUrna)}</div>
+    const celula = (c, fora) => (!c ? '<td class="muted">—</td>'
+      : fora && !estado.mostrarSemChance
+        ? `<td class="sem-chance muted pequeno" title="${esc(`${c.nomeUrna} (${c.partido}, ${fmtPct(c.pct)}). ${DICA_CHANCE[fora]}`)}">sem chance</td>`
+        : `<td${fora ? ` class="sem-chance" title="${esc(DICA_CHANCE[fora])}"` : ''}><div class="colocado-nome">${esc(c.nomeUrna)}</div>
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
-          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance matemática' : ''}</span></div></td>`
-      : '<td class="muted">—</td>');
+          <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}</span></div></td>`);
     const { campo, dir } = estado.ordemUfs;
     const ordenado = itens.slice().sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
       : (a, b) => dir * porNome(a, b));
     const cabecalho = (id, rotulo, classe = '') => `<th${classe ? ` class="${classe}"` : ''} aria-sort="${campo === id ? (dir > 0 ? 'ascending' : 'descending') : 'none'}">
       <button type="button" class="ordenar" data-ordem="${id}">${rotulo}<span aria-hidden="true">${campo === id ? (dir > 0 ? ' ▲' : ' ▼') : ''}</span></button></th>`;
+    let comSemChance = 0; // UFs com algum colocado sem chance (escondido, a não ser que o botão peça para mostrar)
     const linhas = ordenado.map(({ uf, item }) => {
       const colocados = item.colocados ?? [];
-      const fora = semChanceMatematica(colocados.map((x) => x.votos), quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }), item.eleitorado ? votosRestantes(item.eleitorado) : null);
+      const fora = avaliarChances({
+        votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }),
+        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
+      }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
+      if (fora.some(Boolean)) comSemChance += 1;
       const [a, b, c] = colocados;
       return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0])}${celula(b, fora[1])}${celula(c, fora[2])}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
@@ -1018,7 +1038,9 @@ function detalheAgregadoHtml() {
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
         <thead><tr>${cabecalho('uf', 'UF')}<th>1º</th><th>2º</th><th>3º</th>${cabecalho('pct', 'Totalizadas', 'num')}</tr></thead>
-        <tbody>${linhas}</tbody></table></div>`;
+        <tbody>${linhas}</tbody></table></div>
+      ${comSemChance ? `<button class="botao" id="mostrar-sem-chance">${estado.mostrarSemChance ? 'Esconder quem está sem chance' : 'Mostrar também quem está sem chance'}</button>
+      <p class="muted pequeno">"Sem chance": o candidato não alcança os ${meta.codigo === 5 ? 'eleitos' : 'classificados para o 2º turno'} nem recebendo todos os votos que faltam (estimados pela abstenção, brancos e nulos já medidos, com margem), ou o líder já passou de 50% dos válidos. É uma conta do painel, não o resultado do TSE.</p>` : ''}`;
   }
 
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
@@ -1204,6 +1226,10 @@ function renderDetalhe() {
       busca.setSelectionRange(cursor, cursor);
     }
   }
+  $('#mostrar-sem-chance', raiz)?.addEventListener('click', () => {
+    estado.mostrarSemChance = !estado.mostrarSemChance;
+    renderDetalhe();
+  });
   $('#mostrar-todos', raiz)?.addEventListener('click', () => {
     estado.mostrarTodos = !estado.mostrarTodos;
     renderDetalhe();
