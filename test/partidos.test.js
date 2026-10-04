@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { criarPartidos, criarTradutor, carregarPartidos } from '../src/partidos.js';
 import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
-  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
+  CARGOS_PARTIDOS, agrupar, hashAntigoParaNovo, hashPartidos, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
 import { resumir } from '../src/normalize.js';
 
@@ -197,18 +197,20 @@ test('por partido: o mapa lidera pelo partido, não pelo bloco, e os endereços 
   assert.equal(blocoDaBancada({ PT: 8, PSB: 2, PL: 2 }, 'partido'), 'PT');
   const m = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'sp', vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [] }], ufs: ['sp'] });
   const html = partidosHtml(m, { aba: 'placar', agrupar: 'partido' }, { ...ajuda, corPartido: (s) => (s === 'PT' ? '#d00' : '#00d') });
-  assert.match(html, /#\/partidos\/3\/placar\/partido/);
+  assert.match(html, /href="#\/3\/br\/analise\/partido"/); // Placar é o padrão e não vai no endereço
   assert.match(html, /Bastiões \(mesmo partido/);
-  assert.match(partidosHtml(m, { aba: 'placar' }, ajuda), /#\/partidos\/3\/serie"/);
+  assert.match(partidosHtml(m, { aba: 'placar' }, ajuda), /href="#\/3\/br\/analise\/serie"/);
 });
 
-test('Presidente na aba Análises: o endereço é o do comparativo e o seletor de cargo o inclui', () => {
-  assert.equal(hashPartidos(1, 'placar', 'partido'), '#/partidos/1/comparativo');
-  assert.equal(hashPartidos(6, 'serie', 'partido'), '#/partidos/6/serie/partido');
-  assert.equal(hashPartidos(6, 'placar', 'ideologia'), '#/partidos/6/placar');
-  const html = seletorCargosHtml({ cargos: [PRESIDENTE, ...CARGOS_PARTIDOS], atual: 1, aba: 'placar', modo: 'ideologia', esc: (t) => t });
-  assert.match(html, /href="#\/partidos\/1\/comparativo" aria-current="page">Presidente/);
-  assert.match(html, /href="#\/partidos\/6\/placar"/);
+test('endereços da visão Análise: #/cargo/uf/analise[/aba][/partido]; o cargo vem do menu principal, sem seletor próprio', () => {
+  assert.equal(hashPartidos(6, 'placar', 'ideologia'), '#/6/br/analise');
+  assert.equal(hashPartidos(6, 'serie', 'partido'), '#/6/br/analise/serie/partido');
+  assert.equal(hashPartidos(3, 'placar', 'partido'), '#/3/br/analise/partido');
+  const m = criarModelo({ cargo: cargo(5), historico, itens: [], ufs: [] });
+  const html = partidosHtml(m, { aba: 'placar' }, ajuda);
+  assert.ok(!html.includes('aria-label="Cargo"')); // o cargo é o do menu principal
+  assert.match(html, /aria-label="Análise"/);
+  assert.match(html, /aria-label="Agrupar por"/);
 });
 
 test('placar: dois hemiciclos (eleição anterior e 2026) e cartões com 2026, variação e 2022 de uma vez', () => {
@@ -275,13 +277,29 @@ test('Deputado estadual (SP ou RJ): bancada da Assembleia, UF no endereço e no 
   assert.equal(m.base.porPartido.PL, 7);
   assert.deepEqual(m.vivo.naFrente, { PT: 1, PL: 1 });
 
-  const html = partidosHtml(m, { aba: 'placar', cargos: [PRESIDENTE, ...CARGOS_PARTIDOS], ufs: ['sp', 'rj'] }, ajuda);
+  const html = partidosHtml(m, { aba: 'placar', ufs: ['sp', 'rj'] }, ajuda);
   assert.match(html, /aria-label="UF"/);
-  assert.match(html, /href="#\/partidos\/7\/serie\/rj"/);
-  assert.match(html, /href="#\/partidos\/7\/placar\/sp" >SP|href="#\/partidos\/7\/placar\/sp"[^>]*>SP</);
+  assert.match(html, /href="#\/7\/rj\/analise\/serie"/);
+  assert.match(html, /href="#\/7\/sp\/analise"[^>]*>SP</);
   assert.match(html, /Dep\. estadual · RJ: composição/);
-  assert.equal(hashPartidos(7, 'placar', 'partido', 'rj'), '#/partidos/7/placar/rj/partido');
-  assert.equal(hashPartidos(6, 'placar', 'ideologia', 'rj'), '#/partidos/6/placar'); // só o deputado estadual leva UF
+  assert.equal(hashPartidos(7, 'placar', 'partido', 'rj'), '#/7/rj/analise/partido');
+  assert.equal(hashPartidos(7, 'placar', 'ideologia'), '#/7/sp/analise'); // sem UF, a primeira (SP)
+  assert.equal(hashPartidos(6, 'placar', 'ideologia', 'rj'), '#/6/br/analise'); // só o deputado estadual leva UF
   // sem UF escolhida, usa o total padrão de cada Assembleia só quando a UF é conhecida
   assert.equal(criarModelo({ cargo: dep, historico: hist, itens: [], ufs: ['sp'], uf: 'sp' }).vivo.total, 94);
+});
+
+test('endereços antigos (#/partidos/... e comparativo) são traduzidos para #/cargo/uf/analise/...', () => {
+  const novo = (h) => hashAntigoParaNovo(h, '2026x2022');
+  assert.equal(novo('#/partidos/1/comparativo'), '#/1/br/analise/2026x2022');
+  assert.equal(novo('#/partidos/1/comparativo/2022x2018/sp'), '#/1/sp/analise/2022x2018');
+  assert.equal(novo('#/1/br/comparativo/2022x2018'), '#/1/br/analise/2022x2018');
+  assert.equal(novo('#/1/mg/comparativo'), '#/1/mg/analise/2026x2022');
+  assert.equal(novo('#/partidos'), '#/6/br/analise');
+  assert.equal(novo('#/partidos/3/serie/partido'), '#/3/br/analise/serie/partido');
+  assert.equal(novo('#/partidos/6/placar/delta'), '#/6/br/analise'); // cartões antigos viram o padrão
+  assert.equal(novo('#/partidos/7/placar/rj/partido'), '#/7/rj/analise/partido');
+  assert.equal(novo('#/partidos/7/placar'), '#/7/sp/analise');
+  assert.equal(novo('#/3/br'), null);
+  assert.equal(novo('#/1/br/analise/2026x2022'), null);
 });
