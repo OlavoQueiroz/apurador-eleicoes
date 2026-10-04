@@ -309,11 +309,23 @@ test('comparativoHtml (Brasil): regiões e UFs ordenadas pelo maior impacto, só
   assert.match(comparativoHtml(m2218, { uf: 'br', regiao: 'Sul' }, ajuda), /href="#\/1\/rs\/comparativo"/);
 });
 
-test('terceiro candidato (só 2022 × 2018): chips, Ciro por padrão, escolha do usuário muda as barras', () => {
-  assert.deepEqual(PERIODOS['2026x2022'].outros, []);
-  assert.equal(comparativoHtml(modelo, { uf: 'br', regiao: null }, ajuda).includes('data-comp-terceiro'), false);
+test('terceiro candidato: chips em todos os períodos; padrão de 2026 = Cury e Renan; escolha do usuário muda as barras', () => {
+  const padrao26 = (id) => terceirosSelecionados(PERIODOS[id], {});
+  assert.deepEqual(padrao26('2026x2022'), ['cury', 'renan']);
+  assert.deepEqual(padrao26('2026x2018'), ['ciro', 'cury', 'renan']);
   assert.deepEqual(terceirosSelecionados(periodo2218, {}), ['ciro']);
   assert.deepEqual(terceirosSelecionados(periodo2218, { terceiros: ['tebet', 'xx'] }), ['tebet']); // id desconhecido some
+  assert.deepEqual(terceirosSelecionados(PERIODOS['2026x2022'], { terceiros: ['ciro', 'alckmin'] }), ['ciro']); // Alckmin não existe neste período
+  const numeros = (id) => PERIODOS[id].outros.map((o) => `${o.id}:${o.numeroBase ?? '-'}/${o.numeroAtual ?? '-'}`).join(' ');
+  assert.equal(numeros('2026x2022'), 'ciro:12/- tebet:15/- cury:-/70 renan:-/14');
+  assert.equal(numeros('2026x2018'), 'ciro:12/- alckmin:45/- cury:-/70 renan:-/14');
+  assert.equal(numeros('2022x2018'), 'ciro:12/12 alckmin:45/- tebet:-/15');
+
+  const html26 = comparativoHtml(modelo, { uf: 'br', regiao: null }, ajuda);
+  assert.match(html26, /data-comp-terceiro="cury" aria-pressed="true"/);
+  assert.match(html26, /data-comp-terceiro="renan" aria-pressed="true"/);
+  assert.match(html26, /data-comp-terceiro="ciro" aria-pressed="false"/);
+
   const padrao = comparativoHtml(m2218, { uf: 'br', regiao: null }, ajuda);
   assert.match(padrao, /data-comp-terceiro="ciro" aria-pressed="true"/);
   assert.match(padrao, /data-comp-terceiro="alckmin" aria-pressed="false"/);
@@ -323,6 +335,20 @@ test('terceiro candidato (só 2022 × 2018): chips, Ciro por padrão, escolha do
   assert.doesNotMatch(nenhum, /title="PT [\d,]+% · Ciro/);
   const alck = comparativoHtml(m2218, { uf: 'br', regiao: null, terceiros: ['alckmin'] }, ajuda);
   assert.match(alck, /Geraldo Alckmin <small[^>]*>[\d,]+% no Brasil, só em 2018/);
+});
+
+test('2026: Cury (70) e Renan Santos (14) vêm da apuração; a base (2022) não tem os dois', () => {
+  const base26 = { vivo: true, ufs: { ba: { validos: 1000, votos: { 13: 600, 22: 250, 12: 30, 15: 40 }, herdados: { 13: 600, 22: 250 } } } };
+  const itens26 = { ba: { secoes: { pctTotalizadas: 100 }, validos: 2000, votosPorNumero: { 13: 1000, 22: 600, 70: 200, 14: 100 } } };
+  const m = calcular(base26, (uf) => itens26[uf], { periodo: PERIODOS['2026x2022'] });
+  const ba = m.ufs[0];
+  perto(ba.outros.cury.pAtual, 10); perto(ba.outros.cury.pBase, 0);
+  perto(ba.outros.renan.pAtual, 5);
+  perto(ba.outros.tebet.pBase, 4); perto(ba.outros.tebet.pAtual, 0); // Tebet só existe na base
+  perto(m.nacional.atual.outros.cury.pct, 10);
+  const html = comparativoHtml(m, { uf: 'br', regiao: null }, ajuda);
+  assert.match(html, /title="Lula [\d,]+% · Augusto Cury 10,0% · Renan Santos 5,0% · demais/);
+  assert.match(html, /Augusto Cury <small[^>]*>10,0% no Brasil, só em 2026/);
 });
 
 test('2018 como base: o cartão do PT diz Haddad e Lula, e a nota explica que Lula não concorreu', () => {
