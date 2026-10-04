@@ -68,7 +68,7 @@ const estado = {
   lideres: null, // Senado: Map partido → [{ nome, uf }] dos mais votados que ainda não foram eleitos
   eleitos: null, // nomes dos eleitos do cargo aberto no Brasil (hover do mapa de cadeiras): Map partido → [{ nome, uf }]
   senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
-  partidos: { ativo: false, cargo: 6, aba: 'placar', agrupar: 'ideologia', historico: undefined }, // aba Partidos (#/partidos/cargo/aba); historico: undefined = carregando, null = indisponível
+  partidos: { ativo: false, cargo: 6, aba: 'placar', agrupar: 'ideologia', historico: undefined }, // aba Análises (#/partidos/cargo/aba); historico: undefined = carregando, null = indisponível
   conexao: 'conectando',
   ultimoCicloEm: null,
 };
@@ -354,7 +354,8 @@ async function atualizar() {
 
 function ufPadrao(cargo) {
   const meta = cargoMeta(cargo);
-  return meta.abrangencias.length === 1 ? meta.abrangencias[0] : 'br';
+  // Deputado estadual só tem SP e RJ: um "Brasil" de duas UFs não diz nada, então abre direto em SP.
+  return meta.abrangencias.length === 1 || cargo === 7 ? meta.abrangencias[0] : 'br';
 }
 
 function lerHash() {
@@ -453,7 +454,7 @@ function renderAbas() {
     .map((c) => `<a class="aba" href="${hashPara(c.codigo, ufPadrao(c.codigo))}" ${c.codigo === estado.cargo && !estado.partidos.ativo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`)
     .join('');
   const abaPartidos = cargosDePartidos().length
-    ? `<a class="aba" href="${hashPartidos(estado.partidos.cargo, estado.partidos.aba, estado.partidos.agrupar)}" ${estado.partidos.ativo ? 'aria-current="page"' : ''}>Partidos</a>`
+    ? `<a class="aba" href="${hashPartidos(estado.partidos.cargo, estado.partidos.aba, estado.partidos.agrupar)}" ${estado.partidos.ativo ? 'aria-current="page"' : ''}>Análises</a>`
     : '';
   if (estado.partidos.ativo) { $('#abas').innerHTML = `<div class="seg">${itens}${abaPartidos}</div>`; return; }
   // Seletor global Apuração | Projeção: vale para a página toda e acompanha a troca de cargo e de UF. Fica na ponta
@@ -1175,7 +1176,7 @@ function renderDetalhe() {
   }
 }
 
-// ---------- aba Partidos ----------
+// ---------- aba Análises (partidos e ideologia) ----------
 
 // Cargos da aba que o servidor está acompanhando (governador, senador e deputado federal).
 const cargosDePartidos = () => CARGOS_PARTIDOS.filter((c) => cargoMeta(c.codigo));

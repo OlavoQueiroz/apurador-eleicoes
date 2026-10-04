@@ -173,7 +173,7 @@ fração (peso de 0 a 1). Por padrão só o **mesmo partido** herda (PT→Lula, 
 pequenos que repetiram). É uma **decisão política editável**: reinicie o painel depois de mudar. O painel avisa se a
 herança de um candidato de 2022 passar de 100%.
 
-### Eleitos de 2014, 2018 e 2022 (aba Partidos)
+### Eleitos de 2014, 2018 e 2022 (aba Análises)
 
 `dados-historicos/eleitos.json` guarda o partido de cada governador, senador e deputado federal eleito (por UF), a partir dos zips
 `consulta_cand_AAAA.zip` dos dados abertos do TSE (~4,5 MB cada, baixados inteiros). É gerado por
@@ -280,8 +280,8 @@ test/                        testes e fixtures
 - **Swing só para presidente**, e a herança de votos é uma escolha editorial.
 - **Atraso na carga dos municípios no auge** da apuração: o teto de ~5 req/s significa que um município pode ficar até
   ~20 minutos sem atualizar; o dado por UF não é afetado.
-- Conselheiro Distrital (Fernando de Noronha) não é acompanhado; deputado estadual é suportado mas é volumoso e menos
-  testado; a classificação ideológica do mapa de cadeiras é editorial e aproximada.
+- Conselheiro Distrital (Fernando de Noronha) não é acompanhado; deputado estadual só é acompanhado em SP e RJ (sem projeção) e é
+  volumoso e menos testado; a classificação ideológica do mapa de cadeiras é editorial e aproximada.
 
 ## Testes e CI
 

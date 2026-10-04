@@ -1,6 +1,7 @@
 /* Aba Partidos (ver partidos.js). Usa as variáveis de cor de style.css. */
-.par-topo { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.detalhe .par-abas { margin: 0 0 14px; }
+.par-topo { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.detalhe .par-topo .seg-modelo { margin: 0; }
+.par-topo .par-agrupar { margin-left: auto; }
 
 .par-agrupar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 

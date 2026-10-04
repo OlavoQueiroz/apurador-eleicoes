@@ -129,7 +129,7 @@ test('telas: todas as abas renderizam, com e sem histórico', () => {
     for (const agrupar of ['ideologia', 'partido']) {
       for (const aba of ['placar', 'ganhos', 'estados', 'serie']) {
         const html = partidosHtml(m, { aba, agrupar }, ajuda);
-        assert.match(html, /par-abas/);
+        assert.match(html, /aria-label="Análise"/);
         assert.ok(!html.includes('undefined') && !html.includes('NaN'), `${c.nome}/${aba}/${agrupar}`);
       }
     }

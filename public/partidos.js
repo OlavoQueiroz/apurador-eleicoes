@@ -391,8 +391,9 @@ export function partidosHtml(modelo, ui, ajuda) {
   const corpo = !modelo.historico && aba !== 'placar'
     ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
     : { placar: placarHtml, ganhos: ganhosHtml, serie: serieHtml, estados: estadosHtml }[aba](modelo, aj);
+  // Os três seletores na mesma linha (quebra em telas estreitas); o agrupamento fica na ponta direita.
   return `<div class="par-topo"><div class="seg seg-modelo" role="group" aria-label="Cargo">${cargos}</div>
-    <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>
-    <div class="seg seg-modelo par-abas" role="group" aria-label="Análises">${abas}</div>${corpo}
+    <div class="seg seg-modelo" role="group" aria-label="Análise">${abas}</div>
+    <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>${corpo}
     <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;
 }
