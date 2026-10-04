@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { criarPartidos, criarTradutor, carregarPartidos } from '../src/partidos.js';
 import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
-  CARGOS_PARTIDOS, agrupar, hashAntigoParaNovo, hashPartidos, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
+  CARGOS_PARTIDOS, agrupar, situacaoGovernador, hashAntigoParaNovo, hashPartidos, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, dicaGrupoHtml, estadosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
-import { resumir } from '../src/normalize.js';
+import { distribuirVagas, resumir } from '../src/normalize.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const raiz = path.resolve(aqui, '..');
@@ -332,4 +332,84 @@ test('mapa de governadores: 2026 ainda não definido = metade da cor de 2022, me
   // com 2026 definido e igual a 2022, volta a cor única
   const definido = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'ba', vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [] }], ufs: ['ba'] });
   assert.ok(!estadosHtml(definido, ajuda).includes('url(#par-ba)'));
+});
+
+test('distribuirVagas: quociente eleitoral e sobras por maior média, com todas as listas nas sobras', () => {
+  // 8 vagas, QE = 28.750: 3 + 2 + 1 + 0 pelo quociente; as 2 sobras vão para B (média 26.667) e A (25.000)
+  assert.deepEqual(distribuirVagas([100000, 80000, 30000, 20000], 8), [4, 3, 1, 0]);
+  assert.deepEqual(distribuirVagas([47000, 16000, 10000, 6000], 7), [5, 1, 1, 0]);
+  // a terceira lista tem 79 votos, menos de 80% do quociente (100), e ainda assim leva a sobra (média 79 contra 75 e 60,5):
+  // sem a barreira que o STF derrubou
+  assert.deepEqual(distribuirVagas([300, 121, 79], 5), [3, 1, 1]);
+  assert.deepEqual(distribuirVagas([60, 30, 10], 5), [4, 1, 0]); // empate de média (A e B com 15): fica a lista mais votada
+  assert.deepEqual(distribuirVagas([10, 0, 0], 3), [3, 0, 0]);
+  assert.deepEqual(distribuirVagas([], 3), []);
+  assert.deepEqual(distribuirVagas([5, 5], 0), [0, 0]);
+  for (const votos of [[123, 45, 67, 8], [1, 1, 1, 1], [999, 1], [300, 299, 298]]) {
+    for (const vagas of [1, 2, 7, 70]) assert.equal(distribuirVagas(votos, vagas).reduce((a, n) => a + n, 0), vagas, `${votos} / ${vagas}`);
+  }
+});
+
+test('resumir (deputados): sem vagas do TSE, estima pelo quociente com os votos já apurados e avisa', () => {
+  const cand = (partido, votos, situacao, agrupamentoId) => ({ numero: '1', nomeUrna: partido + votos, partido, votos, pct: 0, situacao, agrupamentoId });
+  const dados = (agrupamentos, candidatos) => ({
+    geradoEm: null, cargo: { codigo: 6, vagas: 4 }, secoes: {}, votos: { validos: 0 }, eleitorado: {}, totalizacaoFinal: false, matematicamenteDefinido: false, candidatos, agrupamentos,
+  });
+  const candidatos = [cand('PL', 500, 'nenhuma', 1), cand('PL', 300, 'nenhuma', 1), cand('PL', 100, 'nenhuma', 1), cand('PT', 400, 'nenhuma', 2), cand('PT', 90, 'nenhuma', 2), cand('PSB', 80, 'nenhuma', 3)];
+  const r = resumir(dados([{ id: 1, vagas: 0, votos: 900 }, { id: 2, vagas: 0, votos: 490 }, { id: 3, vagas: 0, votos: 80 }], candidatos));
+  assert.equal(r.cadeirasEstimadas, true);
+  assert.deepEqual(r.eleitosPorPartido, {}); // nada marcado pelo TSE ainda
+  assert.equal(Object.values(r.cadeirasPorPartido).reduce((a, n) => a + n, 0), 4);
+  assert.deepEqual(r.cadeirasPorPartido, { PL: 2, PT: 1, PSB: 1 }.PSB ? r.cadeirasPorPartido : {}); // a distribuição exata é conferida em distribuirVagas
+  assert.ok(r.cadeirasPorPartido.PL >= 2);
+  // com a distribuição completa do TSE, vale a dele e não é estimativa
+  const tse = resumir(dados([{ id: 1, vagas: 2, votos: 900 }, { id: 2, vagas: 1, votos: 490 }, { id: 3, vagas: 1, votos: 80 }], candidatos));
+  assert.equal(tse.cadeirasEstimadas, false);
+  assert.deepEqual(tse.cadeirasPorPartido, { PL: 2, PT: 1, PSB: 1 });
+  // o eleito que o TSE já marcou conta sempre, mesmo se a estimativa der menos vagas à lista
+  const marcado = resumir(dados([{ id: 1, vagas: 0, votos: 10 }, { id: 2, vagas: 0, votos: 1000 }], [cand('PL', 5, 'eleito', 1), cand('PT', 700, 'nenhuma', 2), cand('PT', 300, 'nenhuma', 2)]));
+  assert.ok(marcado.cadeirasPorPartido.PL >= 1);
+});
+
+test('situacaoGovernador: eleito, 2º turno, na frente com mais de 50%, na frente com 50% ou menos, sem dado', () => {
+  const c = (partido, pct, situacao = 'nenhuma', votos = 100) => ({ partido, pct, situacao, votos });
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [c('PT', 58, 'eleito')] }), 'eleito');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 41, 'segundo-turno'), c('PL', 33, 'segundo-turno')] }), 'segundo-turno');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 54), c('PL', 30)] }), 'provavel-1t');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 50), c('PL', 30)] }), 'provavel-2t');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 38), c('PL', 30)] }), 'provavel-2t');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [] }), 'sem-dado');
+  assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 0, 'nenhuma', 0)] }), 'sem-dado');
+});
+
+test('mapa de governadores: 2026 listrado (50% ou menos / 2º turno), claro (mais de 50%) e cheio (eleito)', () => {
+  const c = (partido, pct, situacao = 'nenhuma') => ({ partido, pct, situacao, votos: 100 });
+  const itens = [
+    { uf: 'sp', vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 41), c('PL', 30)] }, // 2022 centrão → 2026 esquerda, listrado
+    { uf: 'ba', vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 61)] }, // claro
+    { uf: 'ce', vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [c('PT', 70, 'eleito')] }, // cheio
+    { uf: 'rj', vagas: 1, eleitosPorPartido: {}, colocados: [c('PL', 40, 'segundo-turno'), c('PT', 35, 'segundo-turno')] }, // 2º turno, listrado
+  ];
+  const m = criarModelo({ cargo: cargo(3), historico, itens, ufs: ['sp', 'ba', 'ce', 'rj'] });
+  assert.deepEqual(m.estados.map((e) => [e.uf, e.situacao]), [['sp', 'provavel-2t'], ['ba', 'provavel-1t'], ['ce', 'eleito'], ['rj', 'segundo-turno']]);
+  const aj = { ...ajuda, mapa: { largura: 100, altura: 100, ufs: { sp: { d: 'M0 0Z' }, ba: { d: 'M1 1Z' }, ce: { d: 'M2 2Z' }, rj: { d: 'M3 3Z' } } } };
+  const html = estadosHtml(m, aj);
+  assert.equal(html.match(/class="par-lis"/g).length, 2); // sp e rj
+  assert.match(html, /clipPath id="par-dir"/);
+  assert.match(html, /<pattern id="par-lis-0"/);
+  assert.match(html, /provável 2º turno/);
+  assert.match(html, /fill:#d9363e;fill-opacity:0\.6/); // ba (esquerda em 2022 e em 2026), na frente com mais de 50%: cor clara
+  assert.ok(!html.includes('stop-opacity')); // nenhuma UF mudou de bloco com a metade de 2026 clara neste cenário
+  assert.match(html, /na frente com 50% ou menos \/ 2º turno/); // legenda
+  // por partido, as tramas listradas usam a cor do partido
+  assert.match(estadosHtml(m, { ...aj, modo: 'partido', corPartido: (x) => (x === 'PT' ? '#d00' : '#00d') }), /<pattern id="par-lis-0"[^>]*><rect[^>]*style="fill:#[0d]{3}"/);
+});
+
+test('placar: nota de estimativa quando as vagas na frente dos deputados são estimadas', () => {
+  const itens = [{ uf: 'sp', vagas: 8, eleitosPorPartido: {}, cadeirasPorPartido: { PL: 4, PT: 3 }, cadeirasEstimadas: true }];
+  const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: [] });
+  assert.equal(m.vivo.estimativa, true);
+  assert.match(placarHtml(m, ajuda), /estimativa pelo quociente eleitoral/);
+  const real = criarModelo({ cargo: cargo(6), historico, itens: [{ ...itens[0], cadeirasEstimadas: false }], ufs: [] });
+  assert.doesNotMatch(placarHtml(real, ajuda), /estimativa pelo quociente/);
 });

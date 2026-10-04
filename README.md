@@ -147,7 +147,14 @@ de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as c
   cheia; a menos, hachurada), com o valor da eleição anterior embaixo. Ao passar o mouse numa cadeira ou na legenda, o bloco
   ou partido é destacado e uma dica mostra o total em cada eleição mostrada. Em **Governadores**, no lugar dos hemiciclos há o mapa
   em que cada UF é dividida ao meio (esquerda = eleição anterior, direita = 2026): quando mudou, as duas cores; enquanto 2026 não
-  está definido, a cor de 2022 e cinza. Há também as listas de viradas e de bastiões.
+  está definido, a cor de 2022 e cinza. A metade de 2026 conta o que o TSE já publicou: **cor cheia** = eleito; **clara** =
+  na frente com mais de 50% dos válidos (pode fechar no 1º turno); **listrada** = na frente com 50% ou menos (provável 2º
+  turno) ou 2º turno já marcado pelo TSE. Há também as listas de viradas e de bastiões.
+- **Prévia das vagas de deputado** (Câmara e Assembleias): se o TSE ainda não distribuiu todas as vagas entre os partidos e
+  federações, o painel **estima** a distribuição pelo quociente eleitoral com os votos já apurados (quociente = válidos ÷
+  vagas; cada lista leva `votos ÷ quociente`; as sobras vão pela maior média `votos ÷ (vagas + 1)`, com todas as listas
+  disputando, como decidiu o STF) e mostra essas vagas como "na frente". É uma estimativa e muda até o fim: as regiões
+  chegam em ordens diferentes. Os nomes dentro de cada lista vão pelo ranking. Quando o TSE publica a distribuição, vale a dele.
 - **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
 - **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece na linha de seletores): é a Assembleia Legislativa,
   com 94 e 70 cadeiras.

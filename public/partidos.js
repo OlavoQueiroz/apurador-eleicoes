@@ -23,6 +23,18 @@ export const ABAS = [
 
 export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
 const PENDENTE = { id: 'pendente', nome: '2026 ainda não definido', cor: 'var(--vazio)' }; // metade cinza do mapa
+const DESCRICAO_SITUACAO = {
+  eleito: 'eleito',
+  'segundo-turno': '2º turno',
+  'provavel-1t': 'na frente com mais de 50%, pode fechar no 1º turno',
+  'provavel-2t': 'na frente com 50% ou menos, provável 2º turno',
+};
+// Como lê a metade de 2026 no mapa de governadores (a cor é a do bloco ou partido; aqui, em cinza neutro).
+const LEGENDA_SITUACAO = [
+  { id: 'st-eleito', nome: 'eleito', cor: '#6b7585' },
+  { id: 'st-claro', nome: 'na frente com mais de 50%', cor: '#6b7585', fundo: 'rgba(107,117,133,0.5)' },
+  { id: 'st-lis', nome: 'na frente com 50% ou menos / 2º turno', cor: '#6b7585', fundo: 'repeating-linear-gradient(45deg,#6b7585 0 2px,transparent 2px 4px)' },
+];
 const ORDEM_BLOCOS = GRUPOS.map((g) => g.id);
 
 const norma = (sigla) =>
@@ -78,6 +90,17 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 // A apuração de 2026 a partir do resumo de cada UF (itens de /api/resumo do cargo, sem "br").
 //   confirmados: eleitos que o TSE já marcou · naFrente: vagas que ainda não têm eleito marcado, atribuídas por ora a
 //   quem lidera (Câmara: vagas já conquistadas pelo partido ou federação) · ocupadas: cadeiras do Senado fora de disputa.
+// Situação de um governador em 2026, pelo que o TSE já publicou: 'eleito' (marcado), 'segundo-turno' (marcado), 'provavel-1t'
+// (lidera com mais de 50% dos válidos, ainda sem marca), 'provavel-2t' (lidera com 50% ou menos) ou 'sem-dado'.
+export function situacaoGovernador(item) {
+  const colocados = item.colocados ?? [];
+  if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
+  if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
+  const lider = colocados.find((c) => c.votos > 0);
+  if (!lider) return 'sem-dado';
+  return lider.pct > 50 ? 'provavel-1t' : 'provavel-2t';
+}
+
 export function aoVivo(cargo, itens, ocupadas = [], totalPadrao = cargo.total) {
   const confirmados = {};
   const naFrente = {};
@@ -94,14 +117,16 @@ export function aoVivo(cargo, itens, ocupadas = [], totalPadrao = cargo.total) {
     }
     for (const [s, n] of Object.entries(c)) soma(confirmados, s, n);
     for (const [s, n] of Object.entries(f)) soma(naFrente, s, n);
-    porUf[item.uf] = { confirmados: c, naFrente: f, vagas: item.vagas };
+    porUf[item.uf] = { confirmados: c, naFrente: f, vagas: item.vagas, situacao: cargo.codigo === 3 ? situacaoGovernador(item) : null };
     vagas += item.vagas;
   }
   const fixas = {};
   for (const o of ocupadas) soma(fixas, o.partido);
   const total = itens.length ? vagas + ocupadas.length : totalPadrao;
   const definidas = somaValores(confirmados) + somaValores(naFrente) + ocupadas.length;
-  return { total, confirmados, naFrente, ocupadas: fixas, porUf, definidas, pendentes: Math.max(0, total - definidas) };
+  // `estimativa`: as vagas "na frente" de deputados vêm de uma distribuição estimada pelo quociente (normalize.js), não do TSE.
+  const estimativa = itens.some((i) => i.cadeirasEstimadas);
+  return { total, confirmados, naFrente, ocupadas: fixas, porUf, definidas, pendentes: Math.max(0, total - definidas), estimativa };
 }
 
 const unir = (...mapas) => mapas.reduce((a, b) => juntar(a, b), {});
@@ -144,7 +169,7 @@ export function criarModelo({ cargo, historico, itens, ocupadas = [], ufs = [], 
     bancadas[2026] = u ? unir(u.confirmados, u.naFrente) : {};
     // Bloco ideológico da UF em cada eleição; a tela também calcula por partido, a partir das bancadas.
     const blocos = Object.fromEntries(Object.entries(bancadas).map(([ano, bancada]) => [ano, blocoDaBancada(bancada)]));
-    return { uf, bancadas, blocos, provisorio: !u || somaValores(u.confirmados) < u.vagas, vagas: u?.vagas ?? 0 };
+    return { uf, bancadas, blocos, provisorio: !u || somaValores(u.confirmados) < u.vagas, situacao: u?.situacao ?? 'sem-dado', vagas: u?.vagas ?? 0 };
   });
 
   const rotulo = uf && cargo.ufs ? `${cargo.nome} · ${uf.toUpperCase()}` : cargo.nome; // nos títulos
@@ -235,7 +260,8 @@ function hemiciclo(fonte, modelo, ajuda) {
 }
 
 function legendaGrupos(grupos, { esc }, extra = '') {
-  return `<div class="par-leg">${grupos.map((g) => `<span${g.id && g.id !== 'outros' && g.id !== 'disputado' && g.id !== 'pendente' ? ` data-g="${esc(g.id)}"` : ''}><i style="background:${g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
+  const hover = (g) => g.id && !['outros', 'disputado', 'pendente'].includes(g.id) && !String(g.id).startsWith('st-');
+  return `<div class="par-leg">${grupos.map((g) => `<span${hover(g) ? ` data-g="${esc(g.id)}"` : ''}><i style="background:${g.fundo ?? g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
 }
 
 // ---------- hover: total do grupo (bloco ou partido) ----------
@@ -337,7 +363,7 @@ export function placarHtml(modelo, ajuda) {
   const grupos = gruposDe(modelo, ajuda);
   if (modelo.cargo.mapa) return `<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>${estadosHtml(modelo, ajuda)}`; // governadores: mapa no lugar dos hemiciclos
   const parcial = vivo.pendentes > 0
-    ? `<p class="par-nota">Apuração em andamento: ${fmtInt(vivo.pendentes)} de ${fmtInt(vivo.total)} cadeiras ainda sem definição. Contorno = vaga na frente, ainda sem eleito marcado pelo TSE.</p>`
+    ? `<p class="par-nota">Apuração em andamento: ${fmtInt(vivo.pendentes)} de ${fmtInt(vivo.total)} cadeiras ainda sem definição. Contorno = vaga na frente, ainda sem eleito marcado pelo TSE.${vivo.estimativa ? ' As vagas na frente dos deputados são uma estimativa pelo quociente eleitoral com os votos já apurados (as regiões chegam em ordens diferentes) e mudam até o fim da apuração.' : ''}</p>`
     : '';
   const confirmadas = somaValores(unir(vivo.confirmados, vivo.ocupadas));
   const extra = modelo.cargo.codigo === 6 ? bancadasHtml(modelo, ajuda) : '';
@@ -410,20 +436,34 @@ export function estadosHtml(modelo, ajuda) {
   const anterior = anos[anos.length - 1];
   const lider = (s, ano) => blocoDaBancada(s.bancadas[ano] ?? {}, modo);
   const porUf = new Map(modelo.estados.map((s) => [s.uf, s]));
-  const defs = [];
+  const defs = ['<clipPath id="par-dir" clipPathUnits="objectBoundingBox"><rect x="0.5" y="0" width="0.5" height="1"/></clipPath>']; // metade direita de cada UF
+  const padroes = new Map(); // uma trama listrada por cor
+  const padraoListrado = (corLista) => {
+    if (!padroes.has(corLista)) {
+      padroes.set(corLista, `par-lis-${padroes.size}`);
+      defs.push(`<pattern id="par-lis-${padroes.size - 1}" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><rect width="3.5" height="7" style="fill:${corLista}"/></pattern>`);
+    }
+    return padroes.get(corLista);
+  };
   const formas = Object.entries(mapa.ufs).map(([uf, forma]) => {
     const s = porUf.get(uf);
     if (!s) return `<g class="uf inativa"><path d="${forma.d}"/></g>`;
     const a = lider(s, anterior);
     const d = lider(s, 2026);
-    // Meio a meio quando mudou, e também quando 2026 ainda não está definido (metade da cor de 2022, metade cinza).
-    const fill = a === d || (!a && !d) ? cor(d ?? a) : `url(#par-${uf})`;
+    // Meio a meio quando mudou, e também quando 2026 ainda não está definido (metade da cor de 2022, metade cinza). A metade
+    // de 2026 conta o que o TSE já publicou: cor cheia (eleito), clara (na frente com mais de 50%, pode fechar no 1º turno) ou
+    // listrada (na frente com 50% ou menos, ou 2º turno confirmado).
+    const sit = s.situacao;
+    const listrado = Boolean(d) && (sit === 'segundo-turno' || sit === 'provavel-2t');
+    const claro = Boolean(d) && sit === 'provavel-1t';
+    const fill = !listrado && (a === d || (!a && !d)) ? cor(d ?? a) : `url(#par-${uf})`;
     if (fill.startsWith('url')) {
-      defs.push(`<linearGradient id="par-${uf}" x1="0" x2="1" y1="0" y2="0"><stop offset="0.5" style="stop-color:${cor(a)}"/><stop offset="0.5" style="stop-color:${cor(d)}${s.provisorio && d ? ';stop-opacity:0.55' : ''}"/></linearGradient>`);
+      defs.push(`<linearGradient id="par-${uf}" x1="0" x2="1" y1="0" y2="0"><stop offset="0.5" style="stop-color:${cor(a)}"/><stop offset="0.5" style="stop-color:${listrado ? 'var(--vazio)' : cor(d)}${claro ? ';stop-opacity:0.55' : ''}"/></linearGradient>`);
     }
     const mudou = d && a !== d;
-    const dica = `${nomeUf(uf)}: ${nome(a)} (${anterior}) → ${d ? `${nome(d)} (2026${s.provisorio ? ', parcial' : ''})` : '2026 ainda não definido'}`;
-    return `<g class="uf par-uf${mudou ? ' virou' : ''}"><path d="${forma.d}" style="fill:${fill}${!mudou && d && s.provisorio ? ';fill-opacity:0.6' : ''}"><title>${esc(dica)}</title></path></g>`;
+    const dica = `${nomeUf(uf)}: ${nome(a)} (${anterior}) → ${d ? `${nome(d)} (2026 · ${DESCRICAO_SITUACAO[sit] ?? 'parcial'})` : '2026 ainda não definido'}`;
+    const listras = listrado ? `<path class="par-lis" d="${forma.d}" clip-path="url(#par-dir)" style="fill:url(#${padraoListrado(cor(d))})"/>` : '';
+    return `<g class="uf par-uf${mudou ? ' virou' : ''}"><path d="${forma.d}" style="fill:${fill}${!mudou && claro ? ';fill-opacity:0.6' : ''}"><title>${esc(dica)}</title></path>${listras}</g>`;
   }).join('');
   const valido = (id) => id && id !== DISPUTADO.id;
   const viradas = modelo.estados.filter((s) => valido(lider(s, 2026)) && valido(lider(s, anterior)) && lider(s, 2026) !== lider(s, anterior));
@@ -437,10 +477,11 @@ export function estadosHtml(modelo, ajuda) {
     legenda = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => infoGrupo(id, modo, ajuda));
   }
   const alvoCor = modo === 'partido' ? 'do partido' : 'do bloco';
-  const regra = `Cada UF recebe a cor ${alvoCor} do governador (na frente, enquanto não eleito, em tom mais claro).`;
+  const regra = `Cada UF recebe a cor ${alvoCor} do governador. Em 2026: cor cheia = eleito; clara = na frente com mais de 50% dos válidos (pode fechar no 1º turno); listrada = na frente com 50% ou menos, ou 2º turno.`;
   return `<div class="par-estados"><div class="par-caixa"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: ${anterior} → 2026</h3>
       <svg class="par-mapa" viewBox="0 0 ${mapa.largura} ${mapa.altura}" role="img" aria-label="Mapa de UFs por ${modo === 'partido' ? 'partido' : 'bloco'}"><defs>${defs.join('')}</defs>${formas}<g class="rotulos">${rotulos}</g></svg>
       ${legendaGrupos([...legenda, PENDENTE], ajuda, `<span class="par-meio"><i></i>${anterior} | 2026</span>`)}
+      ${legendaGrupos(LEGENDA_SITUACAO, ajuda)}
       <p class="par-nota">${esc(regra)} Esquerda da UF = ${anterior}; direita = 2026.</p></div>
     <div><div class="par-caixa"><h3 class="par-h">Viradas (${viradas.length})</h3>${viradas.map(itemV).join('') || '<p class="par-nota">Nenhuma até agora.</p>'}</div>
     <div class="par-caixa"><h3 class="par-h">Bastiões (mesmo ${modo === 'partido' ? 'partido' : 'bloco'} desde ${anos[0]})</h3><div>${bastioes.map((s) => `<span class="par-tag" style="border-color:${cor(lider(s, anos[0]))}">${esc(s.uf.toUpperCase())}</span>`).join('') || '<p class="par-nota">Nenhum.</p>'}</div></div></div></div>`;
