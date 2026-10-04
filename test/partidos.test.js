@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { criarPartidos, criarTradutor, carregarPartidos } from '../src/partidos.js';
 import { contar, eleitosDoAno, lerCsv } from '../scripts/gerar-eleitos.js';
 import {
-  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, estadosHtml, ganhosHtml, partidosHtml, placarHtml, serieHtml,
+  CARGOS_PARTIDOS, PRESIDENTE, agrupar, hashPartidos, seletorCargosHtml, aoVivo, bancadaDoAno, blocoDaBancada, blocosDe, criarModelo, estadosHtml, partidosHtml, placarHtml, serieHtml,
 } from '../public/partidos.js';
 import { resumir } from '../src/normalize.js';
 
@@ -106,20 +106,32 @@ test('aoVivo: Câmara usa as vagas por partido; majoritário usa quem lidera ond
   assert.deepEqual(gov.naFrente, { PT: 1 });
 });
 
-test('criarModelo: base é a eleição anterior; estados mudam de bloco e o parcial é marcado', () => {
+test('criarModelo: base é a eleição anterior; só governador tem mapa de estados e o parcial é marcado', () => {
   const itens = [
     { uf: 'sp', vagas: 8, eleitosPorPartido: { PT: 5 }, cadeirasPorPartido: { PT: 7, PL: 1 } },
     { uf: 'ba', vagas: 6, eleitosPorPartido: { PT: 6 }, cadeirasPorPartido: { PT: 6 } },
   ];
-  const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: ['sp', 'ba'] });
-  assert.equal(m.base.ano, 2022);
-  assert.equal(m.atual.porPartido.PT, 13);
-  const sp = m.estados.find((e) => e.uf === 'sp');
-  const ba = m.estados.find((e) => e.uf === 'ba');
-  assert.equal(sp.blocos[2022], 'direita'); // PL 6 × PT 2
+  const camara = criarModelo({ cargo: cargo(6), historico, itens, ufs: ['sp', 'ba'] });
+  assert.equal(camara.base.ano, 2022);
+  assert.equal(camara.atual.porPartido.PT, 13);
+  assert.equal(camara.estados, null); // a Câmara só tem a visão nacional
+  assert.ok(!partidosHtml(camara, { aba: 'estados' }, ajuda).includes('Viradas por estado'));
+
+  const gov = criarModelo({
+    cargo: cargo(3),
+    historico,
+    itens: [
+      { uf: 'sp', vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [] },
+      { uf: 'ba', vagas: 1, eleitosPorPartido: {}, colocados: [{ partido: 'PT', votos: 5, situacao: 'nenhuma' }] },
+    ],
+    ufs: ['sp', 'ba'],
+  });
+  const sp = gov.estados.find((e) => e.uf === 'sp');
+  const ba = gov.estados.find((e) => e.uf === 'ba');
+  assert.equal(sp.blocos[2022], 'centrao'); // REPUBLICANOS
   assert.equal(sp.blocos[2026], 'esquerda');
-  assert.equal(sp.provisorio, true);
-  assert.equal(ba.provisorio, false);
+  assert.equal(sp.provisorio, false);
+  assert.equal(ba.provisorio, true); // na frente, ainda sem eleito marcado
 });
 
 test('telas: todas as abas renderizam, com e sem histórico', () => {
@@ -127,7 +139,7 @@ test('telas: todas as abas renderizam, com e sem histórico', () => {
   for (const c of CARGOS_PARTIDOS) {
     const m = criarModelo({ cargo: c, historico, itens: c.codigo === 6 ? itens : [], ocupadas: c.codigo === 5 ? [{ partido: 'PT' }] : [], ufs: ['sp', 'ba'] });
     for (const agrupar of ['ideologia', 'partido']) {
-      for (const aba of ['placar', 'ganhos', 'estados', 'serie']) {
+      for (const aba of ['placar', 'estados', 'serie']) {
         const html = partidosHtml(m, { aba, agrupar }, ajuda);
         assert.match(html, /aria-label="Análise"/);
         assert.ok(!html.includes('undefined') && !html.includes('NaN'), `${c.nome}/${aba}/${agrupar}`);
@@ -137,7 +149,6 @@ test('telas: todas as abas renderizam, com e sem histórico', () => {
     assert.match(partidosHtml(sem, { aba: 'serie' }, ajuda), /gerar-eleitos/);
     assert.match(placarHtml(sem, ajuda), /par-cards/);
   }
-  assert.match(ganhosHtml(criarModelo({ cargo: cargo(6), historico, itens, ufs: [] }), ajuda), /par-div/);
   assert.match(serieHtml(criarModelo({ cargo: cargo(6), historico, itens, ufs: [] }), ajuda), /polyline/);
 });
 
@@ -182,13 +193,37 @@ test('por partido: o mapa lidera pelo partido, não pelo bloco, e os endereços 
   const html = partidosHtml(m, { aba: 'estados', agrupar: 'partido' }, { ...ajuda, corPartido: (s) => (s === 'PT' ? '#d00' : '#00d') });
   assert.match(html, /#\/partidos\/3\/placar\/partido/);
   assert.match(html, /Bastiões \(mesmo partido/);
-  assert.match(partidosHtml(m, { aba: 'placar' }, ajuda), /#\/partidos\/3\/ganhos"/);
+  assert.match(partidosHtml(m, { aba: 'placar' }, ajuda), /#\/partidos\/3\/serie"/);
 });
 
 test('Presidente na aba Análises: o endereço é o do comparativo e o seletor de cargo o inclui', () => {
   assert.equal(hashPartidos(1, 'placar', 'partido'), '#/partidos/1/comparativo');
-  assert.equal(hashPartidos(6, 'ganhos', 'partido'), '#/partidos/6/ganhos/partido');
+  assert.equal(hashPartidos(6, 'serie', 'partido'), '#/partidos/6/serie/partido');
+  assert.equal(hashPartidos(6, 'placar', 'ideologia', '2022'), '#/partidos/6/placar/2022');
+  assert.equal(hashPartidos(6, 'placar', 'partido', 'delta'), '#/partidos/6/placar/partido/delta');
+  assert.equal(hashPartidos(6, 'placar', 'ideologia', '2026'), '#/partidos/6/placar');
   const html = seletorCargosHtml({ cargos: [PRESIDENTE, ...CARGOS_PARTIDOS], atual: 1, aba: 'placar', modo: 'ideologia', esc: (t) => t });
   assert.match(html, /href="#\/partidos\/1\/comparativo" aria-current="page">Presidente/);
   assert.match(html, /href="#\/partidos\/6\/placar"/);
+});
+
+test('placar: dois hemiciclos (eleição anterior e 2026) e três leituras dos cartões', () => {
+  const itens = [{ uf: 'sp', vagas: 8, eleitosPorPartido: { PT: 5 }, cadeirasPorPartido: { PT: 5, PL: 1 } }];
+  const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: [] });
+  const html = placarHtml(m, ajuda);
+  assert.equal(html.match(/class="par-hemi"/g).length, 2);
+  assert.match(html, /Eleição de 2022/);
+  assert.match(html, /2026 · em apuração/);
+  for (const id of ['2022', 'delta']) assert.match(html, new RegExp(`/partidos/6/placar/${id}"`));
+
+  const valor = (cartoes, nome) => {
+    const h = placarHtml(m, { ...ajuda, cartoes });
+    return new RegExp(`${nome}</span><b class="[^"]*">([^<]+)</b>`).exec(h)?.[1];
+  };
+  assert.equal(valor('2022', 'Esquerda'), '7'); // PT 7 em 2022 (SP 2 + BA 5)
+  assert.equal(valor('2026', 'Esquerda'), '5');
+  assert.equal(valor('delta', 'Esquerda'), '-2');
+
+  const sem = criarModelo({ cargo: cargo(6), historico: null, itens: [], ufs: [] });
+  assert.equal(placarHtml(sem, ajuda).match(/class="par-hemi"/g).length, 1); // sem histórico, só o de 2026
 });

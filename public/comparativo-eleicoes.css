@@ -71,13 +71,5 @@
   .comp-imp .b { display: none; }
 }
 
-.detalhe .seg-periodo { margin: 12px 0 0; }
-
 .comp-validos { margin-top: 10px; }
 .comp-validos small { font-weight: 500; }
-
-/* Celular: os três períodos cabem na largura do painel. */
-@media (max-width: 520px) {
-  .seg-periodo { display: flex; max-width: 100%; }
-  .seg-periodo .aba { flex: 1 1 0; padding-inline: 6px; text-align: center; white-space: nowrap; font-size: 13px; }
-}
