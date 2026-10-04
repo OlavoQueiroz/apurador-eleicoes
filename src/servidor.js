@@ -120,16 +120,19 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       if (cargo !== 1) return indisponivel('Escolha uma UF: o modelo trabalha com os municípios de uma UF por vez.');
       const ufs = [...(await municipios.listar(eleicao)).keys()];
       const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao.estado.get(`${cargo}:${u}`)?.dados ?? null }));
-      const prontas = fotos.filter(({ foto }) => !foto.primeiraCarga && !foto.carregando).length;
-      if (prontas < ufs.length) {
+      const prontas = fotos.filter(({ foto }) => !foto.primeiraCarga).length;
+      if (prontas === 0) {
         return indisponivel('Carregando os municípios de todas as UFs para somar o Brasil…', {
-          carregando: true, progresso: { feitos: prontas, total: ufs.length, unidade: 'UFs' },
+          carregando: true, progresso: { feitos: 0, total: ufs.length, unidade: 'UFs' },
         });
       }
       const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarDaUf(u, foto, ufDados), ...tamanhoUf({ foto, ufDados }) }));
+      const proj = projetarBrasil(porUf, { limite: 50, modelo: modeloId, anteriorPorUf: anterior?.porUf() ?? null });
+      const carregando = prontas < ufs.length || fotos.some(({ foto }) => foto.carregando);
       return {
-        ...projetarBrasil(porUf, { limite: 50, modelo: modeloId, anteriorPorUf: anterior?.porUf() ?? null }),
-        carregando: false,
+        ...proj,
+        carregando,
+        ...(carregando ? { progresso: { feitos: prontas, total: ufs.length, unidade: 'UFs' } } : {}),
         atualizadoEm: Math.min(...fotos.map(({ foto }) => foto.atualizadoEm ?? Infinity)),
       };
     }
