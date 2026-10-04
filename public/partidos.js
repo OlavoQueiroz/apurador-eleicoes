@@ -102,7 +102,6 @@ function bancadaUfHistorica(historico, ano, chave, uf) {
 export function situacaoGovernador(item) {
   const colocados = item.colocados ?? [];
   if (somaValores(item.eleitosPorPartido ?? {}) >= item.vagas) return 'eleito';
-  if (flagsEleitoPelaConta(item, 3)[0]) return 'eleito'; // dado como eleito pela conta do painel (public/chances.js)
   if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'segundo-turno';
   const [daConta] = elegiveisPelaConta({
     votos: colocados.map((c) => c.votos), k: quantosClassificam({ cargo: 3, vagas: item.vagas, turno: item.turno }), primeiroTurno: item.turno !== 2,

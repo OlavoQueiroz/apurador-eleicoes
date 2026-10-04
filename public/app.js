@@ -1059,10 +1059,17 @@ function eleitosNomeANomeHtml(codigo, itens) {
   const rotulo = codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
   return `<h3 class="secao">${rotulo} (${linhas.length}${codigo === 3 ? ' de 27' : ''})</h3>
     <div class="tabela-rolagem"><table class="tabela tabela-eleitos"><thead><tr><th>UF</th><th>${codigo === 3 ? 'Governador' : 'Senador'}</th><th class="num">% dos válidos</th><th>Situação</th></tr></thead><tbody>
-    ${linhas.map(({ uf, c, conta, pctSecoes }) => `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>
+    ${linhas.map(({ uf, c, conta, pctSecoes }, i) => {
+    // Senado: o nome da UF aparece uma vez só, com o número de vagas já definidas, abrangendo as linhas dos eleitos dela.
+    const primeira = i === 0 || linhas[i - 1].uf !== uf;
+    const doUf = linhas.filter((l) => l.uf === uf).length;
+    const vagasUf = itens.find((x) => x.uf === uf)?.item.vagas || 1;
+    const celulaUf = primeira ? `<td rowspan="${doUf}">${esc(nomeUf(uf))}${vagasUf > 1 ? `<br><span class="muted pequeno">${doUf} de ${vagasUf} vagas</span>` : ''}</td>` : '';
+    return `<tr class="clicavel" data-uf="${uf}">${celulaUf}
       <td><div class="colocado-nome">${esc(c.nomeUrna)}</div><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></td>
       <td class="num">${fmtPct(c.pct)}</td>
-      <td>${conta ? `<span class="pill eleito" title="${esc(dicaEleito(conta, c.pct, pctSecoes))}">Eleito*</span>` : '<span class="pill eleito">Eleito (TSE)</span>'}</td></tr>`).join('')}
+      <td>${conta ? `<span class="pill eleito" title="${esc(dicaEleito(conta, c.pct, pctSecoes))}">Eleito*</span>` : '<span class="pill eleito">Eleito (TSE)</span>'}</td></tr>`;
+  }).join('')}
     </tbody></table></div>
     <p class="muted pequeno">${fmtInt(nTse)} confirmado(s) pelo TSE e ${fmtInt(linhas.length - nTse)} pela conta do painel* (o TSE ainda não os marcou).</p>`;
 }
@@ -1110,7 +1117,10 @@ function detalheAgregadoHtml() {
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
           <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}${fora ? ' · sem chance' : ''}${vence ? ` · <b class="eleito-conta" title="${esc(dicaEleito(vence, c.pct, pctSecoes))}">eleito*</b>` : ''}</span></div></td>`);
     const { campo, dir } = estado.ordemUfs;
-    const ordenado = itens.slice().sort(campo === 'pct'
+    // Senado: o estado com as duas vagas definidas já está em "Senadores eleitos" e sai desta lista.
+    const definidas = meta.codigo === 5 ? itens.filter(({ item }) => eleitosDaUf(item, 5)?.estado === 'eleita') : [];
+    const emAberto = itens.filter((x) => !definidas.includes(x));
+    const ordenado = emAberto.sort(campo === 'pct'
       ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
       : (a, b) => dir * porNome(a, b));
     const cabecalho = (id, rotulo, classe = '') => `<th${classe ? ` class="${classe}"` : ''} aria-sort="${campo === id ? (dir > 0 ? 'ascending' : 'descending') : 'none'}">
@@ -1128,7 +1138,9 @@ function detalheAgregadoHtml() {
       return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0], item.secoes.pctTotalizadas)}${celula(b, fora[1], eleitos[1], item.secoes.pctTotalizadas)}${celula(c, fora[2], eleitos[2], item.secoes.pctTotalizadas)}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
-    tabela = `<h3 class="secao">Mais votados em cada UF</h3>
+    tabela = `<h3 class="secao">${definidas.length ? `Mais votados nos estados ainda em aberto (${emAberto.length})` : 'Mais votados em cada UF'}</h3>
+      ${definidas.length ? `<p class="muted pequeno">${definidas.length === 1 ? '1 estado já tem' : `${definidas.length} estados já têm`} as duas vagas definidas (TSE ou pela conta do painel*) e ${definidas.length === 1 ? 'aparece' : 'aparecem'} só em "Senadores eleitos".</p>` : ''}
+      ${emAberto.length ? '' : '<p class="aviso-bloco">Todos os estados já têm as vagas definidas.</p>'}
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
         <thead><tr>${cabecalho('uf', 'UF')}<th>1º</th><th>2º</th><th>3º</th>${cabecalho('pct', 'Totalizadas', 'num')}</tr></thead>
         <tbody>${linhas}</tbody></table></div>
