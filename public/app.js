@@ -511,21 +511,16 @@ function rotulosMapaHtml(ativas) {
   }).join('');
 }
 
-function legendaHtml({ lideres = null, unidade = 'UF' } = {}) {
+function legendaHtml({ unidade = 'UF' } = {}) {
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
   // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
   const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
-  if (ehMajoritario(estado.cargo)) {
-    const partidos = [...new Set(lideres ?? itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
-    const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-    if (unidade === 'UF' && estado.visao === 'projecao') {
-      const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
-      const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
-      return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
-        <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
-    }
-    return `<div class="leg-linha"><span class="leg-titulo">Mais votado ${unidade === 'UF' ? 'na UF' : 'no município'}</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
-      ${totalizadas}`;
+  // Fora da projeção não há chave de cores dos partidos: o painel ao lado já mostra a etiqueta colorida de cada um.
+  if (ehMajoritario(estado.cargo) && unidade === 'UF' && estado.visao === 'projecao') {
+    const vencedores = [...new Set([...(estado.mapaProj?.porUf.values() ?? [])].map((x) => x.lider.partido))].sort();
+    const itens = vencedores.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
+      <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
   }
   return totalizadas;
 }
@@ -551,7 +546,7 @@ function renderGrade() {
   if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
   destacarMunicipio();
   $('#legenda').innerHTML = municipal
-    ? legendaHtml({ lideres: estado.mun.resultados.municipios.map((m) => m.lider?.partido).filter(Boolean), unidade: 'município' })
+    ? legendaHtml({ unidade: 'município' })
       + (estado.visao === 'projecao' ? '<p class="muted pequeno leg-nota">Municípios: apuração atual. A projeção é por UF.</p>' : '')
     : legendaHtml();
 }
