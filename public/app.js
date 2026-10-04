@@ -51,7 +51,7 @@ const estado = {
   uf: 'br',
   detalhe: undefined, // undefined = carregando; null = sem dado
   visao: 'apuracao', // 'apuracao' (dados do TSE), 'projecao' (estimativa do painel) ou 'comparativo' (2026 × 2022, só presidente)
-  comparativo: { periodo: PADRAO, bases: {}, regiao: null }, // período comparado, base de cada período (carregada uma vez) e região aberta
+  comparativo: { periodo: PADRAO, bases: {}, regiao: null, terceiros: null }, // período, base de cada período (carregada uma vez), região aberta e terceiros nas barras (null = os padrão do período)
   modelo: 'ingenuo',
   projecao: undefined, // mesmo contrato de `detalhe`
   comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
@@ -525,7 +525,7 @@ function comparativoPainelHtml() {
   const topo = `<div class="detalhe-topo"><div><h2>Presidente · ${esc(p.rotulo)}</h2></div></div>${seletorPeriodoHtml(periodo, hrefPeriodo)}`;
   if (base === undefined) return `${topo}<p class="vazio-msg">Carregando…</p>`;
   if (!base?.disponivel) return `${topo}<p class="aviso-bloco espera">${esc(base?.motivo ?? 'Não consegui carregar os dados deste período.')}</p>`;
-  return comparativoHtml(modeloComparativo(), { uf: estado.uf, regiao: estado.comparativo.regiao }, {
+  return comparativoHtml(modeloComparativo(), { uf: estado.uf, regiao: estado.comparativo.regiao, terceiros: estado.comparativo.terceiros }, {
     esc, fmtInt, corPartido, nomeUf, hrefUf: (uf) => hashPara(1, uf), hrefPeriodo, demo: estado.meta.demo,
   });
 }

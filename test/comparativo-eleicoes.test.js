@@ -5,7 +5,7 @@ import { Apuracao } from '../src/apuracao.js';
 import { criarAnterior } from '../src/anterior.js';
 import { criarServidor } from '../src/servidor.js';
 import {
-  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, itemDoAtual, regiaoDaUf, seletorPeriodoHtml, FRACAO_MINIMA, PERIODOS,
+  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, terceirosSelecionados, itemDoAtual, regiaoDaUf, seletorPeriodoHtml, FRACAO_MINIMA, PERIODOS,
 } from '../public/comparativo-eleicoes.js';
 
 const ajuda = {
@@ -94,11 +94,11 @@ test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, r
 
   const html = comparativoHtml(modelo, ui, ajuda);
   assert.match(html, /Presidente · 2026 × 2022/);
-  assert.match(html, /Impacto no saldo nacional/);
+  assert.match(html, /<tr class="comp-brasil">/); // a linha Brasil traz o total
   assert.match(html, /1 de 2 UFs com apuração suficiente/);
   assert.match(html, /data-comp-regiao="Nordeste"/);
-  assert.match(html, /href="#\/1\/ba\/comparativo"/);
-  assert.match(html, /30% apurado/); // SP ainda abaixo do mínimo
+  assert.match(html, /href="#\/1\/ba\/comparativo"/); // a região de maior impacto (Nordeste, com a BA pronta) já vem aberta
+  assert.match(comparativoHtml(modelo, { uf: 'br', regiao: 'Sudeste' }, ajuda), /30% apurado/); // SP ainda abaixo do mínimo
   assert.match(html, /Lula contra Lula 2022 · Flávio Bolsonaro contra Bolsonaro 2022/);
   assert.match(html, /href="#\/1\/br\/comparativo\/2022x2018"/); // seletor de período
   assert.match(html, /não é transferência de votos/i);
@@ -106,11 +106,11 @@ test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, r
 
 test('comparativoHtml (região aberta): lista só as UFs da região e oferece voltar ao Brasil', () => {
   const html = comparativoHtml(modelo, { uf: 'br', regiao: 'Nordeste' }, ajuda);
-  assert.match(html, /UFs do Nordeste/);
+  assert.match(html, /data-comp-regiao="Nordeste"[^>]*aria-expanded="true"/);
   assert.match(html, /href="#\/1\/ba\/comparativo"/);
   assert.doesNotMatch(html, /href="#\/1\/sp\/comparativo"/);
   assert.match(html, /data-comp-limpar/);
-  assert.match(html, /data-comp-regiao="Nordeste"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-comp-regiao="Sudeste"[^>]*aria-expanded="false"/);
 });
 
 test('comparativoHtml (UF): cartões das duas candidaturas, variação e impacto; UF abaixo do mínimo avisa', () => {
@@ -167,10 +167,10 @@ const mapa2018 = { 13: [{ de: '13', peso: 1 }], 22: [{ de: '17', peso: 1 }] };
 
 test('anterior.porUf traduz pelo mapeamento e brutoPorUf devolve os votos sem tradução', () => {
   const a22 = criarAnterior(h2022, mapa2022);
-  assert.deepEqual(a22.porUf(), { ba: { validos: 145, herdados: { 13: 100, 22: 20 } }, sp: { validos: 10, herdados: { 13: 7, 22: 1.5 } } });
+  assert.deepEqual(a22.porUf(), { ba: { validos: 145, votos: { 13: 100, 22: 40, 12: 5 }, herdados: { 13: 100, 22: 20 } }, sp: { validos: 10, votos: { 13: 7, 22: 3 }, herdados: { 13: 7, 22: 1.5 } } });
   assert.deepEqual(a22.brutoPorUf().ba, { validos: 145, votos: { 13: 100, 22: 40, 12: 5 } });
   const a18 = criarAnterior(h2018, mapa2018);
-  assert.deepEqual(a18.porUf().ba, { validos: 70, herdados: { 13: 20, 22: 50 } }); // o 22 de agora herda o 17 de 2018
+  assert.deepEqual(a18.porUf().ba, { validos: 70, votos: { 13: 20, 17: 50 }, herdados: { 13: 20, 22: 50 } }); // o 22 de agora herda o 17 de 2018
 });
 
 test('/api/comparativo/presidente?periodo=...: base e, nos períodos encerrados, o "atual"; erros claros', async () => {
@@ -186,13 +186,13 @@ test('/api/comparativo/presidente?periodo=...: base e, nos períodos encerrados,
     assert.equal(padrao.periodo, '2026x2022');
     assert.equal(padrao.vivo, true);
     assert.equal(padrao.atual, null);
-    assert.deepEqual(padrao.ufs.ba, { validos: 145, herdados: { 13: 100, 22: 20 } });
+    assert.deepEqual(padrao.ufs.ba, { validos: 145, votos: { 13: 100, 22: 40, 12: 5 }, herdados: { 13: 100, 22: 20 } });
 
     const encerrado = await (await fetch(`${urlCompleto}/api/comparativo/presidente?periodo=2022x2018`)).json();
     assert.equal(encerrado.disponivel, true);
     assert.equal(encerrado.vivo, false);
     assert.equal(encerrado.anoBase, 2018);
-    assert.deepEqual(encerrado.ufs.ba, { validos: 70, herdados: { 13: 20, 22: 50 } });
+    assert.deepEqual(encerrado.ufs.ba, { validos: 70, votos: { 13: 20, 17: 50 }, herdados: { 13: 20, 22: 50 } });
     assert.deepEqual(encerrado.atual.ufs.ba, { validos: 145, votos: { 13: 100, 22: 40, 12: 5 } });
 
     const aoVivo2018 = await (await fetch(`${urlCompleto}/api/comparativo/presidente?periodo=2026x2018`)).json();
@@ -265,25 +265,64 @@ test('escala do mapa: no mínimo 8 p.p., cresce com o maior saldo para as UFs n�
   assert.ok(forcas.includes(100) && forcas.some((f) => f < 100));
 });
 
-test('total do 1º turno em cada eleição: votos válidos e votação de cada candidatura, no Brasil e na UF', () => {
-  const encerrada = {
-    vivo: false,
-    ufs: { ba: { validos: 1000, herdados: { 13: 300, 22: 400 } }, zz: { validos: 100, herdados: { 13: 10, 22: 60 } } },
-    atual: { ufs: { ba: { validos: 1200, votos: { 13: 700, 22: 200 } }, zz: { validos: 150, votos: { 13: 20, 22: 100 } } } },
-  };
-  const periodo = PERIODOS['2022x2018'];
-  const m = calcular(encerrada, itemDoAtual(encerrada, null), { periodo });
-  assert.equal(m.nacional.base.validos, 1100); // com o exterior
-  assert.equal(m.nacional.base.pt.votos, 310);
-  perto(m.nacional.atual.pt.pct, (100 * 720) / 1350);
-  const html = comparativoHtml(m, { uf: 'br', regiao: null }, ajuda);
-  assert.match(html, /Total do 1º turno, Brasil/);
-  assert.match(html, /<span class="cab num">2018<\/span><span class="cab num">2022<\/span>/);
-  assert.match(html, /<b>1100<\/b>/);
-  assert.match(html, /<b>1350<\/b>/);
-  const ba = comparativoHtml(m, { uf: 'ba', regiao: null }, ajuda);
+const encerrada = {
+  vivo: false,
+  ufs: {
+    ba: { validos: 1000, votos: { 13: 300, 17: 400, 12: 150, 45: 50 }, herdados: { 13: 300, 22: 400 } },
+    sp: { validos: 3000, votos: { 13: 500, 17: 1800, 12: 400, 45: 200 }, herdados: { 13: 500, 22: 1800 } },
+    rs: { validos: 1500, votos: { 13: 400, 17: 700, 12: 200, 45: 100 }, herdados: { 13: 400, 22: 700 } },
+    zz: { validos: 100, votos: { 13: 10, 17: 60, 12: 5, 45: 5 }, herdados: { 13: 10, 22: 60 } },
+  },
+  atual: { ufs: {
+    ba: { validos: 1200, votos: { 13: 700, 22: 200, 12: 40, 15: 30 } },
+    sp: { validos: 3000, votos: { 13: 1300, 22: 1500, 12: 100, 15: 150 } },
+    rs: { validos: 1500, votos: { 13: 600, 22: 700, 12: 50, 15: 60 } },
+    zz: { validos: 150, votos: { 13: 20, 22: 100, 12: 10, 15: 5 } },
+  } },
+};
+const periodo2218 = PERIODOS['2022x2018'];
+const m2218 = calcular(encerrada, itemDoAtual(encerrada, null), { periodo: periodo2218 });
+
+test('total do 1º turno em cada eleição: linha Brasil com votos válidos (com o exterior) e barras PT × Bolsonaro', () => {
+  assert.equal(m2218.nacional.base.validos, 5600); // com o exterior
+  assert.equal(m2218.nacional.base.pt.votos, 1210);
+  perto(m2218.nacional.atual.pt.pct, (100 * 2620) / 5850);
+  perto(m2218.nacional.base.outros.ciro.pct, (100 * 755) / 5600);
+  assert.equal(m2218.nacional.base.outros.tebet.votos, 0); // só concorreu em 2022
+  const html = comparativoHtml(m2218, { uf: 'br', regiao: null }, ajuda);
+  assert.match(html, /<tr class="comp-brasil">/);
+  assert.match(html, /0,0 → 0,0 mi votos válidos/);
+  assert.match(html, /<th>2018<\/th><th>2022<\/th>/);
+  assert.doesNotMatch(html, /comp-hero/); // sem o número gigante
+  const ba = comparativoHtml(m2218, { uf: 'ba', regiao: null }, ajuda);
   assert.match(ba, /Votos válidos no 1º turno de 2018 <b>1000<\/b>/);
   assert.match(ba, /de 2022 <b>1200<\/b>/);
+});
+
+test('comparativoHtml (Brasil): regiões e UFs ordenadas pelo maior impacto, só a região de maior impacto aberta', () => {
+  const html = comparativoHtml(m2218, { uf: 'br', regiao: null }, ajuda);
+  const pos = (n) => html.indexOf(`data-comp-regiao="${n}"`);
+  assert.ok(pos('Sudeste') < pos('Nordeste') && pos('Nordeste') < pos('Sul'), 'Sudeste (SP, +20) > Nordeste (BA, +9) > Sul (RS, +4)');
+  assert.match(html, /data-comp-regiao="Sudeste"[^>]*aria-expanded="true"/);
+  assert.match(html, /href="#\/1\/sp\/comparativo"/);
+  assert.doesNotMatch(html, /href="#\/1\/rs\/comparativo"/); // Sul fechada
+  assert.match(comparativoHtml(m2218, { uf: 'br', regiao: 'Sul' }, ajuda), /href="#\/1\/rs\/comparativo"/);
+});
+
+test('terceiro candidato (só 2022 × 2018): chips, Ciro por padrão, escolha do usuário muda as barras', () => {
+  assert.deepEqual(PERIODOS['2026x2022'].outros, []);
+  assert.equal(comparativoHtml(modelo, { uf: 'br', regiao: null }, ajuda).includes('data-comp-terceiro'), false);
+  assert.deepEqual(terceirosSelecionados(periodo2218, {}), ['ciro']);
+  assert.deepEqual(terceirosSelecionados(periodo2218, { terceiros: ['tebet', 'xx'] }), ['tebet']); // id desconhecido some
+  const padrao = comparativoHtml(m2218, { uf: 'br', regiao: null }, ajuda);
+  assert.match(padrao, /data-comp-terceiro="ciro" aria-pressed="true"/);
+  assert.match(padrao, /data-comp-terceiro="alckmin" aria-pressed="false"/);
+  assert.match(padrao, /Ciro Gomes <small[^>]*>[\d,]+% → [\d,]+% no Brasil/);
+  assert.match(padrao, /title="PT [\d,]+% · Ciro Gomes [\d,]+% · demais/);
+  const nenhum = comparativoHtml(m2218, { uf: 'br', regiao: null, terceiros: [] }, ajuda);
+  assert.doesNotMatch(nenhum, /title="PT [\d,]+% · Ciro/);
+  const alck = comparativoHtml(m2218, { uf: 'br', regiao: null, terceiros: ['alckmin'] }, ajuda);
+  assert.match(alck, /Geraldo Alckmin <small[^>]*>[\d,]+% no Brasil, só em 2018/);
 });
 
 test('2018 como base: o cartão do PT diz Haddad e Lula, e a nota explica que Lula não concorreu', () => {

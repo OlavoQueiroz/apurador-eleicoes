@@ -4,36 +4,44 @@
 .uf.fora { opacity: 0.35; }
 .leg-div { background: linear-gradient(90deg, var(--esq), var(--vazio), var(--dir)); }
 
-.comp-resumo { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 4px; }
-.comp-hero { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.comp-hero b { font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; }
-.comp-hero small { font-size: 15px; font-weight: 600; color: var(--muted); }
 .comp-nota { margin-top: 10px; }
 
-/* Tabelas de impacto: região e UF, com barra centrada no zero (azul à esquerda = Flávio, vermelho à direita = Lula). */
-.comp-tabela { margin-top: 16px; display: flex; flex-direction: column; }
-.comp-cabeca, .comp-linha { display: grid; grid-template-columns: minmax(150px, 1.6fr) 56px minmax(90px, 2fr) 62px; gap: 8px; align-items: center; padding: 6px 8px; }
-.comp-cabeca { padding-bottom: 4px; font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-.comp-cabeca > :nth-child(2), .comp-cabeca > :nth-child(4) { text-align: right; }
-.comp-escala { display: flex; justify-content: space-between; letter-spacing: 0; text-transform: none; font-weight: 600; }
-.comp-linha { width: 100%; border: 0; border-radius: 9px; background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; }
-a.comp-linha, button.comp-linha { cursor: pointer; }
-a.comp-linha:hover, button.comp-linha:hover { background: var(--surface-2); }
-.comp-regiao { font-weight: 650; }
-.comp-regiao[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--text); }
-.comp-resto { background: var(--surface-2); }
-.comp-linha .nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.comp-linha .nome small { font-weight: 400; font-size: 11.5px; }
-.comp-linha .peso { text-align: right; font-size: 12px; font-weight: 400; color: var(--muted); }
-.comp-linha .valor { text-align: right; }
-.comp-barra { position: relative; display: grid; grid-template-columns: 1fr 1fr; height: 14px; }
-.comp-barra::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line); }
-.comp-barra .neg, .comp-barra .pos { display: flex; align-items: center; }
-.comp-barra .neg { justify-content: flex-end; }
-.comp-barra i { display: block; height: 10px; background: var(--cor); }
-.comp-barra .neg i { border-radius: 3px 0 0 3px; }
-.comp-barra .pos i { border-radius: 0 3px 3px 0; }
-.comp-limpar { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; cursor: pointer; }
+/* Tabela única: Brasil, regiões (por impacto) e, na região aberta, as UFs. Uma barra de 100% por eleição. */
+.comp-tab { width: 100%; margin-top: 14px; border-collapse: collapse; font-size: 13px; }
+.comp-tab th { padding: 4px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); text-align: right; white-space: nowrap; }
+.comp-tab th small { font-weight: 500; letter-spacing: 0; text-transform: none; }
+.comp-tab th.nm, .comp-tab td.nm { text-align: left; }
+.comp-tab td { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: middle; line-height: 1.25; }
+.comp-tab td.nm { min-width: 0; white-space: nowrap; }
+.comp-tab td.nm small { display: block; font-weight: 400; font-size: 11.5px; }
+.comp-tab td.nm a { color: inherit; text-decoration: none; }
+.comp-tab td.nm a:hover { text-decoration: underline; }
+.comp-tab td.peso { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.comp-brasil td { border-bottom: 2px solid var(--line); }
+.comp-brasil[role="button"], .comp-regiao { cursor: pointer; }
+.comp-regiao td { background: var(--surface-2); font-weight: 700; }
+.comp-regiao:hover td, .comp-brasil[role="button"]:hover td { filter: brightness(0.97); }
+.comp-regiao:focus-visible, .comp-brasil:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.comp-regiao[aria-expanded="true"] td:first-child { box-shadow: inset 3px 0 0 var(--text); }
+.comp-regiao .seta { display: inline-block; width: 14px; color: var(--muted); }
+.comp-uf td.nm { padding-left: 24px; font-weight: 500; }
+.comp-uf td { font-weight: 400; }
+
+.comp-eleicao { display: flex; width: 132px; height: 18px; gap: 1px; margin-left: auto; border-radius: 4px; overflow: hidden; }
+.comp-eleicao i { display: block; min-width: 0; background: var(--cor); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 18px; font-style: normal; text-align: center; overflow: hidden; white-space: nowrap; }
+.comp-eleicao i.demais, .comp-legenda i.demais { background: var(--vazio); }
+.comp-imp { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.comp-imp .b { width: 40px; display: block; }
+.comp-imp .b i { display: block; height: 8px; background: var(--cor); border-radius: 0 3px 3px 0; }
+.comp-imp b { min-width: 44px; font-variant-numeric: tabular-nums; }
+
+.comp-terceiros { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; font-size: 13px; }
+.comp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.comp-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--cor); }
+.comp-chip[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+.comp-legenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; font-size: 12px; }
+.comp-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.comp-legenda i { width: 10px; height: 10px; border-radius: 3px; background: var(--cor); }
 
 /* UF aberta: um cartão por candidatura. */
 .comp-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
@@ -51,22 +59,20 @@ a.comp-linha:hover, button.comp-linha:hover { background: var(--surface-2); }
 .comp-resumo-uf b { color: var(--text); }
 
 @container (max-width: 480px) {
-  .comp-cabeca, .comp-linha { grid-template-columns: minmax(0, 1fr) 46px minmax(80px, 1fr) 56px; gap: 6px; padding: 6px 4px; }
   .comp-cards { grid-template-columns: 1fr; }
+  .comp-tab .peso { display: none; }
+  .comp-tab { font-size: 12px; }
+  .comp-tab th, .comp-tab td { padding-inline: 3px; }
+  .comp-tab td.nm { white-space: normal; }
+  .comp-uf td.nm { padding-left: 14px; }
+  .comp-eleicao { width: 70px; }
+  .comp-imp b { min-width: 0; }
+  .comp-eleicao i { font-size: 0; }
+  .comp-imp .b { display: none; }
 }
 
 .detalhe .seg-periodo { margin: 12px 0 0; }
 
-/* Total do 1º turno em cada eleição: tabela pequena, uma coluna por ano. */
-.comp-titulo-bloco { margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
-.comp-totais { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 22px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 13px; align-items: baseline; }
-.comp-totais .cab { font-size: 12px; font-weight: 700; color: var(--muted); }
-.comp-totais .cab small { font-weight: 500; }
-.comp-totais .nome { display: flex; align-items: center; gap: 8px; }
-.comp-totais .nome i { width: 10px; height: 10px; border-radius: 50%; background: var(--cor); flex: none; }
-.comp-totais .num { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; text-align: right; }
-.comp-totais .num small { color: var(--muted); font-size: 11.5px; }
-.comp-totais .num b { font-variant-numeric: tabular-nums; }
 .comp-validos { margin-top: 10px; }
 .comp-validos small { font-weight: 500; }
 
