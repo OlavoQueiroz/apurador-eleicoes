@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
+import { garantidosNoTopo, vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
 
 test('quantosClassificam: Senado = vagas; presidente e governador = 2 no 1º turno e 1 no 2º', () => {
   assert.equal(quantosClassificam({ cargo: 5, vagas: 2, turno: 1 }), 2);
@@ -78,4 +78,15 @@ test('vitoriaNoPrimeiroTurno: o líder passa de 50% mesmo sem receber mais voto 
   assert.equal(vitoriaNoPrimeiroTurno({ votos: [670, 230, 100], validos: 1000, pctSecoes: 68 }), null);
   assert.equal(vitoriaNoPrimeiroTurno({ votos: [670, 230, 100], validos: 1000, pctSecoes: 90 }), 'pratica');
   assert.equal(vitoriaNoPrimeiroTurno({ votos: [0, 0], validos: 0, pctSecoes: 50 }), null);
+});
+
+test('garantidosNoTopo (Senado, 2 vagas): quem fica entre os 2 primeiros mesmo sem receber mais voto', () => {
+  const eleitorado = { total: 1000, comparecimento: 640, abstencao: 160 }; // faltam 200 aptos (teto); estimado ≈ 184
+  // 1º 600 e 2º 500: o 3º (150) chega a 334 < 500 → os dois estão garantidos
+  assert.deepEqual(garantidosNoTopo({ votos: [600, 500, 150], k: 2, validos: 1100, eleitorado }), ['pratica', 'pratica', null].map((_, i) => (i < 2 ? 'matematica' : null)));
+  // 3º com 400: pode chegar a 600 > 500 → o 2º não está garantido; o 1º (600) só é ultrapassado se o 3º passar de 600: 400+200=600, não passa → garantido
+  assert.deepEqual(garantidosNoTopo({ votos: [600, 500, 400], k: 2, validos: 1100, eleitorado }), ['matematica', null, null]);
+  // sem o eleitorado, pela proporção de seções
+  assert.deepEqual(garantidosNoTopo({ votos: [600, 500, 150], k: 2, validos: 1250, pctSecoes: 90 }), ['pratica', 'pratica', null]);
+  assert.deepEqual(garantidosNoTopo({ votos: [0, 0, 0], k: 2, validos: 0, eleitorado }), [null, null, null]);
 });
