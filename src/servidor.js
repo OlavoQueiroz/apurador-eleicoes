@@ -5,6 +5,7 @@
 //   GET /api/historico/:cargo/:uf?modelo=  evolução gravada: % de cada candidato e projeção ao longo da apuração
 //   GET /api/municipios/:cargo/:uf     líder e apuração de cada município de uma UF
 //   GET /api/projecao/:modelo/:cargo/:uf   estimativa do resultado final (não é dado do TSE)
+//   GET /api/busca?q=&cargo=&uf=       candidatos (do cargo e UF abertos e de todo o resto) e municípios
 //   GET /events                        SSE: um evento "ciclo" a cada rodada de consultas
 
 import http from 'node:http';
@@ -12,6 +13,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { CARGOS } from './tse.js';
 import { lerSerie } from './historico.js';
+import { buscarCandidatos, criarIndiceMunicipios } from './busca.js';
 import { MODELOS, modeloPorId, projetar, projetarEstratificado, projetarBrasil } from './projecao.js';
 
 const TIPOS = {
@@ -27,6 +29,7 @@ const SEM_CACHE = { 'cache-control': 'no-store' };
 
 export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null }) {
   const clientes = new Set();
+  const buscarMunicipios = criarIndiceMunicipios(diretorioPublico);
 
   const enviarJson = (res, status, corpo) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...SEM_CACHE });
@@ -158,6 +161,17 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     if (pathname === '/api/meta') return enviarJson(res, 200, montarMeta());
     if (pathname === '/api/resumo') return enviarJson(res, 200, montarResumo());
+
+    if (pathname === '/api/busca') {
+      const params = new URL(req.url, 'http://localhost').searchParams;
+      const q = (params.get('q') ?? '').slice(0, 80);
+      const cargo = Number(params.get('cargo')) || 0;
+      const uf = params.get('uf') ?? '';
+      return enviarJson(res, 200, {
+        ...buscarCandidatos(apuracao, q, { cargo, uf }),
+        municipios: await buscarMunicipios(q, { uf }),
+      });
+    }
 
     const m = /^\/api\/resultado\/(\d+)\/([a-z]{2})$/.exec(pathname);
     if (m) {

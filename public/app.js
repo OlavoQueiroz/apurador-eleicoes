@@ -1,6 +1,7 @@
 // Painel de apuração: busca /api/*, escuta /events (SSE) e redesenha quando chegam dados novos.
 
 import { MAPA } from './mapa-brasil.js';
+import { iniciarBusca } from './busca.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -47,6 +48,7 @@ const estado = {
   detalhe: undefined, // undefined = carregando; null = sem dado
   mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
   busca: '',
+  destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
   conexao: 'conectando',
   ultimoCicloEm: null,
@@ -179,7 +181,7 @@ function ufPadrao(cargo) {
 }
 
 function lerHash() {
-  const m = /^#\/(\d+)\/([a-z]{2})$/.exec(location.hash);
+  const m = /^#\/(\d+)\/([a-z]{2})(?:\/([cm])\/(\w+))?$/.exec(location.hash);
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
@@ -188,15 +190,61 @@ function lerHash() {
   estado.uf = valida ? ufPedida : ufPadrao(meta.codigo);
   estado.busca = '';
   estado.mostrarTodos = false;
+  estado.destaque = m?.[3] ? { tipo: m[3], id: m[4] } : null;
+  estado.destaqueRolado = false;
 }
 
-window.addEventListener('hashchange', async () => {
+async function aplicarHash() {
   lerHash();
   estado.detalhe = undefined;
   estado.mun = undefined;
   render();
   await atualizar();
-});
+}
+window.addEventListener('hashchange', aplicarHash);
+
+// ---------- busca global ----------
+
+// Cargo em que um município pode ser aberto: o atual, se for majoritário com resultado municipal naquela UF;
+// senão o primeiro que servir.
+function cargoParaMunicipio(uf) {
+  const serve = (c) => [1, 3, 5].includes(c.codigo) && c.abrangencias.includes(uf);
+  return (serve(cargoMeta()) ? cargoMeta() : estado.meta.cargos.find(serve))?.codigo;
+}
+
+function escolherNaBusca(item) {
+  let hash;
+  if (item.tipo === 'candidato') hash = `#/${item.cargo}/${item.uf}/c/${item.sq}`;
+  else {
+    const cargo = cargoParaMunicipio(item.uf);
+    if (!cargo) return;
+    hash = `#/${cargo}/${item.uf}/m/${item.codigo}`;
+  }
+  // Escolher de novo o que já está aberto não muda o hash; redesenha à mão para rolar até ele outra vez.
+  if (location.hash === hash) aplicarHash();
+  else location.hash = hash;
+}
+
+// Município escolhido na busca: contorno destacado no mapa e um cartão com o resultado dele.
+function destacarMunicipio() {
+  if (estado.destaque?.tipo !== 'm' || !modoMunicipal()) return;
+  const forma = $(`path.mun[data-mun="${estado.destaque.id}"]`);
+  if (!forma) return;
+  forma.classList.add('sel');
+  forma.parentNode.append(forma); // por último, para o contorno não ficar escondido pelos vizinhos
+}
+
+function municipioSelecionadoHtml() {
+  if (estado.destaque?.tipo !== 'm') return '';
+  const nome = estado.mun?.geo.municipios[estado.destaque.id]?.n;
+  if (!nome) return '';
+  const m = estado.mun.porCodigo.get(estado.destaque.id);
+  const dado = !m?.secoes?.totalizadas
+    ? '<span class="muted pequeno">Sem votos apurados ainda</span>'
+    : `${ehMajoritario(estado.cargo) && m.lider ? `<span class="pequeno"><b>${esc(m.lider.nomeUrna)}</b> (${esc(m.lider.partido)}) lidera com ${fmtPct(m.lider.pct)} dos válidos · </span>` : ''}<span class="muted pequeno">${fmtPct(m.secoes.pctTotalizadas)} das seções totalizadas</span>`;
+  return `<div class="sel-municipio"><div><b>${esc(nomeProprio(nome))}</b> · ${esc(nomeUf(estado.uf))}<br>${dado}</div>
+    <a href="#/${estado.cargo}/${estado.uf}">Limpar</a></div>`;
+}
 
 // ---------- desenho: abas e mapa ----------
 
@@ -317,6 +365,7 @@ function renderGrade() {
 
   const temTotal = ativas.has('br') || meta.codigo !== 1;
   if (temTotal) $('#grade').insertAdjacentHTML('beforeend', totalBrasilHtml());
+  destacarMunicipio();
   $('#legenda').innerHTML = municipal
     ? legendaHtml({ lideres: estado.mun.resultados.municipios.map((m) => m.lider?.partido).filter(Boolean), unidade: 'município' })
     : legendaHtml();
@@ -428,7 +477,8 @@ function extraCandidato(c) {
 
 function candidatoHtml(c, posicao, largura) {
   const cor = corPartido(c.partido);
-  return `<li style="--cor:${cor}">
+  const destaque = estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? ' class="destaque"' : '';
+  return `<li${destaque} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
       <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong><span class="cand-num">${esc(c.numero)}</span>${extraCandidato(c)}</div>
@@ -485,6 +535,7 @@ function detalheArquivoHtml() {
   }
 
   let lista;
+  let fixado = '';
   if (ehProporcional(d.cargo.codigo)) {
     const termo = estado.busca.trim().toLowerCase();
     const filtrados = termo
@@ -496,6 +547,12 @@ function detalheArquivoHtml() {
     const maisVotado = candidatos[0]?.votos ?? 0;
     const largura = (c) => (maisVotado > 0 ? (c.votos / maisVotado) * 100 : 0);
     const posicaoGeral = new Map(candidatos.map((c, i) => [c.sq, i + 1]));
+    // Candidato vindo da busca global que ficou fora da parte visível da lista: aparece fixado acima dela.
+    const escolhido = estado.destaque?.tipo === 'c' && !termo ? candidatos.find((c) => String(c.sq) === estado.destaque.id) : null;
+    fixado = escolhido && !visiveis.includes(escolhido)
+      ? `<h3 class="secao sel-fixado">Candidato selecionado</h3>
+        <ol class="candidatos" style="list-style:none;padding:0">${candidatoHtml(escolhido, posicaoGeral.get(escolhido.sq), largura(escolhido))}</ol>`
+      : '';
     lista = `<div class="ferramentas">
         <input id="busca" type="search" placeholder="Buscar candidato, número ou partido" value="${esc(estado.busca)}" autocomplete="off">
         ${termo || filtrados.length <= 20 ? '' : `<button class="botao" id="mostrar-todos">${estado.mostrarTodos ? 'Mostrar só os 20 primeiros' : `Mostrar todos (${fmtInt(filtrados.length)})`}</button>`}
@@ -516,6 +573,7 @@ function detalheArquivoHtml() {
     ${progressoHtml(d.secoes)}
     ${numerosHtml(d)}
     ${topo ? `<div style="margin-top:14px">${topo}</div>` : ''}
+    ${fixado}
     <h3 class="secao">${ehProporcional(d.cargo.codigo) ? 'Candidatos mais votados' : 'Candidatos'}</h3>
     ${lista}`;
 }
@@ -607,7 +665,7 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  raiz.innerHTML = voltarHtml() + (ehAgregado() ? detalheAgregadoHtml() : detalheArquivoHtml());
+  raiz.innerHTML = voltarHtml() + municipioSelecionadoHtml() + (ehAgregado() ? detalheAgregadoHtml() : detalheArquivoHtml());
 
   const busca = $('#busca', raiz);
   if (busca) {
@@ -630,6 +688,12 @@ function renderDetalhe() {
     });
   });
   window.scrollTo({ top: rolagem });
+  // Candidato escolhido na busca: rola até ele uma vez, quando o detalhe já tiver carregado.
+  const alvo = !estado.destaqueRolado && $('.candidatos > li.destaque, .sel-fixado + .candidatos > li', raiz);
+  if (alvo) {
+    estado.destaqueRolado = true;
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 
 function render() {
@@ -686,6 +750,13 @@ async function iniciar() {
 
   lerHash();
   iniciarDica();
+  iniciarBusca({
+    raiz: $('#busca-global'),
+    contexto: () => ({ cargo: estado.cargo, uf: estado.uf }),
+    nomeCargo: (codigo) => cargoMeta(codigo)?.nome ?? `Cargo ${codigo}`,
+    nomeUf, nomeProprio, corPartido, esc, fmtPct,
+    aoEscolher: escolherNaBusca,
+  });
   await atualizar();
   conectar();
   setInterval(renderEstado, 1000);
