@@ -74,7 +74,9 @@ export function listarCadeiras(bancadas, pendentes) {
   const cadeiras = [];
   for (const b of bancadas) {
     for (let i = 0; i < b.ocupadas; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: true, pessoa: b.pessoasOcupadas[i] });
-    for (let i = 0; i < b.eleitos; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, pessoa: b.pessoasEleitas[i] });
+    // As últimas cadeiras da bancada são as vagas de partido (nome inferido pelo ranking); as anteriores, eleitos marcados pelo TSE.
+    const porVaga = b.pessoasEleitas.filter((x) => x.inferido).length;
+    for (let i = 0; i < b.eleitos; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, vaga: i >= b.eleitos - porVaga, pessoa: b.pessoasEleitas[i] });
     for (let i = 0; i < b.lideres; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, lider: true, pessoa: b.pessoasLideres[i] });
   }
   for (let i = 0; i < pendentes; i += 1) cadeiras.push({ sigla: null, grupo: null, ocupada: false });
@@ -84,7 +86,7 @@ export function listarCadeiras(bancadas, pendentes) {
 // Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
 const dicaCadeira = (c) => {
   const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
-  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}${c.pessoa?.inferido ? ' · vaga do partido, nome pelo ranking da lista' : ''}`;
+  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}${c.vaga ? ' · vaga do partido, ainda sem eleito marcado (nome pelo ranking da lista)' : ''}`;
 };
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
@@ -119,6 +121,10 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   const pontos = ordemSerpentina(posicoes);
   const definidas = cadeiras.filter((c) => c.sigla && !c.lider).length;
   const naFrente = cadeiras.filter((c) => c.lider).length;
+  const porVagaN = cadeiras.filter((c) => c.vaga).length;
+  const eleitosN = cadeiras.filter((c) => c.sigla && !c.lider && !c.vaga && !c.ocupada).length;
+  const ocupadasN = cadeiras.filter((c) => c.ocupada).length;
+  const pendentesN = cadeiras.length - definidas - naFrente;
   const foco = ui.foco;
 
   // Por ideologia, sem foco, cada cadeira leva a cor do grupo; ao abrir um grupo (ou um partido), a cor do partido.
@@ -138,8 +144,10 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     const r = raio;
     const rotulo = c.sigla ? dicaCadeira(c) : 'Em apuração';
     // Na frente (ainda não eleito): só o contorno na cor do partido.
+    // Vaga do partido (o TSE já deu a vaga, falta marcar quem): preenchimento claro com borda na cor do partido.
     const estilo = [
-      c.lider ? `fill:color-mix(in srgb, ${cor} 12%, var(--surface));stroke:${cor};stroke-width:2.2` : (cor ? `fill:${cor}` : ''), noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
+      c.vaga ? `fill:color-mix(in srgb, ${cor} 35%, var(--surface));stroke:${cor};stroke-width:1.6` : null,
+      c.vaga ? null : c.lider ? `fill:color-mix(in srgb, ${cor} 12%, var(--surface));stroke:${cor};stroke-width:2.2` : (cor ? `fill:${cor}` : ''), noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
     return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" data-dica="${esc(rotulo)}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}></circle>`;
   }).join('');
 
@@ -178,6 +186,17 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     ? `<button type="button" class="cad-voltar" data-cad-foco="">← ${ui.modo === 'ideologia' ? 'Todos os grupos' : 'Todos os partidos'}</button>`
     : '';
 
+  // Chaves de leitura do mapa: só os estados que existem agora, cada um com o desenho que tem nas cadeiras.
+  const chave = (classe, rotulo, n) => `<span class="cad-chave"><i class="${classe}" aria-hidden="true"></i>${esc(rotulo)} <b>${fmtInt(n)}</b></span>`;
+  const estados = [
+    eleitosN ? chave('k-eleito', 'Eleito (marcado pelo TSE)', eleitosN) : '',
+    ocupadasN ? chave('k-eleito', 'Fora de disputa (eleito em 2022)', ocupadasN) : '',
+    porVagaN ? chave('k-vaga', 'Vaga do partido (eleito ainda não marcado)', porVagaN) : '',
+    naFrente ? chave('k-frente', 'Na frente, ainda não eleito', naFrente) : '',
+    pendentesN ? chave('k-pendente', 'Em apuração', pendentesN) : '',
+  ].filter(Boolean).join('');
+  const chaves = estados ? `<div class="cad-estados" role="group" aria-label="Como ler as cadeiras">${estados}</div>` : '';
+
   const frente = naFrente
     ? `<p class="muted pequeno">Contorno: ${fmtInt(naFrente)} cadeiras em que o candidato ainda não foi eleito, mas está entre os mais votados da UF neste momento (tantos quantas forem as vagas). Pode mudar até a totalização.</p>`
     : '';
@@ -202,6 +221,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     <div class="cad-dica" hidden></div>
     <svg class="cad-svg" viewBox="${-MARGEM} ${-MARGEM} ${LARGURA + 2 * MARGEM} ${ALTURA + 2 * MARGEM}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
+    ${chaves}
     ${aviso}${porVaga}${frente}${ocupadas}${naoDefinido}
   </section>`;
 }

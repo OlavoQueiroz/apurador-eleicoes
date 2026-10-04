@@ -356,6 +356,20 @@ function cartoesHtml(modelo, grupos, ajuda) {
   }).join('');
 }
 
+// Como ler os hemiciclos de 2026: cheio = confirmada pelo TSE; contorno = vaga na frente (nos deputados, estimada pelo
+// quociente com os votos já apurados); cinza = sem definição. Só entram os estados que existem agora.
+function chavesHtml(vivo, { esc, fmtInt }) {
+  const chave = (classe, rotulo, n) => `<span class="par-chave"><i class="${classe}" aria-hidden="true"></i>${esc(rotulo)} <b>${fmtInt(n)}</b></span>`;
+  const confirmadas = somaValores(unir(vivo.confirmados, vivo.ocupadas));
+  const frente = somaValores(vivo.naFrente);
+  const itens = [
+    confirmadas ? chave('k-cheio', 'Confirmada pelo TSE', confirmadas) : '',
+    frente ? chave('k-frente', vivo.estimativa ? 'Estimativa (vaga na frente, não é do TSE)' : 'Na frente, ainda não confirmada', frente) : '',
+    vivo.pendentes > 0 ? chave('k-vazia', 'Sem definição', vivo.pendentes) : '',
+  ].filter(Boolean).join('');
+  return itens ? `<div class="par-chaves" role="group" aria-label="Como ler as cadeiras de 2026">${itens}</div>` : '';
+}
+
 export function placarHtml(modelo, ajuda) {
   const { esc, fmtInt } = ajuda;
   const { vivo, base } = modelo;
@@ -372,7 +386,7 @@ export function placarHtml(modelo, ajuda) {
   const figuras = [...historicasDoPlacar(modelo).map((x) => figura(`Eleição de ${x.ano}`, fonteHistorica(x))), figura(vivo.pendentes > 0 ? '2026 · em apuração' : '2026', fonteAoVivo(modelo))];
   const hemiciclos = `<div class="par-figs" style="--n:${figuras.length}">${figuras.join('')}</div>`;
   return `<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>
-    <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
+    <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}${chavesHtml(vivo, ajuda)}
     <p class="par-nota">${fmtInt(confirmadas)} confirmadas pelo TSE em 2026${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
 }
 

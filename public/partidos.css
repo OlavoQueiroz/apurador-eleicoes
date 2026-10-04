@@ -90,3 +90,12 @@
 .par-dica strong { font-size: 13px; }
 
 .par-uf path.par-lis { stroke: none; pointer-events: none; }
+
+/* Chaves de leitura dos hemiciclos de 2026: cheio, contorno (na frente / estimativa) e cinza (sem definição). */
+.par-chaves { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.par-chave { display: inline-flex; align-items: center; gap: 5px; }
+.par-chave i { width: 11px; height: 11px; border-radius: 50%; flex: none; box-sizing: border-box; }
+.par-chave b { color: var(--text); font-weight: 700; }
+.par-chave .k-cheio { background: var(--muted); }
+.par-chave .k-frente { border: 2px solid var(--muted); }
+.par-chave .k-vazia { background: var(--vazio); }
