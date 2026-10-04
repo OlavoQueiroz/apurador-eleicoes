@@ -14,7 +14,7 @@ export const GRUPOS = [
 const PARTIDOS = {
   esquerda: ['PT', 'PCDOB', 'PV', 'PSOL', 'REDE', 'PSB', 'PDT', 'PCB', 'PSTU', 'PCO', 'UP'],
   centrao: ['MDB', 'PSD', 'PP', 'UNIAO', 'REPUBLICANOS', 'PSDB', 'CIDADANIA', 'PODE', 'AVANTE', 'SOLIDARIEDADE', 'PRD', 'MOBILIZA'],
-  direita: ['PL', 'NOVO', 'DC', 'DEMOCRATA', 'AGIR', 'PRTB', 'PMB'],
+  direita: ['PL', 'PSL', 'NOVO', 'DC', 'DEMOCRATA', 'AGIR', 'PRTB', 'PMB'],
 };
 
 // "PC do B", "PCdoB" e "PC DO B" são o mesmo partido; "UNIÃO" e "UNIAO" também.

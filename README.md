@@ -135,6 +135,26 @@ do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios
 `/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
 municípios ficam o exterior (sem geometria) e o DF (um município só).
 
+### Aba Partidos
+
+Ao lado dos cargos, a aba **Partidos** mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
+Direita, Independente) e por partido, em quatro análises: **Placar** (cartões com a variação de cadeiras desde a eleição
+anterior e o hemiciclo), **Ganhos e perdas** (barras por partido), **Viradas por estado** (mapa de Governadores e Câmara em
+que cada UF é dividida ao meio quando mudou de bloco: esquerda = eleição anterior, direita = 2026) e **Série histórica**
+(participação de cada bloco desde 2014). Em todas elas, o seletor **Agrupar por** troca entre **Ideologia** (os quatro
+blocos) e **Partido** (os maiores partidos e as cores de cada um). O endereço guarda a escolha (`#/partidos/6/serie` ou
+`#/partidos/6/serie/partido`).
+
+- Os blocos são uma **classificação editorial** (`public/ideologia.js`), não um dado oficial. Edite as listas à vontade.
+- Os eleitos de 2014, 2018 e 2022 vêm de `dados-historicos/eleitos.json`, gerado por `node scripts/gerar-eleitos.js` (três
+  zips de ~4,5 MB dos dados abertos do TSE). `dados-historicos/partidos-sucessao.json` traduz siglas antigas para o partido de
+  hoje (PMDB → MDB, DEM → UNIÃO...) e também é editável; reinicie o painel depois de mudar.
+- No Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes; em 2026 as 27 cadeiras fora de disputa vêm
+  de `public/senado-ocupadas.json` (com o partido atual de cada senador).
+- Durante a apuração, as vagas que o TSE ainda não marcou como eleitas entram como "na frente" (contorno no hemiciclo e tom
+  mais claro no mapa), então os números mudam até a totalização final. A Câmara usa também as vagas já dadas a cada
+  partido ou federação. Na Câmara, a UF recebe a cor do bloco com mais cadeiras; diferença menor que 10% das cadeiras = "disputado".
+
 ### Comparativo com eleições anteriores
 
 Na tela de Presidente, ao lado de "Apuração" e "Projeção", a visão **Comparativo** compara o PT (Lula ou Haddad) com ele
@@ -264,7 +284,7 @@ public/              interface (HTML, CSS e JS sem build); mapa-brasil.js e muni
 dados-historicos/    2022 e 2018 por município e mapeamentos de herança (versionados)
 dados/               histórico da apuração gravado (fora do git)
 .cache/              cache dos municípios (fora do git)
-scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-historico-2022 e -2018), dev e stop
+scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-eleitos, gerar-historico-2022 e -2018), dev e stop
 docs/                arquitetura.md e modelos-simulacao.md
 test/                testes e fixtures
 ```

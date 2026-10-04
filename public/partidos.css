@@ -1,0 +1,64 @@
+/* Aba Partidos (ver partidos.js). Usa as variáveis de cor de style.css. */
+.par-topo { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.par-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+
+.par-agrupar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.par-seg-b { padding: 6px 14px; font-size: 13px; color: var(--muted); text-decoration: none; }
+.par-seg-b + .par-seg-b { border-left: 1px solid var(--line); }
+.par-seg-b[aria-current="page"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.par-abas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.par-aba { padding: 6px 12px; font-size: 13px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); text-decoration: none; background: transparent; }
+.par-aba:hover { border-color: var(--accent); }
+.par-aba[aria-current="page"] { background: var(--surface-2); color: var(--text); border-color: var(--text); }
+
+.par-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.par-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border-top: 3px solid var(--cor); }
+.par-card-nome { font-size: 12.5px; color: var(--muted); }
+.par-card b { font-size: 26px; font-weight: 700; line-height: 1.15; }
+.par-card-d { font-size: 12px; color: var(--muted); }
+.sobe { color: var(--ok); }
+.desce { color: var(--bad); }
+
+.par-caixa { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.par-h { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+.par-nota { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+.par-rodape { margin-top: 4px; }
+.par-hemi { display: block; width: 100%; max-width: 640px; height: auto; margin: 4px auto; }
+.par-hemi .par-vaga { fill: var(--vazio); }
+.par-hemi-num { font-size: 40px; font-weight: 750; text-anchor: middle; fill: var(--text); }
+.par-hemi-leg { font-size: 15px; text-anchor: middle; fill: var(--muted); }
+.par-leg { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.par-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.par-meio i { background: linear-gradient(90deg, var(--muted) 50%, var(--accent) 50%); width: 18px; border-radius: 2px; }
+
+.par-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.par-linha { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; height: 26px; }
+.par-linha div { height: 12px; }
+.par-linha i { display: block; height: 100%; border-radius: 3px; }
+.par-linha b, .par-div b { text-align: right; }
+.par-lista { margin: 0; font-size: 13px; line-height: 1.8; }
+
+.par-div { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; height: 28px; }
+.par-trilho { position: relative; height: 14px; }
+.par-trilho::before { content: ""; position: absolute; left: 50%; top: -6px; bottom: -6px; width: 1px; background: var(--line); }
+.par-trilho i { position: absolute; height: 100%; border-radius: 3px; width: var(--w); }
+.par-trilho i.ganho { left: 50%; }
+.par-trilho i.perda { right: 50%; }
+
+.par-serie { display: block; width: 100%; height: auto; }
+.par-grade { stroke: var(--line); }
+.par-eixo { font-size: 11px; fill: var(--muted); }
+
+.par-estados { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; align-items: start; }
+.par-mapa { display: block; width: 100%; height: auto; max-width: 520px; margin: 0 auto; }
+.par-uf path { stroke: var(--surface); stroke-width: 1; }
+.par-uf.virou path { stroke: var(--text); stroke-width: 1.6; }
+.par-vira { font-size: 13px; line-height: 1.9; }
+.par-vira small { color: var(--muted); }
+.par-tag { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 9px; font-size: 12px; border: 1px solid; border-left-width: 4px; border-radius: 10px; background: var(--surface-2); }
+
+@media (max-width: 720px) {
+  .par-cards { grid-template-columns: 1fr 1fr; }
+  .par-duas, .par-estados { grid-template-columns: 1fr; }
+}
+.par-uf { cursor: default; }

@@ -146,6 +146,22 @@ export function normalizar(bruto) {
   };
 }
 
+// Câmara: cadeiras por partido contando também as vagas que o TSE já deu a um partido ou federação (`vag`) antes de
+// marcar os eleitos. Dentro de cada lista as vagas vão para os mais votados, então os que faltam são os próximos do
+// ranking (mesma regra do mapa de cadeiras da interface). Os candidatos já vêm em ordem de votos.
+function cadeirasPorPartido(dados) {
+  const saida = {};
+  for (const agr of dados.agrupamentos) {
+    const lista = dados.candidatos.filter((c) => c.agrupamentoId === agr.id);
+    const eleitos = lista.filter((c) => c.situacao === 'eleito');
+    const faltam = Math.max(0, agr.vagas - eleitos.length);
+    for (const c of [...eleitos, ...lista.filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, faltam)]) {
+      saida[c.partido] = (saida[c.partido] ?? 0) + 1;
+    }
+  }
+  return saida;
+}
+
 // Visão compacta usada nos mapas/tiles e nos totais nacionais (sem a lista inteira de candidatos).
 export function resumir(dados) {
   const [lider, segundo] = dados.candidatos;
@@ -172,6 +188,8 @@ export function resumir(dados) {
     colocados: dados.candidatos.slice(0, 3).filter((c) => c.votos > 0).map(compacto), // 1º, 2º e 3º (tabela do Senado)
     eleitos: Object.values(eleitosPorPartido).reduce((soma, n) => soma + n, 0),
     eleitosPorPartido,
+    // Câmara: eleitos mais as vagas já conquistadas por partido/federação, para a aba de partidos.
+    ...(dados.cargo.codigo === 6 ? { cadeirasPorPartido: cadeirasPorPartido(dados) } : {}),
     segundoTurno,
   };
 }

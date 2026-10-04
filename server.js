@@ -12,6 +12,7 @@ import { Municipios } from './src/municipios.js';
 import { criarCacheDisco } from './src/cache-disco.js';
 import { Historico, registrarCiclo } from './src/historico.js';
 import { carregarAnterior } from './src/anterior.js';
+import { carregarPartidos } from './src/partidos.js';
 import { criarServidor } from './src/servidor.js';
 import { abrirNoNavegador } from './src/abrir.js';
 
@@ -81,6 +82,14 @@ try {
   console.warn(`Comparativo com 2018 desligado: ${erro.message}`);
 }
 
+// Eleitos de 2014, 2018 e 2022 por partido, para a aba de partidos (opcional: sem o arquivo a aba some).
+let partidos = null;
+try {
+  partidos = carregarPartidos(path.join(raiz, 'dados-historicos', 'eleitos.json'), path.join(raiz, 'dados-historicos', 'partidos-sucessao.json'));
+} catch (erro) {
+  console.warn(`Aba de partidos desligada (rode scripts/gerar-eleitos.js): ${erro.message}`);
+}
+
 // Histórico da apuração (gráfico de evolução): um arquivo por ciclo/turno, em dados/ (fora do git). A
 // demonstração grava num arquivo próprio e recomeça do zero a cada execução.
 const historico = new Historico({
@@ -122,6 +131,7 @@ const servidor = criarServidor({
   limitador,
   anterior: prior2022,
   historicos: prior2018 ? { 2018: prior2018 } : {},
+  partidos,
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
   diretorioPublico: path.resolve(raiz, 'public'),
 });

@@ -1,0 +1,23 @@
+{
+  "_comentario": "Sigla publicada pelo TSE em eleições passadas → sigla do mesmo partido hoje (renomeações, fusões e incorporações). Serve para comparar bancadas entre eleições. Decisão editável; reinicie o painel depois de mudar. O PSL não entra na tabela de propósito: virou União com o DEM, mas em 2018 era o partido de Bolsonaro, e juntá-lo ao União esconderia a direita naquele ano.",
+  "PMDB": "MDB",
+  "DEM": "UNIÃO",
+  "PTB": "PRD",
+  "PATRIOTA": "PRD",
+  "PEN": "PRD",
+  "PRP": "PRD",
+  "PPS": "CIDADANIA",
+  "PR": "PL",
+  "PRB": "REPUBLICANOS",
+  "PSC": "PODE",
+  "PTN": "PODE",
+  "PHS": "PODE",
+  "PROS": "SOLIDARIEDADE",
+  "SD": "SOLIDARIEDADE",
+  "PT do B": "AVANTE",
+  "PSDC": "DC",
+  "PMN": "MOBILIZA",
+  "PTC": "AGIR",
+  "PPL": "PCDOB",
+  "PC do B": "PCDOB"
+}
