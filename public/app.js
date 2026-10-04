@@ -2,6 +2,7 @@
 
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
+import { PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, seletorPeriodoHtml, sinal } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
@@ -49,7 +50,8 @@ const estado = {
   cargo: 1,
   uf: 'br',
   detalhe: undefined, // undefined = carregando; null = sem dado
-  visao: 'apuracao', // 'apuracao' (dados do TSE) ou 'projecao' (estimativa do painel)
+  visao: 'apuracao', // 'apuracao' (dados do TSE), 'projecao' (estimativa do painel) ou 'comparativo' (2026 × 2022, só presidente)
+  comparativo: { periodo: PADRAO, bases: {}, regiao: null }, // período comparado, base de cada período (carregada uma vez) e região aberta
   modelo: 'ingenuo',
   projecao: undefined, // mesmo contrato de `detalhe`
   comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
@@ -101,8 +103,11 @@ const ehAgregado = () => estado.uf === 'br' && !temArquivoNacional(estado.cargo)
 const chaveAtual = () => `${estado.cargo}:${estado.uf}`;
 const itemResumo = (cargo, uf) => estado.resumo.get(`${cargo}:${uf}`);
 // A visão escolhida (apuração ou projeção) acompanha a troca de cargo e de UF.
-const hashPara = (cargo, uf, visao = estado.visao, modelo = estado.modelo) =>
-  `#/${cargo}/${uf}${visao === 'projecao' ? `/projecao/${modelo}` : ''}`;
+const hashPara = (cargo, uf, visao = estado.visao, modelo = estado.modelo, periodo = estado.comparativo.periodo) => {
+  if (visao === 'projecao') return `#/${cargo}/${uf}/projecao/${modelo}`;
+  if (visao === 'comparativo' && cargo === 1) return `#/${cargo}/${uf}/comparativo${periodo === PADRAO ? '' : `/${periodo}`}`;
+  return `#/${cargo}/${uf}`;
+};
 
 async function getJson(url) {
   const res = await fetch(url, { cache: 'no-store' });
@@ -122,7 +127,24 @@ async function carregarResumo() {
   estado.resumo = new Map(itens.map((item) => [item.chave, item]));
 }
 
+// Base de cada período do comparativo (eleição anterior por UF); não muda durante a apuração, então carrega uma vez.
+async function carregarBaseComparativo() {
+  const periodo = estado.comparativo.periodo;
+  if (estado.comparativo.bases[periodo] !== undefined) return;
+  try {
+    estado.comparativo.bases[periodo] = await getJson(`/api/comparativo/presidente?periodo=${periodo}`);
+  } catch {
+    estado.comparativo.bases[periodo] = null;
+  }
+}
+
 async function carregarDetalhe() {
+  if (estado.visao === 'comparativo') {
+    estado.detalhe = undefined;
+    estado.projecao = undefined;
+    await carregarBaseComparativo();
+    return;
+  }
   if (ehAgregado()) {
     estado.detalhe = null;
     estado.projecao = null;
@@ -238,7 +260,7 @@ async function carregarEleitos() {
 
 // Só os cargos majoritários com resultado por município; Brasil, exterior e DF (um município só) ficam de fora.
 const querMunicipios = () =>
-  [1, 3, 5].includes(estado.cargo) && !['br', 'zz', 'df'].includes(estado.uf) && cargoMeta().abrangencias.includes(estado.uf);
+  estado.visao !== 'comparativo' && [1, 3, 5].includes(estado.cargo) && !['br', 'zz', 'df'].includes(estado.uf) && cargoMeta().abrangencias.includes(estado.uf);
 const modoMunicipal = () => estado.mun?.chave === chaveAtual();
 
 let recargaMunicipios = null;
@@ -270,7 +292,7 @@ async function carregarMunicipios() {
 
 // ---------- evolução da apuração (gráfico) ----------
 
-const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && estado.visao !== 'projecao';
+const querHistorico = () => [1, 3, 5].includes(estado.cargo) && !ehAgregado() && estado.visao === 'apuracao';
 const chaveHistorico = () => `${chaveAtual()}:${estado.modelo ?? 'ingenuo'}`;
 
 async function buscarHistorico() {
@@ -330,12 +352,14 @@ function ufPadrao(cargo) {
 }
 
 function lerHash() {
-  const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao)(?:\/([a-z]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
-  estado.visao = m?.[3] === 'projecao' ? 'projecao' : 'apuracao';
+  const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao|comparativo)(?:\/([a-z0-9]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
   const modeloPedido = m?.[4];
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
+  // O comparativo com 2022 só existe para presidente.
+  estado.visao = m?.[3] === 'projecao' ? 'projecao' : m?.[3] === 'comparativo' && meta.codigo === 1 ? 'comparativo' : 'apuracao';
+  if (estado.visao === 'comparativo') estado.comparativo.periodo = PERIODOS[modeloPedido] ? modeloPedido : PADRAO;
   // Modelo que não vale para o cargo aberto (ex.: swing em governador) volta para o simples.
   estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : 'ingenuo';
   const ufPedida = m?.[2];
@@ -417,7 +441,8 @@ function renderAbas() {
   // direita da linha dos cargos. O seletor de modelo fica dentro do painel da projeção.
   const visao = (id, rotulo) =>
     `<a class="aba" href="${hashPara(estado.cargo, estado.uf, id)}" ${estado.visao === id ? 'aria-current="page"' : ''}>${rotulo}</a>`;
-  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}</div>`;
+  const comparativo = estado.cargo === 1 ? visao('comparativo', 'Comparativo') : '';
+  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}${comparativo}</div>`;
   $('#abas').innerHTML = `<div class="seg">${itens}</div>${modo}`;
 }
 
@@ -440,6 +465,7 @@ function conteudoTile(item) {
 
 // Dados de uma "unidade" (UF, Brasil ou exterior) para o mapa, os chips e a dica.
 function dadoUnidade(uf) {
+  if (estado.visao === 'comparativo') return dadoComparativo(uf);
   // "Brasil" nos cargos sem arquivo nacional é a soma das UFs; nos demais casos é um arquivo comum.
   if (projecaoNoMapa(uf)) {
     const proj = estado.mapaProj.porUf.get(uf);
@@ -450,6 +476,57 @@ function dadoUnidade(uf) {
   return uf === 'br' && !temArquivoNacional(estado.cargo)
     ? { sub: 'Visão geral', sub2: fmtPct(agregadoSecoes().pct, 0), pct: agregadoSecoes().pct, cor: null, vazio: false }
     : conteudoTile(itemResumo(estado.cargo, uf));
+}
+
+// Comparativo entre eleições (ver comparativo-eleicoes.js): o que o mapa, a dica e a legenda mostram.
+function modeloComparativo() {
+  const base = estado.comparativo.bases[estado.comparativo.periodo];
+  if (!base?.disponivel) return null;
+  return calcular(base, itemDoAtual(base, (uf) => itemResumo(1, uf)), { periodo: periodoPorId(estado.comparativo.periodo) });
+}
+
+function dadoComparativo(uf) {
+  const modelo = modeloComparativo();
+  if (uf === 'br') return { sub: 'Brasil', sub2: modelo?.total.impacto == null ? '—' : `${sinal(modelo.total.impacto)} p.p.`, pct: 0, cor: null, vazio: false };
+  const u = modelo?.ufs.find((x) => x.uf === uf);
+  const cor = corDoMapa(u);
+  return cor
+    ? { sub: sinal(u.saldo, 1), sub2: 'p.p.', pct: cor.forca, cor: corPartido(cor.candidato === 'pt' ? 'PT' : 'PL'), vazio: false }
+    : { sub: '', sub2: '—', pct: 0, cor: null, vazio: true };
+}
+
+function dicaComparativoHtml(uf) {
+  const modelo = modeloComparativo();
+  const u = modelo?.ufs.find((x) => x.uf === uf);
+  if (!u) return `<strong>${esc(nomeUf(uf))}</strong><span class="muted">Fora do comparativo</span>`;
+  const p = modelo.periodo;
+  const linha = (c) => {
+    const x = u[c.id];
+    const variacao = x.d == null ? '' : ` · ${sinal(x.d, 1)} p.p.`;
+    return `<span class="dica-lider" style="--cor:${corPartido(c.partido)}"><i></i><span>${esc(c.nome)}<small>${p.anoBase}: ${fmtPct(x.pBase, 1)} · ${p.anoAtual}: ${u.validosAtual ? fmtPct(x.pAtual, 1) : '—'}${variacao}</small></span></span>`;
+  };
+  const rodape = u.pronto ? `Impacto no Brasil: ${sinal(u.impacto)} p.p.` : `Apuração em ${fmtPct(u.fracao, 0)}: ainda fora do comparativo`;
+  return `<strong>${esc(nomeUf(uf))}</strong>${linha({ id: 'pt', ...p.pt })}${linha({ id: 'pl', ...p.pl })}<span class="muted">${rodape}</span>`;
+}
+
+function legendaComparativoHtml() {
+  const p = periodoPorId(estado.comparativo.periodo);
+  return `<div class="leg-linha"><span class="leg-titulo">Saldo na UF</span><span class="muted">${esc(p.pl.curto ?? p.pl.nome)}</span>
+      <span class="leg-grad leg-div" style="--esq:${corPartido('PL')};--dir:${corPartido('PT')}"></span><span class="muted">${esc(p.pt.nome)}</span></div>
+    <p class="muted pequeno leg-nota">Cor = variação de ${esc(p.pt.nome)} − variação de ${esc(p.pl.curto ?? p.pl.nome)} em relação a ${p.anoBase} (cor cheia a ±8 p.p.).${p.vivo ? ' Cinza: menos de 50% das seções, ainda fora do comparativo.' : ''}</p>`;
+}
+
+function comparativoPainelHtml() {
+  const periodo = estado.comparativo.periodo;
+  const p = periodoPorId(periodo);
+  const base = estado.comparativo.bases[periodo];
+  const hrefPeriodo = (id) => hashPara(1, estado.uf, 'comparativo', undefined, id);
+  const topo = `<div class="detalhe-topo"><div><h2>Presidente · ${esc(p.rotulo)}</h2></div></div>${seletorPeriodoHtml(periodo, hrefPeriodo)}`;
+  if (base === undefined) return `${topo}<p class="vazio-msg">Carregando…</p>`;
+  if (!base?.disponivel) return `${topo}<p class="aviso-bloco espera">${esc(base?.motivo ?? 'Não consegui carregar os dados deste período.')}</p>`;
+  return comparativoHtml(modeloComparativo(), { uf: estado.uf, regiao: estado.comparativo.regiao }, {
+    esc, fmtInt, corPartido, nomeUf, hrefUf: (uf) => hashPara(1, uf), hrefPeriodo, demo: estado.meta.demo,
+  });
 }
 
 // Pílula no canto do mapa que leva ao total do Brasil (que já inclui o exterior).
@@ -491,7 +568,8 @@ function ufMapaHtml(uf, ativas) {
   // Nos majoritários, sem líder (ainda sem votos) a UF fica cinza; nos demais cargos a cor é a de destaque.
   const cor = dado.cor ?? (ehMajoritario(estado.cargo) ? null : 'var(--accent)');
   const estilo = dado.vazio || !cor ? '' : ` style="--cor:${cor};--forca:${forcaCor(dado.pct)}"`;
-  return `<a class="uf${dado.vazio ? ' vazio' : ''}" href="${hashPara(estado.cargo, uf)}" data-uf="${uf}"${estilo}
+  const fora = estado.visao === 'comparativo' && estado.comparativo.regiao && regiaoDaUf(uf) !== estado.comparativo.regiao;
+  return `<a class="uf${dado.vazio ? ' vazio' : ''}${fora ? ' fora' : ''}" href="${hashPara(estado.cargo, uf)}" data-uf="${uf}"${estilo}
       aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
       <path d="${forma.d}"/></a>`;
 }
@@ -511,6 +589,7 @@ function rotulosMapaHtml(ativas) {
 }
 
 function legendaHtml({ unidade = 'UF' } = {}) {
+  if (estado.visao === 'comparativo') return legendaComparativoHtml();
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
   // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
   const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
@@ -581,6 +660,7 @@ function dicaProjecaoHtml(uf) {
 }
 
 function dicaHtml(uf) {
+  if (estado.visao === 'comparativo') return dicaComparativoHtml(uf);
   if (projecaoNoMapa(uf)) return dicaProjecaoHtml(uf);
   const item = itemResumo(estado.cargo, uf);
   const dado = conteudoTile(item);
@@ -1024,7 +1104,8 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  if (ehAgregado()) raiz.innerHTML = estado.visao === 'projecao' ? projecaoAgregadoHtml() : detalheAgregadoHtml();
+  if (estado.visao === 'comparativo') raiz.innerHTML = comparativoPainelHtml();
+  else if (ehAgregado()) raiz.innerHTML = estado.visao === 'projecao' ? projecaoAgregadoHtml() : detalheAgregadoHtml();
   else raiz.innerHTML = (estado.visao === 'projecao' ? detalheProjecaoHtml() : municipioSelecionadoHtml() + detalheArquivoHtml());
 
   // "Voltar ao Brasil" vai para o canto do cabeçalho do painel, ao lado dos selos, sem empurrar o título.
@@ -1037,6 +1118,7 @@ function renderDetalhe() {
     if (selos) acoes.append(selos);
     topoDetalhe.append(acoes);
   }
+  if (estado.visao === 'comparativo') ligarComparativo(raiz, estado.comparativo, () => { renderGrade(); renderDetalhe(); });
   $('.como-calcula', raiz)?.addEventListener('toggle', (e) => { estado.comoAberto = e.target.open; });
   $('.mais-num', raiz)?.addEventListener('toggle', (e) => { estado.numerosAbertos = e.target.open; });
 

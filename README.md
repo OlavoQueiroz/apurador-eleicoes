@@ -135,6 +135,20 @@ do TSE liga ao código do IBGE. Para regerá-los: `node scripts/gerar-municipios
 `/api/municipios/:cargo/:uf`; se essa rota não existir, o painel continua no mapa do Brasil. Fora do mapa de
 municípios ficam o exterior (sem geometria) e o DF (um município só).
 
+### Comparativo com eleições anteriores
+
+Na tela de Presidente, ao lado de "Apuração" e "Projeção", a visão **Comparativo** compara o PT (Lula ou Haddad) com ele
+mesmo e o campo de Bolsonaro (Flávio ou Bolsonaro) com Bolsonaro, no 1º turno. O seletor do painel escolhe o período:
+**2026 × 2022**, **2026 × 2018** (a apuração de 2026 ao vivo) e **2022 × 2018** (as duas encerradas: serve para testar a
+página com dados reais antes da apuração). O endereço guarda a escolha (`#/1/br/comparativo/2022x2018`).
+
+A informação principal é o **impacto no saldo nacional**, não a variação dentro da UF: o saldo da UF é a variação do PT
+menos a do campo de Bolsonaro (em pontos percentuais dos votos válidos) e o impacto é o saldo multiplicado pelo peso da UF
+(votos válidos da eleição base ÷ total). Assim o Acre, que varia muito e pesa 0,4%, quase não aparece, e São Paulo domina.
+Só entram na soma as UFs com pelo menos 50% das seções totalizadas (em 2026), porque as regiões chegam em ordens diferentes.
+O mapa é pintado pelo saldo de cada UF; clicar numa região do painel destaca ela e lista as UFs. **Variação não é
+transferência de votos**: com dados por UF não dá para saber de quem veio cada voto.
+
 ### API local
 
 - `GET /api/meta` — configuração, cargos e estado do último ciclo.
@@ -145,6 +159,7 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
   `disponivel: false` com o motivo, ou `carregando: true`.
 - `GET /api/historico/{cargo}/{uf}?modelo=` — série gravada da evolução da apuração (404 se não houver).
 - `GET /api/busca?q=&cargo=&uf=` — busca global de candidatos e municípios.
+- `GET /api/comparativo/presidente?periodo=` — base por UF para o comparativo (`2026x2022`, `2026x2018`, `2022x2018`); pode vir `disponivel: false` com o motivo.
 - `GET /events` — SSE, evento `ciclo`.
 
 `/api/meta` também traz `requisicoes`: pedidos ao TSE por prioridade, por minuto e quantos 429/503.
@@ -246,10 +261,10 @@ src/abrir.js         abre o painel no navegador ao iniciar
 src/supervisor.js    npm run dev: reinicia o servidor quando o código muda
 src/parar.js         npm run stop: acha e encerra só o painel deste projeto
 public/              interface (HTML, CSS e JS sem build); mapa-brasil.js e municipios/ são gerados
-dados-historicos/    2022 por município e mapeamento de herança (versionados)
+dados-historicos/    2022 e 2018 por município e mapeamentos de herança (versionados)
 dados/               histórico da apuração gravado (fora do git)
 .cache/              cache dos municípios (fora do git)
-scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-historico-2022), dev e stop
+scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-historico-2022 e -2018), dev e stop
 docs/                arquitetura.md e modelos-simulacao.md
 test/                testes e fixtures
 ```

@@ -140,3 +140,13 @@ test('arquivo vazio ou sem cargo não quebra', () => {
   assert.equal(d.secoes.total, 0);
   assert.equal(resumir(d).lider, null);
 });
+
+test('resumir: votos válidos sempre; votos por número de candidato só na presidência', () => {
+  const d = normalizar(fixture('presidente-br'));
+  const r = resumir(d);
+  assert.equal(r.validos, d.votos.validos);
+  assert.equal(Object.keys(r.votosPorNumero).length, d.candidatos.length);
+  for (const c of d.candidatos) assert.equal(r.votosPorNumero[c.numero], c.votos);
+  const governador = { ...d, cargo: { ...d.cargo, codigo: 3 } };
+  assert.equal(resumir(governador).votosPorNumero, undefined);
+});

@@ -161,6 +161,9 @@ export function resumir(dados) {
     geradoEm: dados.geradoEm,
     vagas: dados.cargo.vagas,
     secoes: dados.secoes,
+    validos: dados.votos.validos,
+    // Presidência: votos de cada candidato por número (poucos candidatos); alimenta o comparativo com 2022.
+    ...(dados.cargo.codigo === 1 ? { votosPorNumero: Object.fromEntries(dados.candidatos.map((c) => [c.numero, c.votos])) } : {}),
     pctComparecimento: dados.eleitorado.pctComparecimento,
     totalizacaoFinal: dados.totalizacaoFinal,
     matematicamenteDefinido: dados.matematicamenteDefinido,
