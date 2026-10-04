@@ -382,17 +382,17 @@ export function partidosHtml(modelo, ui, ajuda) {
   const modo = ui.agrupar === 'partido' ? 'partido' : 'ideologia';
   const aba = abasDoCargo(modelo.cargo).some((a) => a.id === ui.aba) ? ui.aba : 'placar';
   const cargos = (ui.cargos ?? CARGOS_PARTIDOS).map((c) =>
-    `<a class="par-seg-b" href="${hashPartidos(c.codigo, aba, modo)}" ${c.codigo === modelo.cargo.codigo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
+    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo)}" ${c.codigo === modelo.cargo.codigo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
   const agrupar = MODOS.map((m) =>
-    `<a class="par-seg-b" href="${hashPartidos(modelo.cargo.codigo, aba, m.id)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
   const abas = abasDoCargo(modelo.cargo).map((a) =>
-    `<a class="par-aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
   const aj = { ...ajuda, modo };
   const corpo = !modelo.historico && aba !== 'placar'
     ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
     : { placar: placarHtml, ganhos: ganhosHtml, serie: serieHtml, estados: estadosHtml }[aba](modelo, aj);
-  return `<div class="par-topo"><div class="par-seg" role="group" aria-label="Cargo">${cargos}</div>
-    <div class="par-agrupar"><span>Agrupar por</span><div class="par-seg" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>
-    <nav class="par-abas" aria-label="Análises">${abas}</nav>${corpo}
+  return `<div class="par-topo"><div class="seg seg-modelo" role="group" aria-label="Cargo">${cargos}</div>
+    <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>
+    <div class="seg seg-modelo par-abas" role="group" aria-label="Análises">${abas}</div>${corpo}
     <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;
 }

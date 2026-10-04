@@ -1,15 +1,8 @@
 /* Aba Partidos (ver partidos.js). Usa as variáveis de cor de style.css. */
-.par-topo { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.par-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.par-topo { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.detalhe .par-abas { margin: 0 0 14px; }
 
 .par-agrupar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.par-seg-b { padding: 6px 14px; font-size: 13px; color: var(--muted); text-decoration: none; }
-.par-seg-b + .par-seg-b { border-left: 1px solid var(--line); }
-.par-seg-b[aria-current="page"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
-.par-abas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.par-aba { padding: 6px 12px; font-size: 13px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); text-decoration: none; background: transparent; }
-.par-aba:hover { border-color: var(--accent); }
-.par-aba[aria-current="page"] { background: var(--surface-2); color: var(--text); border-color: var(--text); }
 
 .par-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .par-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border-top: 3px solid var(--cor); }
