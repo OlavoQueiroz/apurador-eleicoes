@@ -124,6 +124,10 @@ test('elegiveisPelaConta: com 47% das seções ninguém é dado como eleito, por
   for (const lider of [55, 60, 70, 80]) {
     const votos = [lider * 10000, (100 - lider) * 6000, (100 - lider) * 3000];
     assert.deepEqual(elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 47 }), [null, null, null], `líder com ${lider}%`);
+  }
+  // Senado (2 votos por eleitor, então um candidato nunca passa de ~50% dos votos): 1º com 30%, 40% ou 45%
+  for (const lider of [30, 40, 45]) {
+    const votos = [lider * 10000, (lider - 5) * 10000, (lider - 15) * 10000];
     assert.deepEqual(elegiveisPelaConta({ votos, k: 2, validos: 1000000, pctSecoes: 47, votosPorEleitor: 2 }), [null, null, null], `Senado, 1º com ${lider}%`);
   }
 });
