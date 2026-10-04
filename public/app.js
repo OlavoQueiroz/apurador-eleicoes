@@ -601,18 +601,20 @@ function ufMapaHtml(uf, ativas) {
   const dado = dadoUnidade(uf);
   // Nos majoritários, sem líder (ainda sem votos) a UF fica cinza; nos demais cargos a cor é a de destaque.
   const cor = dado.cor ?? (ehMajoritario(estado.cargo) ? null : 'var(--accent)');
-  const estilo = dado.vazio || !cor ? '' : ` style="--cor:${cor};--forca:${forcaCor(dado.pct)}"`;
+  const eleicao = !projecaoNoMapa(uf) && !ehComparativo() ? eleitosDaUf(itemResumo(estado.cargo, uf), estado.cargo) : null;
+  const eleita = eleicao?.estado === 'eleita'; // eleita: cor cheia, contorno escuro e ✓; as demais seguem a cor pela fração apurada
+  const estilo = dado.vazio || !cor ? '' : ` style="--cor:${cor};--forca:${eleita ? 100 : forcaCor(dado.pct)}"`;
   const fora = ehComparativo() && estado.comparativo.regiao && regiaoDaUf(uf) !== estado.comparativo.regiao;
-  return `<a class="uf${dado.vazio ? ' vazio' : ''}${fora ? ' fora' : ''}" href="${hashPara(estado.cargo, uf)}" data-uf="${uf}"${estilo}
-      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
+  return `<a class="uf${dado.vazio ? ' vazio' : ''}${fora ? ' fora' : ''}${eleita ? ' eleita' : eleicao?.estado === 'parcial' ? ' eleita-parcial' : ''}" href="${hashPara(estado.cargo, uf)}" data-uf="${uf}"${estilo}
+      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}${eleita ? ' (eleito)' : ''}">
       <path d="${forma.d}"/></a>`;
 }
 
-function rotulosMapaHtml(ativas) {
+function rotulosMapaHtml(ativas, eleitas = new Set()) {
   return Object.entries(MAPA.ufs).map(([uf, centro]) => {
     const pos = { ...centro, ...ROTULOS[uf] };
     const classe = `rot${ativas.has(uf) ? '' : ' inativa'}${pos.ancora === 'start' ? ' fora' : ''}`;
-    const texto = `<text class="${classe}" x="${pos.x}" y="${pos.y}">${uf.toUpperCase()}</text>`;
+    const texto = `<text class="${classe}" x="${pos.x}" y="${pos.y}">${uf.toUpperCase()}${eleitas.has(uf) ? ' ✓' : ''}</text>`;
     if (!pos.guia) return texto;
     // A linha termina na borda do texto (à esquerda dele quando alinhado à esquerda, no meio quando centralizado).
     const x2 = pos.ancora === 'start' ? pos.x - 3 : pos.x;
@@ -634,7 +636,17 @@ function legendaHtml({ unidade = 'UF' } = {}) {
     return `<div class="leg-linha"><span class="leg-titulo">Vencedor projetado (estimativa)</span>${itens || '<span class="muted">calculando…</span>'}</div>
       <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>`;
   }
-  return totalizadas;
+  const eleicao = [3, 5].includes(estado.cargo) && unidade === 'UF' && estado.visao !== 'analise'
+    ? `<div class="leg-linha"><span class="leg-titulo">Eleição</span><span class="leg-item"><i class="leg-eleito"></i>✓ eleito (TSE ou pela conta*)</span>${estado.cargo === 5 ? '<span class="leg-item"><i class="leg-parcial"></i>1 das 2 vagas</span>' : ''}<span class="leg-item"><i class="leg-aberto"></i>em apuração</span></div>` : '';
+  return totalizadas + eleicao;
+}
+
+// UFs com tudo definido (governador: eleito; Senado: as 2 vagas), para o ✓ no rótulo do mapa.
+function eleitasNoMapa(ativas) {
+  const eleitas = new Set();
+  if (![3, 5].includes(estado.cargo) || estado.visao === 'projecao') return eleitas;
+  for (const uf of ativas) if (uf !== 'br' && eleitosDaUf(itemResumo(estado.cargo, uf), estado.cargo)?.estado === 'eleita') eleitas.add(uf);
+  return eleitas;
 }
 
 function renderGrade() {
@@ -651,7 +663,7 @@ function renderGrade() {
   $('#grade').innerHTML = municipal ? mapaMunicipalHtml() : `<svg class="mapa-svg" viewBox="0 0 ${MAPA.largura + FOLGA_DIREITA} ${MAPA.altura}" role="group" aria-label="Mapa do Brasil por UF">
       ${ordem.map((uf) => ufMapaHtml(uf, ativas)).join('')}
       ${ativas.has('zz') ? exteriorGloboHtml() : ''}
-      <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
+      <g class="rotulos">${rotulosMapaHtml(ativas, eleitasNoMapa(ativas))}</g>
     </svg>`;
 
   // Deputado estadual (só SP e RJ) não tem visão Brasil.
@@ -706,6 +718,8 @@ function dicaHtml(uf) {
       linhas.push(`<span class="dica-lider" style="--cor:${corPartido(item.lider.partido)}"><i></i><span>${esc(item.lider.nomeUrna)}<small>${esc(item.lider.partido)} · ${fmtPct(item.lider.pct)} dos válidos</small></span></span>`);
     }
     linhas.push(`<span class="muted">${fmtPct(item.secoes.pctTotalizadas)} das seções totalizadas</span>`);
+    const el = eleitosDaUf(item, estado.cargo);
+    if (el?.estado) linhas.push(`<span><b>✓ ${el.estado === 'eleita' ? 'eleito' : `${el.tse + el.conta} de ${el.vagas} eleitos`}</b> <span class="muted">${el.tse >= el.vagas ? '(TSE)' : el.tse ? `(${el.tse} TSE, ${el.conta} pela conta*)` : '(pela conta do painel*)'}</span></span>`);
   }
   return `<strong>${esc(nomeUf(uf))}</strong>${linhas.join('')}`;
 }
@@ -967,6 +981,15 @@ function flagsEleitoPelaConta(item, codigo) {
   }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
 }
 
+// Quantos eleitos uma UF tem: os que o TSE marcou e os dados como eleitos pela conta do painel (governador e Senado).
+function eleitosDaUf(item, codigo) {
+  if (!item?.secoes || ![3, 5].includes(codigo)) return null;
+  const tse = Object.values(item.eleitosPorPartido ?? {}).reduce((s, n) => s + n, 0);
+  const conta = flagsEleitoPelaConta(item, codigo).filter(Boolean).length;
+  const vagas = item.vagas || 1;
+  return { tse, conta, vagas, estado: tse + conta >= vagas ? 'eleita' : tse + conta > 0 ? 'parcial' : null };
+}
+
 // Governador e Senado, visão Brasil: partido → [{ nome, uf, conta: true }] dos eleitos pela conta do painel.
 function eleitosPelaContaDoCargo(codigo) {
   const mapa = new Map();
@@ -1024,6 +1047,31 @@ function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
     partidos,
     ocupadas,
   }, estado.cadeiras, { esc, corPartido, fmtInt });
+}
+
+// Governador e Senado: quem está eleito, nome a nome (TSE ou pela conta do painel), por UF.
+function eleitosNomeANomeHtml(codigo, itens) {
+  if (![3, 5].includes(codigo)) return '';
+  const linhas = [];
+  for (const { uf, item } of itens) {
+    const flags = flagsEleitoPelaConta(item, codigo);
+    (item.colocados ?? []).forEach((c, i) => {
+      if (c.situacao === 'eleito') linhas.push({ uf, c, conta: false });
+      else if (flags[i]) linhas.push({ uf, c, conta: flags[i] });
+    });
+  }
+  if (!linhas.length) return '';
+  linhas.sort((x, y) => nomeUf(x.uf).localeCompare(nomeUf(y.uf), 'pt-BR') || y.c.votos - x.c.votos);
+  const nTse = linhas.filter((l) => !l.conta).length;
+  const rotulo = codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
+  return `<h3 class="secao">${rotulo} (${linhas.length}${codigo === 3 ? ' de 27' : ''})</h3>
+    <div class="tabela-rolagem"><table class="tabela tabela-eleitos"><thead><tr><th>UF</th><th>${codigo === 3 ? 'Governador' : 'Senador'}</th><th class="num">% dos válidos</th><th>Situação</th></tr></thead><tbody>
+    ${linhas.map(({ uf, c, conta }) => `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>
+      <td><div class="colocado-nome">${esc(c.nomeUrna)}</div><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span></td>
+      <td class="num">${fmtPct(c.pct)}</td>
+      <td>${conta ? `<span class="pill eleito" title="${esc(DICA_ELEITO[conta])}">Eleito*</span>` : '<span class="pill eleito">Eleito (TSE)</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted pequeno">${fmtInt(nTse)} confirmado(s) pelo TSE e ${fmtInt(linhas.length - nTse)} pela conta do painel* (o TSE ainda não os marcou).</p>`;
 }
 
 function detalheAgregadoHtml() {
@@ -1098,7 +1146,7 @@ function detalheAgregadoHtml() {
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
-    ${barras}${tabela}`;
+    ${barras}${eleitosNomeANomeHtml(meta.codigo, itens)}${tabela}`;
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------

@@ -481,3 +481,12 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 
 /* Eleito pela conta do painel (o TSE ainda não marcou). */
 .tabela b.eleito-conta { color: var(--ok); }
+
+/* Mapa de governador e senador: UF eleita (cor cheia, contorno escuro) e parcial (Senado: 1 das 2 vagas). */
+.uf.eleita path { stroke: var(--text); stroke-width: 1.8; }
+.uf.eleita-parcial path { stroke: var(--text); stroke-width: 1.4; stroke-dasharray: 4 2.5; }
+.leg-eleito, .leg-parcial, .leg-aberto { box-sizing: border-box; }
+.leg-eleito { background: var(--muted); border: 2px solid var(--text); }
+.leg-parcial { background: color-mix(in srgb, var(--muted) 55%, var(--vazio)); border: 1.5px dashed var(--text); }
+.leg-aberto { background: color-mix(in srgb, var(--muted) 30%, var(--vazio)); }
+.tabela-eleitos td { vertical-align: top; }
