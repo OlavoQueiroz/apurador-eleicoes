@@ -94,6 +94,14 @@ TSE (JSON estático, CDN)  →  poller  →  normalização  →  memória  → 
 - **Antes da apuração**: os arquivos já existem, mas com votos zerados; o painel mostra "Aguardando apuração".
   Arquivos que o TSE ainda não publicou (ex.: 2º turno) aparecem como indisponíveis, sem erro.
 
+### O mapa
+
+O mapa é o contorno real das 27 UFs, desenhado em SVG a partir das malhas do IBGE (qualidade mínima, ~58 KB em
+`public/mapa-brasil.js`). Nada é buscado fora do seu computador em tempo de execução. Nos cargos majoritários a UF
+leva a cor do partido do mais votado, **mais clara quanto menos seções foram totalizadas**; nos demais, a cor indica só
+o quanto foi totalizado. Passe o mouse numa UF para ver o líder e a apuração. Para regerar os contornos:
+`node scripts/gerar-mapa.js`.
+
 ### API local
 
 - `GET /api/meta` — configuração, cargos e estado do último ciclo.
@@ -149,7 +157,8 @@ src/config.js        opções e variáveis de ambiente
 src/abrir.js         abre o painel no navegador ao iniciar
 src/supervisor.js    npm run dev: reinicia o servidor quando o código muda
 src/parar.js         npm run stop: acha e encerra só o painel deste projeto
-public/              interface (HTML, CSS e JS sem build)
+public/              interface (HTML, CSS e JS sem build); mapa-brasil.js é gerado
+scripts/gerar-mapa.js  baixa as malhas do IBGE e gera public/mapa-brasil.js
 scripts/dev.js       npm run dev (usa src/supervisor.js)
 scripts/stop.js      npm run stop (usa src/parar.js)
 test/                testes e fixtures

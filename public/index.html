@@ -14,8 +14,13 @@
 
   <header class="topo">
     <div class="topo-titulo">
-      <h1>Apuração <span id="ano"></span></h1>
-      <p id="subtitulo" class="muted"></p>
+      <span class="marca" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M8 17l5 5 11-12" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div>
+        <h1>Apuração <span id="ano"></span></h1>
+        <p id="subtitulo" class="muted"></p>
+      </div>
     </div>
     <div class="estado" aria-live="polite">
       <span id="pulso" class="pulso" data-estado="conectando"></span>
@@ -29,10 +34,13 @@
   <nav id="abas" class="abas" aria-label="Cargos"></nav>
 
   <main id="principal" class="principal">
-    <section id="mapa" class="mapa" aria-label="Unidades da Federação">
-      <div id="grade" class="grade-uf"></div>
+    <section id="mapa" class="mapa" aria-label="Mapa das Unidades da Federação">
+      <div class="mapa-area">
+        <div id="grade" class="mapa-wrap"></div>
+        <div id="dica" class="dica" role="tooltip" hidden></div>
+      </div>
       <div id="especiais" class="especiais"></div>
-      <p class="muted pequeno legenda">Cada quadrado é uma UF (posições aproximadas). A barra mostra o quanto da UF já foi totalizado.</p>
+      <div id="legenda" class="legenda"></div>
     </section>
     <section id="detalhe" class="detalhe" aria-label="Resultado"></section>
   </main>

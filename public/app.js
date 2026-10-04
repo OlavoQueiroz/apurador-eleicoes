@@ -1,5 +1,7 @@
 // Painel de apuração: busca /api/*, escuta /events (SSE) e redesenha quando chegam dados novos.
 
+import { MAPA } from './mapa-brasil.js';
+
 const UF_NOME = {
   ac: 'Acre', al: 'Alagoas', am: 'Amazonas', ap: 'Amapá', ba: 'Bahia', ce: 'Ceará', df: 'Distrito Federal',
   es: 'Espírito Santo', go: 'Goiás', ma: 'Maranhão', mg: 'Minas Gerais', ms: 'Mato Grosso do Sul', mt: 'Mato Grosso',
@@ -8,17 +10,22 @@ const UF_NOME = {
   se: 'Sergipe', sp: 'São Paulo', to: 'Tocantins', br: 'Brasil', zz: 'Exterior',
 };
 
-// Posição [coluna, linha] de cada UF numa grade que lembra o mapa do Brasil.
-const GRADE = {
-  rr: [1, 0], ap: [3, 0],
-  am: [1, 1], pa: [2, 1], ma: [3, 1], pi: [4, 1], ce: [5, 1], rn: [6, 1],
-  ac: [0, 2], ro: [1, 2], mt: [2, 2], to: [3, 2], ba: [4, 2], pe: [5, 2], pb: [6, 2],
-  ms: [2, 3], go: [3, 3], df: [4, 3], se: [5, 3], al: [6, 3],
-  sp: [3, 4], mg: [4, 4], es: [5, 4],
-  pr: [3, 5], rj: [4, 5],
-  sc: [3, 6],
-  rs: [3, 7],
+// Posição do rótulo (sistema de coordenadas de mapa-brasil.js) quando o centro da UF não serve: UFs pequenas
+// do litoral levam a sigla para o mar, ligada por uma linha ao centro da UF (`guia`); `ancora: 'start'` alinha
+// o texto à esquerda, que é o caso dos rótulos que ficam à direita do mapa.
+const ROTULOS = {
+  rn: { x: 592, y: 170, guia: true, ancora: 'start' },
+  pb: { x: 592, y: 193, guia: true, ancora: 'start' },
+  pe: { x: 592, y: 216, guia: true, ancora: 'start' },
+  al: { x: 592, y: 239, guia: true, ancora: 'start' },
+  se: { x: 592, y: 262, guia: true, ancora: 'start' },
+  es: { x: 522, y: 384, guia: true, ancora: 'start' },
+  rj: { x: 508, y: 426, guia: true, ancora: 'start' },
+  df: { x: 385, y: 356, guia: true },
+  go: { x: 340, y: 330 },
 };
+// Espaço à direita do mapa para os rótulos que ficam no mar.
+const FOLGA_DIREITA = 40;
 
 // Cores aproximadas; partido sem cor definida ganha uma cor estável derivada do nome.
 const CORES = {
@@ -175,37 +182,119 @@ function conteudoTile(item) {
   };
 }
 
-function tileHtml(uf, { posicao } = {}) {
+// Dados de uma "unidade" (UF, Brasil ou exterior) para o mapa, os chips e a dica.
+function dadoUnidade(uf) {
   // "Brasil" nos cargos sem arquivo nacional é a soma das UFs; nos demais casos é um arquivo comum.
-  const dado = uf === 'br' && !temArquivoNacional(estado.cargo)
+  return uf === 'br' && !temArquivoNacional(estado.cargo)
     ? { sub: 'Visão geral', sub2: fmtPct(agregadoSecoes().pct, 0), pct: agregadoSecoes().pct, cor: null, vazio: false }
     : conteudoTile(itemResumo(estado.cargo, uf));
-  const estilo = [posicao ? `--c:${posicao[0]};--r:${posicao[1]}` : '', dado.cor ? `--cor:${dado.cor}` : ''].filter(Boolean).join(';');
-  return `<a class="tile${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}" style="${estilo}"
-      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}" title="${esc(nomeUf(uf))}">
-      <span class="tile-uf">${uf.toUpperCase()}</span>
-      ${dado.sub ? `<span class="tile-sub">${dado.sub}</span>` : ''}
-      <span class="tile-sub">${dado.sub2}</span>
+}
+
+function chipHtml(uf) {
+  const dado = dadoUnidade(uf);
+  const estilo = dado.cor ? ` style="--cor:${dado.cor}"` : '';
+  return `<a class="chip-uf${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}"${estilo}
+      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
+      <span class="tile-uf">${uf === 'br' ? 'Brasil' : 'Exterior'}</span>
+      <span class="tile-sub">${dado.sub ? `${dado.sub} · ` : ''}${dado.sub2}</span>
       <span class="tile-barra"><i style="width:${dado.pct}%"></i></span>
     </a>`;
 }
 
+// Intensidade da cor: a UF começa cinza e ganha a cor do líder conforme é apurada, para que uma UF com
+// poucas seções não pareça um resultado firme.
+const forcaCor = (pct) => Math.round(Math.min(100, Math.max(0, pct)));
+
+function ufMapaHtml(uf, ativas) {
+  const forma = MAPA.ufs[uf];
+  if (!ativas.has(uf)) return `<g class="uf inativa"><path d="${forma.d}"/></g>`;
+  const dado = dadoUnidade(uf);
+  // Nos majoritários, sem líder (ainda sem votos) a UF fica cinza; nos demais cargos a cor é a de destaque.
+  const cor = dado.cor ?? (ehMajoritario(estado.cargo) ? null : 'var(--accent)');
+  const estilo = dado.vazio || !cor ? '' : ` style="--cor:${cor};--forca:${forcaCor(dado.pct)}"`;
+  return `<a class="uf${dado.vazio ? ' vazio' : ''}" href="#/${estado.cargo}/${uf}" data-uf="${uf}"${estilo}
+      aria-current="${uf === estado.uf}" aria-label="${esc(nomeUf(uf))}: ${dado.vazio ? 'sem dados' : esc(`${dado.sub} ${dado.sub2}`.trim())}">
+      <path d="${forma.d}"/></a>`;
+}
+
+function rotulosMapaHtml(ativas) {
+  return Object.entries(MAPA.ufs).map(([uf, centro]) => {
+    const pos = { ...centro, ...ROTULOS[uf] };
+    const classe = `rot${ativas.has(uf) ? '' : ' inativa'}${pos.ancora === 'start' ? ' fora' : ''}`;
+    const texto = `<text class="${classe}" x="${pos.x}" y="${pos.y}">${uf.toUpperCase()}</text>`;
+    if (!pos.guia) return texto;
+    // A linha termina na borda do texto (à esquerda dele quando alinhado à esquerda, no meio quando centralizado).
+    const x2 = pos.ancora === 'start' ? pos.x - 3 : pos.x;
+    const y2 = pos.ancora === 'start' ? pos.y : pos.y - 8;
+    return `<line class="guia" x1="${centro.x}" y1="${centro.y}" x2="${x2}" y2="${y2}"/>
+      <circle class="guia-ponto" cx="${centro.x}" cy="${centro.y}" r="2"/>${texto}`;
+  }).join('');
+}
+
+function legendaHtml() {
+  const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
+  if (ehMajoritario(estado.cargo)) {
+    const partidos = [...new Set(itensDoCargo().filter(({ uf }) => uf !== 'zz').map(({ item }) => item.lider?.partido).filter(Boolean))].sort();
+    const chaves = partidos.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    return `<div class="leg-linha"><span class="leg-titulo">Mais votado na UF</span>${chaves || '<span class="muted">sem votos ainda</span>'}</div>
+      <div class="leg-linha"><span class="leg-titulo">Apuração</span><span class="muted">pouca</span>${gradiente('var(--text)')}<span class="muted">toda</span></div>`;
+  }
+  return `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
+}
+
 function renderGrade() {
   const meta = cargoMeta();
-  const ufs = new Set(meta.abrangencias);
+  const ativas = new Set(meta.abrangencias);
   const semMapa = meta.abrangencias.length === 1;
   $('#principal').classList.toggle('sem-mapa', semMapa);
   if (semMapa) return;
 
-  $('#grade').innerHTML = Object.entries(GRADE)
-    .filter(([uf]) => ufs.has(uf))
-    .map(([uf, posicao]) => tileHtml(uf, { posicao }))
-    .join('');
+  // A UF selecionada vai por último para que o contorno de destaque não fique escondido; o DF, que é um
+  // buraco dentro de Goiás, vem logo antes para ficar por cima dele.
+  const ordem = Object.keys(MAPA.ufs).sort((a, b) => (a === 'df') - (b === 'df')).sort((a, b) => (a === estado.uf) - (b === estado.uf));
+  $('#grade').innerHTML = `<svg class="mapa-svg" viewBox="0 0 ${MAPA.largura + FOLGA_DIREITA} ${MAPA.altura}" role="group" aria-label="Mapa do Brasil por UF">
+      ${ordem.map((uf) => ufMapaHtml(uf, ativas)).join('')}
+      <g class="rotulos">${rotulosMapaHtml(ativas)}</g>
+    </svg>`;
 
   const especiais = [];
-  if (ufs.has('br') || meta.codigo !== 1) especiais.push('br');
-  if (ufs.has('zz')) especiais.push('zz');
-  $('#especiais').innerHTML = especiais.map((uf) => tileHtml(uf)).join('');
+  if (ativas.has('br') || meta.codigo !== 1) especiais.push('br');
+  if (ativas.has('zz')) especiais.push('zz');
+  $('#especiais').innerHTML = especiais.map(chipHtml).join('');
+  $('#legenda').innerHTML = legendaHtml();
+}
+
+// ---------- dica ao passar o mouse sobre uma UF ----------
+
+function dicaHtml(uf) {
+  const item = itemResumo(estado.cargo, uf);
+  const dado = conteudoTile(item);
+  const linhas = [];
+  if (dado.vazio) linhas.push('<span class="muted">Sem dados ainda</span>');
+  else {
+    if (ehMajoritario(estado.cargo) && item.lider) {
+      linhas.push(`<span class="dica-lider" style="--cor:${corPartido(item.lider.partido)}"><i></i><span>${esc(item.lider.nomeUrna)}<small>${esc(item.lider.partido)} · ${fmtPct(item.lider.pct)} dos válidos</small></span></span>`);
+    }
+    linhas.push(`<span class="muted">${fmtPct(item.secoes.pctTotalizadas)} das seções totalizadas</span>`);
+  }
+  return `<strong>${esc(nomeUf(uf))}</strong>${linhas.join('')}`;
+}
+
+function iniciarDica() {
+  const area = $('#grade').parentElement;
+  const dica = $('#dica');
+  const esconder = () => { dica.hidden = true; };
+  area.addEventListener('pointermove', (evento) => {
+    const alvo = evento.target.closest?.('a.uf');
+    if (!alvo || evento.pointerType === 'touch') return esconder();
+    dica.innerHTML = dicaHtml(alvo.dataset.uf);
+    dica.hidden = false;
+    const caixa = area.getBoundingClientRect();
+    const x = Math.min(evento.clientX - caixa.left + 14, caixa.width - dica.offsetWidth);
+    dica.style.left = `${Math.max(0, x)}px`;
+    dica.style.top = `${evento.clientY - caixa.top + 16}px`;
+  });
+  area.addEventListener('pointerleave', esconder);
 }
 
 // ---------- desenho: blocos do detalhe ----------
@@ -514,6 +603,7 @@ async function iniciar() {
   $('#banner-demo').hidden = !meta.demo;
 
   lerHash();
+  iniciarDica();
   await atualizar();
   conectar();
   setInterval(renderEstado, 1000);
