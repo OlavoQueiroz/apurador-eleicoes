@@ -6,7 +6,7 @@ import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, i
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
-import { CARGOS_PARTIDOS, cargoPartidos, criarModelo, hashPartidos, partidosHtml } from './partidos.js';
+import { CARGOS_PARTIDOS, PRESIDENTE, cargoPartidos, criarModelo, hashPartidos, partidosHtml, seletorCargosHtml } from './partidos.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -107,7 +107,8 @@ const itemResumo = (cargo, uf) => estado.resumo.get(`${cargo}:${uf}`);
 // A visão escolhida (apuração ou projeção) acompanha a troca de cargo e de UF.
 const hashPara = (cargo, uf, visao = estado.visao, modelo = estado.modelo, periodo = estado.comparativo.periodo) => {
   if (visao === 'projecao') return `#/${cargo}/${uf}/projecao/${modelo}`;
-  if (visao === 'comparativo' && cargo === 1) return `#/${cargo}/${uf}/comparativo${periodo === PADRAO ? '' : `/${periodo}`}`;
+  // O comparativo da presidência vive na aba Análises: #/partidos/1/comparativo/período[/uf].
+  if (visao === 'comparativo' && cargo === 1) return `#/partidos/1/comparativo/${periodo}${uf === 'br' ? '' : `/${uf}`}`;
   return `#/${cargo}/${uf}`;
 };
 
@@ -335,7 +336,7 @@ async function atualizar() {
   try {
     do {
       atualizarDeNovo = false;
-      if (estado.partidos.ativo) {
+      if (estado.partidos.ativo && estado.partidos.cargo !== PRESIDENTE.codigo) {
         await Promise.all([carregarResumo(), carregarHistoricoPartidos()]); // a aba Partidos só usa os resumos das UFs
       } else {
         await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico(), carregarMapaProjecao(), carregarHistoricoPartidos()]);
@@ -359,23 +360,32 @@ function ufPadrao(cargo) {
 }
 
 function lerHash() {
-  const p = /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?(?:\/(ideologia|partido))?$/.exec(location.hash);
-  estado.partidos.ativo = Boolean(p) && cargosDePartidos().length > 0;
-  if (estado.partidos.ativo) {
+  const hash = location.hash;
+  const comp = /^#\/partidos\/1\/comparativo(?:\/(\d{4}x\d{4}))?(?:\/([a-z]{2}))?$/.exec(hash);
+  const p = !comp && /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?(?:\/(ideologia|partido))?$/.exec(hash);
+  estado.partidos.ativo = Boolean(comp || p) && cargosDePartidos().length > 0;
+  if (p && estado.partidos.ativo) {
     const pedido = Number(p[1]);
-    estado.partidos.cargo = cargosDePartidos().some((c) => c.codigo === pedido) ? pedido : cargosDePartidos()[0].codigo;
+    // Presidente na aba Análises é o comparativo, que tem endereço próprio.
+    if (pedido === PRESIDENTE.codigo) { history.replaceState(null, '', hashPartidos(PRESIDENTE.codigo)); return lerHash(); }
+    estado.visao = 'apuracao';
+    estado.partidos.cargo = cargosDePartidos().some((c) => c.codigo === pedido) ? pedido : cargosDePartidos().find((c) => c.codigo !== PRESIDENTE.codigo).codigo;
     estado.partidos.aba = p[2] ?? 'placar';
     estado.partidos.agrupar = p[3] === 'partido' ? 'partido' : 'ideologia';
     return;
   }
-  const m = /^#\/(\d+)\/([a-z]{2})(?:\/(projecao|comparativo)(?:\/([a-z0-9]+))?)?(?:\/([cm])\/(\w+))?$/.exec(location.hash);
+  const m = comp ? [hash, '1', comp[2] ?? 'br', 'comparativo', comp[1]] : /^#\/(\d+)\/([a-z]{2})(?:\/(projecao|comparativo)(?:\/([a-z0-9]+))?)?(?:\/([cm])\/(\w+))?$/.exec(hash);
   const modeloPedido = m?.[4];
   const cargo = m ? Number(m[1]) : estado.meta.cargos[0].codigo;
   const meta = cargoMeta(cargo) ?? estado.meta.cargos[0];
   estado.cargo = meta.codigo;
   // O comparativo com 2022 só existe para presidente.
   estado.visao = m?.[3] === 'projecao' ? 'projecao' : m?.[3] === 'comparativo' && meta.codigo === 1 ? 'comparativo' : 'apuracao';
-  if (estado.visao === 'comparativo') estado.comparativo.periodo = PERIODOS[modeloPedido] ? modeloPedido : PADRAO;
+  if (estado.visao === 'comparativo') {
+    estado.comparativo.periodo = PERIODOS[modeloPedido] ? modeloPedido : PADRAO;
+    estado.partidos.ativo = cargosDePartidos().length > 0;
+    estado.partidos.cargo = PRESIDENTE.codigo;
+  }
   // Modelo que não vale para o cargo aberto (ex.: swing em governador) volta para o simples.
   estado.modelo = modelosDoCargo(meta.codigo).some((x) => x.id === modeloPedido) ? modeloPedido : 'ingenuo';
   const ufPedida = m?.[2];
@@ -385,6 +395,8 @@ function lerHash() {
   estado.mostrarTodos = false;
   estado.destaque = m?.[5] ? { tipo: m[5], id: m[6] } : null;
   estado.destaqueRolado = false;
+  // Endereço antigo do comparativo (#/1/br/comparativo): vira o novo, na aba Análises.
+  if (estado.visao === 'comparativo' && !comp) history.replaceState(null, '', hashPara(1, estado.uf, 'comparativo'));
 }
 
 async function aplicarHash() {
@@ -461,8 +473,7 @@ function renderAbas() {
   // direita da linha dos cargos. O seletor de modelo fica dentro do painel da projeção.
   const visao = (id, rotulo) =>
     `<a class="aba" href="${hashPara(estado.cargo, estado.uf, id)}" ${estado.visao === id ? 'aria-current="page"' : ''}>${rotulo}</a>`;
-  const comparativo = estado.cargo === 1 ? visao('comparativo', 'Comparativo') : '';
-  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}${comparativo}</div>`;
+  const modo = `<div class="seg seg-modo" role="group" aria-label="Visão">${visao('apuracao', 'Apuração')}${visao('projecao', 'Projeção')}</div>`;
   $('#abas').innerHTML = `<div class="seg">${itens}${abaPartidos}</div>${modo}`;
 }
 
@@ -1127,7 +1138,7 @@ function renderDetalhe() {
   const cursor = buscaFocada ? document.activeElement.selectionStart : null;
   const rolagem = window.scrollY;
 
-  if (estado.visao === 'comparativo') raiz.innerHTML = comparativoPainelHtml();
+  if (estado.visao === 'comparativo') raiz.innerHTML = `<div class="par-topo">${seletorCargosHtml({ cargos: cargosDePartidos(), atual: PRESIDENTE.codigo, aba: estado.partidos.aba, modo: estado.partidos.agrupar, esc })}</div>${comparativoPainelHtml()}`;
   else if (ehAgregado()) raiz.innerHTML = estado.visao === 'projecao' ? projecaoAgregadoHtml() : detalheAgregadoHtml();
   else raiz.innerHTML = (estado.visao === 'projecao' ? detalheProjecaoHtml() : municipioSelecionadoHtml() + detalheArquivoHtml());
 
@@ -1179,11 +1190,11 @@ function renderDetalhe() {
 // ---------- aba Análises (partidos e ideologia) ----------
 
 // Cargos da aba que o servidor está acompanhando (governador, senador e deputado federal).
-const cargosDePartidos = () => CARGOS_PARTIDOS.filter((c) => cargoMeta(c.codigo));
+const cargosDePartidos = () => [...(cargoMeta(PRESIDENTE.codigo) ? [PRESIDENTE] : []), ...CARGOS_PARTIDOS.filter((c) => cargoMeta(c.codigo))];
 
 // Eleitos de 2014, 2018 e 2022 por partido; não mudam durante a apuração, então carrega uma vez.
 async function carregarHistoricoPartidos() {
-  if (!estado.partidos.ativo || estado.partidos.historico !== undefined) return;
+  if (!estado.partidos.ativo || estado.partidos.cargo === PRESIDENTE.codigo || estado.partidos.historico !== undefined) return;
   try {
     const h = await getJson('/api/partidos');
     estado.partidos.historico = h.disponivel ? h : null;
@@ -1211,7 +1222,7 @@ function renderPartidos() {
 
 function render() {
   renderAbas();
-  if (estado.partidos.ativo) {
+  if (estado.partidos.ativo && estado.partidos.cargo !== PRESIDENTE.codigo) {
     $('#principal').classList.add('sem-mapa');
     renderPartidos();
     renderEstado();

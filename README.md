@@ -137,7 +137,7 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
 
 ### Aba Análises (partidos e ideologia)
 
-Ao lado dos cargos, a aba **Análises** mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
+Ao lado dos cargos, a aba **Análises** reúne o Comparativo da presidência (abaixo) e mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
 Direita, Independente) e por partido, em quatro análises: **Placar** (cartões com a variação de cadeiras desde a eleição
 anterior e o hemiciclo), **Ganhos e perdas** (barras por partido), **Viradas por estado** (mapa de Governadores e Câmara em
 que cada UF é dividida ao meio quando mudou de bloco: esquerda = eleição anterior, direita = 2026) e **Série histórica**
@@ -157,10 +157,10 @@ blocos) e **Partido** (os maiores partidos e as cores de cada um). O endereço g
 
 ### Comparativo com eleições anteriores
 
-Na tela de Presidente, ao lado de "Apuração" e "Projeção", a visão **Comparativo** compara o PT (Lula ou Haddad) com ele
+Na aba **Análises**, em **Presidente**, o **Comparativo** compara o PT (Lula ou Haddad) com ele
 mesmo e o campo de Bolsonaro (Flávio ou Bolsonaro) com Bolsonaro, no 1º turno. O seletor do painel escolhe o período:
 **2026 × 2022**, **2026 × 2018** (a apuração de 2026 ao vivo) e **2022 × 2018** (as duas encerradas: serve para testar a
-página com dados reais antes da apuração). O endereço guarda a escolha (`#/1/br/comparativo/2022x2018`).
+página com dados reais antes da apuração). O endereço guarda a escolha (`#/partidos/1/comparativo/2022x2018`, com a UF no fim se houver uma aberta); o endereço antigo (`#/1/br/comparativo`) redireciona.
 
 A informação principal é o **impacto no saldo nacional**, não a variação dentro da UF: o saldo da UF é a variação do PT
 menos a do campo de Bolsonaro (em pontos percentuais dos votos válidos) e o impacto é o saldo multiplicado pelo peso da UF

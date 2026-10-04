@@ -13,6 +13,8 @@ export const CARGOS_PARTIDOS = [
   { codigo: 3, chave: 'governador', nome: 'Governadores', total: 27, anos: [2014, 2018, 2022], mapa: true },
 ];
 export const cargoPartidos = (codigo) => CARGOS_PARTIDOS.find((c) => c.codigo === Number(codigo));
+// Presidente também mora na aba Análises, mas com a visão Comparativo (comparativo-eleicoes.js) em vez de bancadas.
+export const PRESIDENTE = { codigo: 1, nome: 'Presidente' };
 
 export const ABAS = [
   { id: 'placar', nome: 'Placar' },
@@ -374,15 +376,23 @@ export function estadosHtml(modelo, ajuda) {
 
 export const MODOS = [{ id: 'ideologia', nome: 'Ideologia' }, { id: 'partido', nome: 'Partido' }];
 // Endereço de uma visão da aba; o agrupamento por ideologia é o padrão e não vai no endereço.
-export const hashPartidos = (cargo, aba, agrupar) => `#/partidos/${cargo}/${aba}${agrupar === 'partido' ? '/partido' : ''}`;
+export const hashPartidos = (cargo, aba, agrupar) => (Number(cargo) === PRESIDENTE.codigo
+  ? '#/partidos/1/comparativo'
+  : `#/partidos/${cargo}/${aba}${agrupar === 'partido' ? '/partido' : ''}`);
+
+// Seletor de cargo da aba (o mesmo switch do resto do app); `atual` é o código do cargo aberto.
+export function seletorCargosHtml({ cargos, atual, aba, modo, esc }) {
+  const itens = cargos.map((c) =>
+    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo)}" ${c.codigo === atual ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
+  return `<div class="seg seg-modelo" role="group" aria-label="Cargo">${itens}</div>`;
+}
 
 // Página inteira: seletor de cargo, de agrupamento, abas e o conteúdo da aba. Os controles são links.
 export function partidosHtml(modelo, ui, ajuda) {
   const { esc } = ajuda;
   const modo = ui.agrupar === 'partido' ? 'partido' : 'ideologia';
   const aba = abasDoCargo(modelo.cargo).some((a) => a.id === ui.aba) ? ui.aba : 'placar';
-  const cargos = (ui.cargos ?? CARGOS_PARTIDOS).map((c) =>
-    `<a class="aba" href="${hashPartidos(c.codigo, aba, modo)}" ${c.codigo === modelo.cargo.codigo ? 'aria-current="page"' : ''}>${esc(c.nome)}</a>`).join('');
+  const cargos = seletorCargosHtml({ cargos: ui.cargos ?? CARGOS_PARTIDOS, atual: modelo.cargo.codigo, aba, modo, esc });
   const agrupar = MODOS.map((m) =>
     `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
   const abas = abasDoCargo(modelo.cargo).map((a) =>
@@ -392,7 +402,7 @@ export function partidosHtml(modelo, ui, ajuda) {
     ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
     : { placar: placarHtml, ganhos: ganhosHtml, serie: serieHtml, estados: estadosHtml }[aba](modelo, aj);
   // Os três seletores na mesma linha (quebra em telas estreitas); o agrupamento fica na ponta direita.
-  return `<div class="par-topo"><div class="seg seg-modelo" role="group" aria-label="Cargo">${cargos}</div>
+  return `<div class="par-topo">${cargos}
     <div class="seg seg-modelo" role="group" aria-label="Análise">${abas}</div>
     <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>${corpo}
     <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;
