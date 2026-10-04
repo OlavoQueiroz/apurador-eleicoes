@@ -309,7 +309,6 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 /* ---------- candidatos ---------- */
 .candidatos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .candidatos > li { padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid transparent; }
-.candidatos > li:first-child { background: color-mix(in srgb, var(--cor, var(--accent)) 9%, var(--surface)); border-color: color-mix(in srgb, var(--cor, var(--accent)) 28%, var(--line)); }
 .cand-topo { display: flex; align-items: center; gap: 10px; }
 .cand-pos {
   display: grid;
@@ -324,14 +323,14 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
   font-weight: 700;
   flex: none;
 }
-.candidatos > li:first-child .cand-pos { background: var(--cor, var(--accent)); border-color: transparent; color: #fff; }
-.cand-nome { flex: 1; min-width: 0; }
+.candidatos > li.lider .cand-pos { background: var(--cor, var(--accent)); border-color: transparent; color: #fff; }
+.cand-nome { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .cand-nome strong { font-weight: 650; }
-.cand-num { color: var(--muted); font-size: 12.5px; margin-left: 4px; }
-.cand-extra { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cand-num { color: var(--muted); font-size: 12.5px; }
 .cand-votos { text-align: right; flex: none; }
 .cand-votos b { display: block; font-size: 17px; letter-spacing: -0.01em; }
 .cand-votos small { color: var(--muted); font-size: 12px; }
+.cand-votos .sem-votos { color: var(--muted); font-weight: 500; }
 .partido {
   flex: none;
   font-size: 11.5px;
@@ -351,7 +350,7 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 @media (prefers-color-scheme: dark) {
   .pill.eleito, .pill.segundo-turno { color: #0b1020; }
 }
-.barra { margin: 8px 0 0 36px; height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+.barra { margin: 8px 0 0 36px; height: 5px; border-radius: 99px; background: var(--track); overflow: hidden; }
 .barra i { display: block; height: 100%; border-radius: 99px; background: var(--cor, var(--accent)); }
 @media (prefers-reduced-motion: no-preference) {
   .barra i, .trilho i { transition: width 0.5s ease; }

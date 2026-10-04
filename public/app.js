@@ -657,25 +657,22 @@ function pilulaSituacao(c) {
   return '';
 }
 
-function extraCandidato(c) {
-  if (!c.vices?.length) return '';
-  const rotulo = { v: 'Vice', s1: '1º suplente', s2: '2º suplente' };
-  const texto = c.vices.map((x) => `${rotulo[x.tipo] ?? 'Vice'}: ${esc(x.nomeUrna)}`).join(' · ');
-  return `<span class="cand-extra">${texto}</span>`;
-}
-
-function candidatoHtml(c, posicao, largura) {
+// Antes de qualquer voto não há o que mostrar: sem barra, sem líder e um traço no lugar de "0,00%" repetido.
+function candidatoHtml(c, posicao, largura, semVotos = false) {
   const cor = corPartido(c.partido);
-  const destaque = estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? ' class="destaque"' : '';
-  return `<li${destaque} style="--cor:${cor}">
+  const classes = [
+    estado.destaque?.tipo === 'c' && estado.destaque.id === String(c.sq) ? 'destaque' : '',
+    posicao === 1 && !semVotos ? 'lider' : '',
+  ].filter(Boolean).join(' ');
+  // Em disputa proporcional o número identifica o candidato (e a busca usa ele); nos majoritários é o do partido.
+  const numero = ehProporcional(estado.cargo) ? `<span class="cand-num">${esc(c.numero)}</span>` : '';
+  return `<li${classes ? ` class="${classes}"` : ''} style="--cor:${cor}">
     <div class="cand-topo">
       <span class="cand-pos">${posicao}</span>
-      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong><span class="cand-num">${esc(c.numero)}</span>${extraCandidato(c)}</div>
-      <span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>
-      ${pilulaSituacao(c)}
-      <div class="cand-votos"><b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small></div>
+      <div class="cand-nome"><strong>${esc(c.nomeUrna)}</strong>${numero}<span class="partido" title="${esc(c.partidoNome)}">${esc(c.partido)}</span>${pilulaSituacao(c)}</div>
+      <div class="cand-votos">${semVotos ? '<b class="sem-votos">—</b>' : `<b>${fmtPct(c.pct)}</b><small>${fmtInt(c.votos)}</small>`}</div>
     </div>
-    <div class="barra"><i style="width:${largura}%"></i></div>
+    ${semVotos ? '' : `<div class="barra"><i style="width:${largura}%"></i></div>`}
   </li>`;
 }
 
@@ -723,6 +720,7 @@ function detalheArquivoHtml() {
     topo = `<p class="aviso-bloco"><b>${esc(a.nomeUrna)}</b> está ${fmtInt(a.votos - b.votos)} votos (${fmtPct(a.pct - b.pct)} pontos) à frente de <b>${esc(b.nomeUrna)}</b>.</p>`;
   }
 
+  const semVotos = candidatos.every((c) => !c.votos);
   let lista;
   let fixado = '';
   if (ehProporcional(d.cargo.codigo)) {
@@ -740,18 +738,18 @@ function detalheArquivoHtml() {
     const escolhido = estado.destaque?.tipo === 'c' && !termo ? candidatos.find((c) => String(c.sq) === estado.destaque.id) : null;
     fixado = escolhido && !visiveis.includes(escolhido)
       ? `<h3 class="secao sel-fixado">Candidato selecionado</h3>
-        <ol class="candidatos" style="list-style:none;padding:0">${candidatoHtml(escolhido, posicaoGeral.get(escolhido.sq), largura(escolhido))}</ol>`
+        <ol class="candidatos" style="list-style:none;padding:0">${candidatoHtml(escolhido, posicaoGeral.get(escolhido.sq), largura(escolhido), semVotos)}</ol>`
       : '';
     lista = `<div class="ferramentas">
         <input id="busca" type="search" placeholder="Buscar candidato, número ou partido" value="${esc(estado.busca)}" autocomplete="off">
         ${termo || filtrados.length <= 20 ? '' : `<button class="botao" id="mostrar-todos">${estado.mostrarTodos ? 'Mostrar só os 20 primeiros' : `Mostrar todos (${fmtInt(filtrados.length)})`}</button>`}
       </div>
-      <ol class="candidatos" style="list-style:none;padding:0">${visiveis.map((c) => candidatoHtml(c, posicaoGeral.get(c.sq), largura(c))).join('')}</ol>
+      <ol class="candidatos" style="list-style:none;padding:0">${visiveis.map((c) => candidatoHtml(c, posicaoGeral.get(c.sq), largura(c), semVotos)).join('')}</ol>
       ${filtrados.length === 0 ? '<p class="vazio-msg">Nenhum candidato encontrado.</p>' : ''}
       ${termo && filtrados.length > limite ? `<p class="muted pequeno">Mostrando ${limite} de ${fmtInt(filtrados.length)}. Refine a busca.</p>` : ''}
       ${agrupamentosHtml(d)}`;
   } else {
-    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct)).join('')}</ol>`;
+    lista = `<ol class="candidatos">${candidatos.map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos)).join('')}</ol>`;
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
@@ -850,7 +848,7 @@ function detalheAgregadoHtml() {
 
   const barras = partidos.length
     ? `<h3 class="secao">Eleitos por partido</h3>
-       <ol class="candidatos">${partidos.map(([p, n], i) => `<li style="--cor:${corPartido(p)}">
+       <ol class="candidatos">${partidos.map(([p, n], i) => `<li class="${i === 0 ? 'lider' : ''}" style="--cor:${corPartido(p)}">
          <div class="cand-topo"><span class="cand-pos">${i + 1}</span><div class="cand-nome"><strong>${esc(p)}</strong></div>
          <div class="cand-votos"><b>${fmtInt(n)}</b></div></div>
          <div class="barra"><i style="width:${(n / maior) * 100}%"></i></div></li>`).join('')}</ol>`
