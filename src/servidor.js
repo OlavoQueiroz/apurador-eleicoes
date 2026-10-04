@@ -14,7 +14,7 @@ import path from 'node:path';
 import { CARGOS } from './tse.js';
 import { lerSerie } from './historico.js';
 import { buscarCandidatos, criarIndiceMunicipios } from './busca.js';
-import { MODELOS, modeloPorId, projetar, projetarEstratificado, projetarBrasil } from './projecao.js';
+import { MODELOS, modeloPorId, projetar, projetarUf, projetarBrasil, tamanhoUf } from './projecao.js';
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -79,15 +79,16 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     if (uf === 'br') {
       if (cargo !== 1) return indisponivel('Escolha uma UF: o modelo trabalha com os municípios de uma UF por vez.');
       const ufs = [...(await municipios.listar(eleicao)).keys()];
-      const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }) }));
+      const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao.estado.get(`${cargo}:${u}`)?.dados ?? null }));
       const prontas = fotos.filter(({ foto }) => !foto.primeiraCarga && !foto.carregando).length;
       if (prontas < ufs.length) {
         return indisponivel('Carregando os municípios de todas as UFs para somar o Brasil…', {
           carregando: true, progresso: { feitos: prontas, total: ufs.length, unidade: 'UFs' },
         });
       }
+      const porUf = fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) }));
       return {
-        ...projetarBrasil(fotos.map(({ uf: u, foto }) => ({ uf: u, dados: foto.dados, total: foto.total })), { limite: 50 }),
+        ...projetarBrasil(porUf, { limite: 50 }),
         carregando: false,
         atualizadoEm: Math.min(...fotos.map(({ foto }) => foto.atualizadoEm ?? Infinity)),
       };
@@ -97,17 +98,13 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     if (snap.primeiraCarga) {
       return indisponivel(snap.erro ?? 'Carregando os resultados dos municípios…', { carregando: snap.carregando, progresso: snap.progresso });
     }
-    if (!snap.dados.length) return indisponivel(snap.erro ?? 'O TSE ainda não publicou os arquivos dos municípios desta UF.');
-    // Conferência: a soma dos municípios deve ficar perto do arquivo da UF (podem ser de momentos diferentes).
-    const somaMunicipios = snap.dados.reduce((s, m) => s + m.votos.validos, 0);
-    const validosUf = item.dados?.votos.validos ?? null;
+    const r = projetarUf({ foto: snap, ufDados: item.dados, limite: 50 });
     return {
-      ...projetarEstratificado(snap.dados, { limite: 50, totalMunicipios: snap.total }),
+      ...r,
       carregando: snap.carregando,
       progresso: snap.progresso,
       atualizadoEm: snap.atualizadoEm,
       aviso: snap.erro,
-      conferencia: validosUf ? { municipios: somaMunicipios, uf: validosUf, diferencaPct: validosUf > 0 ? (100 * (somaMunicipios - validosUf)) / validosUf : 0 } : null,
     };
   };
 

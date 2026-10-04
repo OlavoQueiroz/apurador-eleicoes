@@ -19,9 +19,9 @@ export const MODELOS = [
     nome: 'Estratificação por município',
     disponivel: true,
     descricao:
-      'Projeta cada município pela fração das seções dele já apuradas e soma. Municípios que ainda não '
-      + 'apuraram nada entram pelo eleitorado e pela média da UF. Corrige parte da distorção da ordem de '
-      + 'apuração, mas só vale para presidente, governador e senador, uma UF por vez.',
+      'Projeta os municípios grandes um a um e o resto do estado em bloco (arquivo da UF menos os grandes), '
+      + 'pela fração de seções apuradas de cada parte. Corrige a distorção capital × interior. Se os arquivos '
+      + 'estiverem fora de sincronia, volta para a extrapolação simples. Só presidente, governador e senador.',
   },
   {
     id: 'bayesiano',
@@ -153,20 +153,190 @@ export function projetarEstratificado(municipios, { limite = 20, totalMunicipios
   };
 }
 
-// Modelo 2 no Brasil (presidente): projeta cada UF pelos seus municípios e soma. Uma UF em que nenhum
-// município apurou ainda entra pelo eleitorado e pela média nacional das UFs que já têm votos.
-// `ufs` = [{ uf, dados: [resultado de cada município], total: nº de municípios da UF }]. Candidatos são
-// identificados pelo número (nacional na presidência).
+// Modelo 2 com municípios grandes + "resto do estado". Só os municípios grandes têm arquivo próprio; o resto da UF
+// é o arquivo da UF menos a soma dos grandes, e é projetado em bloco pela fração de seções dele (as seções do resto
+// vêm do arquivo de acompanhamento, que lista todos os municípios).
+//  • `grandes`: resultados normalizados dos municípios grandes (cada um com codigoMunicipio);
+//  • `ufDados`: resultado normalizado do arquivo da UF (ciclo principal);
+//  • `detalhes`: Map município → { aptos, secoes:{total,totalizadas} } de TODOS os municípios da UF.
+// Os arquivos têm horários de geração diferentes. Se as seções da UF, do acompanhamento e dos grandes não baterem
+// (além de `tolerancia`, fração do total de seções da UF), ou se a subtração der negativo, devolve
+// `descompasso` e quem chamou usa a extrapolação simples (plano B).
+export function projetarComResto({ grandes, ufDados, detalhes, limite = 20, tolerancia = 0.01 }) {
+  const base = { modelo: 'estratificado', modo: 'grandes+resto' };
+  const idsGrandes = new Set(grandes.map((g) => g.codigoMunicipio));
+  const secoesUf = ufDados.totalizacaoFinal
+    ? { total: ufDados.secoes.total, totalizadas: ufDados.secoes.total }
+    : ufDados.secoes;
+
+  // Seções do resto e conferência de sincronia.
+  let restoTotal = 0;
+  let restoTotalizadas = 0;
+  let restoAptos = 0;
+  let restoMunicipios = 0;
+  let acompTotalizadas = 0;
+  let grandesAcomp = 0;
+  for (const [codigo, d] of detalhes) {
+    acompTotalizadas += d.secoes.totalizadas;
+    if (idsGrandes.has(codigo)) grandesAcomp += d.secoes.totalizadas;
+    else {
+      restoTotal += d.secoes.total;
+      restoTotalizadas += d.secoes.totalizadas;
+      restoAptos += d.aptos;
+      restoMunicipios += 1;
+    }
+  }
+  const grandesArquivos = grandes.reduce((t, g) => t + g.secoes.totalizadas, 0);
+  const totalRef = Math.max(1, secoesUf.total);
+  const dessincUf = Math.abs(secoesUf.totalizadas - acompTotalizadas) / totalRef;
+  const dessincGrandes = Math.abs(grandesArquivos - grandesAcomp) / totalRef;
+  const conferencia = {
+    secoesUf: secoesUf.totalizadas,
+    secoesAcompanhamento: acompTotalizadas,
+    diferencaUfPct: dessincUf * 100,
+    diferencaGrandesPct: dessincGrandes * 100,
+  };
+  if (Math.max(dessincUf, dessincGrandes) > tolerancia) {
+    return { ...base, disponivel: false, descompasso: true, conferencia, motivo: 'Os arquivos da UF e dos municípios estão em momentos diferentes da apuração.' };
+  }
+
+  // Votos do resto = UF − grandes, por candidato.
+  const info = new Map();
+  const votosUf = new Map();
+  for (const c of ufDados.candidatos) {
+    info.set(c.sq, { numero: c.numero, nomeUrna: c.nomeUrna, partido: c.partido });
+    votosUf.set(c.sq, c.votos);
+  }
+  const votosGrandes = new Map();
+  let validosGrandes = 0;
+  for (const g of grandes) {
+    validosGrandes += g.votos.validos;
+    for (const c of g.candidatos) votosGrandes.set(c.sq, (votosGrandes.get(c.sq) ?? 0) + c.votos);
+  }
+  const folga = Math.max(10, 0.005 * ufDados.votos.validos);
+  const restoVotos = new Map();
+  let negativo = false;
+  for (const [sq, v] of votosUf) {
+    const r = v - (votosGrandes.get(sq) ?? 0);
+    if (r < -folga) negativo = true;
+    restoVotos.set(sq, Math.max(0, r));
+  }
+  const restoValidosBruto = ufDados.votos.validos - validosGrandes;
+  if (negativo || restoValidosBruto < -folga) {
+    return { ...base, disponivel: false, descompasso: true, conferencia, motivo: 'A soma dos municípios grandes passa do total da UF: arquivos em momentos diferentes.' };
+  }
+  const restoValidos = Math.max(0, restoValidosBruto);
+
+  // Estratos já iniciados contribuem com o que mediram; os que ainda não têm votos entram pelo eleitorado.
+  const projetado = new Map(); // sq → votos esperados dos estratos iniciados
+  let esperadoIniciado = 0;
+  let aptosIniciados = 0;
+  let aptosSemVotos = 0;
+  let grandesComVotos = 0;
+  let grandesSemVotos = 0;
+  for (const g of grandes) {
+    const f = fracaoMunicipio(g);
+    if (f > 0 && g.votos.validos > 0) {
+      grandesComVotos += 1;
+      esperadoIniciado += g.votos.validos / f;
+      aptosIniciados += g.eleitorado.total;
+      for (const c of g.candidatos) projetado.set(c.sq, (projetado.get(c.sq) ?? 0) + c.votos / f);
+    } else {
+      grandesSemVotos += 1;
+      aptosSemVotos += g.eleitorado.total;
+    }
+  }
+  const restoFracao = ufDados.totalizacaoFinal ? 1 : (restoTotal > 0 ? restoTotalizadas / restoTotal : 0);
+  const restoIniciado = restoFracao > 0 && restoValidos > 0;
+  let esperadoResto = 0;
+  if (restoIniciado) {
+    esperadoResto = restoValidos / restoFracao;
+    esperadoIniciado += esperadoResto;
+    aptosIniciados += restoAptos;
+    for (const [sq, v] of restoVotos) projetado.set(sq, (projetado.get(sq) ?? 0) + v / restoFracao);
+  } else {
+    aptosSemVotos += restoAptos;
+  }
+  if (esperadoIniciado <= 0) {
+    return { ...base, disponivel: false, conferencia, motivo: 'Ainda não há votos apurados em nenhum município desta UF.' };
+  }
+  const taxa = aptosIniciados > 0 ? esperadoIniciado / aptosIniciados : 0;
+  const esperadoEstimado = aptosSemVotos * taxa;
+  const validosProjetados = Math.round(esperadoIniciado + esperadoEstimado);
+  const validosAtuais = ufDados.votos.validos;
+  const faltantes = Math.max(0, validosProjetados - validosAtuais);
+
+  const candidatos = [...info.entries()].map(([sq, i]) => {
+    const comMedida = projetado.get(sq) ?? 0;
+    const doEstimado = (comMedida / esperadoIniciado) * esperadoEstimado;
+    const votos = votosUf.get(sq) ?? 0;
+    const proj = comMedida + doEstimado;
+    return {
+      ...i,
+      votosAtuais: votos,
+      votosProjetados: Math.round(proj),
+      pctAtual: validosAtuais > 0 ? (votos / validosAtuais) * 100 : 0,
+      pctProjetado: validosProjetados > 0 ? (proj / validosProjetados) * 100 : 0,
+      pctMinimo: validosProjetados > 0 ? (votos / validosProjetados) * 100 : 0,
+      pctMaximo: validosProjetados > 0 ? (Math.min(votos + faltantes, validosProjetados) / validosProjetados) * 100 : 0,
+    };
+  }).sort((a, b) => b.votosProjetados - a.votosProjetados).slice(0, limite);
+
+  return {
+    ...base,
+    disponivel: true,
+    fracaoApurada: secoesUf.total > 0 ? secoesUf.totalizadas / secoesUf.total : 0,
+    votosValidos: validosAtuais,
+    validosProjetados,
+    votosFaltantes: faltantes,
+    municipios: { total: detalhes.size, grandes: grandes.length, comVotos: grandesComVotos, semVotos: grandesSemVotos, semArquivo: 0 },
+    resto: {
+      municipios: restoMunicipios,
+      secoes: { total: restoTotal, totalizadas: restoTotalizadas },
+      fracao: restoFracao,
+      iniciado: restoIniciado,
+      parte: validosProjetados > 0 ? esperadoResto / validosProjetados : 0,
+    },
+    parteEstimadaPelaUf: validosProjetados > 0 ? esperadoEstimado / validosProjetados : 0,
+    conferencia,
+    candidatos,
+  };
+}
+
+// Projeção do modelo 2 para uma UF, escolhendo o método conforme o que foi carregado. `foto` vem de
+// Municipios#consultar/espiar. Se os arquivos estiverem fora de sincronia, cai na extrapolação simples (plano B).
+export function projetarUf({ foto, ufDados, limite = Infinity }) {
+  const indisponivel = (motivo) => ({ modelo: 'estratificado', disponivel: false, motivo });
+  if (foto.completo) {
+    if (!foto.dados.length) return indisponivel('O TSE ainda não publicou os arquivos dos municípios desta UF.');
+    return projetarEstratificado(foto.dados, { limite, totalMunicipios: foto.total });
+  }
+  if (!ufDados) return indisponivel('O arquivo desta UF ainda não está disponível no TSE.');
+  if (!foto.detalhes) return indisponivel(foto.erro ?? 'Aguardando o arquivo de acompanhamento da UF.');
+  if (!foto.dados.length) return indisponivel(foto.erro ?? 'Aguardando os municípios grandes desta UF.');
+  const r = projetarComResto({ grandes: foto.dados, ufDados, detalhes: foto.detalhes, limite });
+  if (!r.descompasso) return r;
+  const simples = projetarIngenuo(ufDados, { limite });
+  return { ...simples, modelo: 'estratificado', plano: 'extrapolacao', motivoPlano: r.motivo, conferencia: r.conferencia };
+}
+
+// Tamanho da UF para a soma nacional: eleitorado e seções, do arquivo da UF quando existe.
+export function tamanhoUf({ foto, ufDados }) {
+  if (ufDados) return { aptos: ufDados.eleitorado.total, secoes: ufDados.secoes };
+  return {
+    aptos: foto.dados.reduce((s, m) => s + m.eleitorado.total, 0),
+    secoes: foto.dados.reduce((a, m) => ({ total: a.total + m.secoes.total, totalizadas: a.totalizadas + m.secoes.totalizadas }), { total: 0, totalizadas: 0 }),
+  };
+}
+
+// Modelo 2 no Brasil (presidente): soma a projeção de cada UF. Uma UF em que nada foi apurado ainda entra pelo
+// eleitorado e pela média nacional das UFs que já têm votos. `ufs` = [{ uf, r, aptos, secoes }], onde `r` é a
+// projeção da UF (projetarUf). Candidatos são identificados pelo número (nacional na presidência).
 export function projetarBrasil(ufs, { limite = 20 } = {}) {
   const base = { modelo: 'estratificado' };
-  const parciais = ufs.map((u) => ({
-    ...u,
-    r: projetarEstratificado(u.dados, { limite: Infinity, totalMunicipios: u.total }),
-    aptos: u.dados.reduce((s, m) => s + m.eleitorado.total, 0),
-  }));
-  const comVotos = parciais.filter((p) => p.r.disponivel);
+  const comVotos = ufs.filter((u) => u.r.disponivel);
   if (!comVotos.length) return { ...base, disponivel: false, motivo: 'Ainda não há votos apurados em nenhum município.' };
-  const semVotos = parciais.filter((p) => !p.r.disponivel);
+  const semVotos = ufs.filter((u) => !u.r.disponivel);
 
   const info = new Map();
   const projetado = new Map();
@@ -177,36 +347,28 @@ export function projetarBrasil(ufs, { limite = 20 } = {}) {
   let esperadoEstimado = 0;
   let secoesTotal = 0;
   let secoesTotalizadas = 0;
-  const municipios = { total: 0, comVotos: 0, semVotos: 0, semArquivo: 0 };
+  const municipios = { total: 0, grandes: 0, comVotos: 0, semVotos: 0, semArquivo: 0 };
+  let planoB = 0;
 
-  for (const { r, aptos: a, dados, total } of comVotos) {
+  for (const { r, aptos: a, secoes } of comVotos) {
     esperado += r.validosProjetados;
     aptos += a;
     validosAtuais += r.votosValidos;
-    esperadoEstimado += r.parteEstimadaPelaUf * r.validosProjetados;
+    esperadoEstimado += (r.parteEstimadaPelaUf ?? 0) * r.validosProjetados;
+    if (r.plano === 'extrapolacao') planoB += 1;
     for (const c of r.candidatos) {
       info.set(c.numero, { numero: c.numero, nomeUrna: c.nomeUrna, partido: c.partido });
       projetado.set(c.numero, (projetado.get(c.numero) ?? 0) + c.votosProjetados);
       atual.set(c.numero, (atual.get(c.numero) ?? 0) + c.votosAtuais);
     }
-    for (const m of dados) {
-      secoesTotal += m.secoes.total;
-      secoesTotalizadas += m.secoes.totalizadas;
-    }
-    municipios.total += r.municipios.total;
-    municipios.comVotos += r.municipios.comVotos;
-    municipios.semVotos += r.municipios.semVotos;
-    municipios.semArquivo += r.municipios.semArquivo;
+    secoesTotal += secoes.total;
+    secoesTotalizadas += secoes.totalizadas;
+    for (const k of Object.keys(municipios)) municipios[k] += r.municipios?.[k] ?? 0;
   }
 
   const taxa = aptos > 0 ? esperado / aptos : 0;
-  const esperadoUfsVazias = semVotos.reduce((s, p) => s + p.aptos * taxa, 0);
-  for (const p of semVotos) {
-    for (const m of p.dados) secoesTotal += m.secoes.total;
-    municipios.total += p.total;
-    municipios.semVotos += p.dados.length;
-    municipios.semArquivo += Math.max(0, p.total - p.dados.length);
-  }
+  const esperadoUfsVazias = semVotos.reduce((s, u) => s + u.aptos * taxa, 0);
+  for (const u of semVotos) secoesTotal += u.secoes.total;
   const validosProjetados = Math.round(esperado + esperadoUfsVazias);
   const faltantes = Math.max(0, validosProjetados - validosAtuais);
 
@@ -233,7 +395,7 @@ export function projetarBrasil(ufs, { limite = 20 } = {}) {
     validosProjetados,
     votosFaltantes: faltantes,
     municipios,
-    ufs: { total: parciais.length, comVotos: comVotos.length, semVotos: semVotos.length },
+    ufs: { total: ufs.length, comVotos: comVotos.length, semVotos: semVotos.length, planoB },
     parteEstimadaPelaUf: validosProjetados > 0 ? (esperadoEstimado + esperadoUfsVazias) / validosProjetados : 0,
     candidatos,
   };

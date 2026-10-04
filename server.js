@@ -52,6 +52,8 @@ const raiz = path.dirname(fileURLToPath(import.meta.url));
 const municipios = new Municipios({
   fonte: cfg.demo ? fonte.municipios(fonteMunicipiosTse) : fonteMunicipiosTse,
   ciclo: eleicoes.ciclo,
+  // Só os municípios grandes têm arquivo baixado; o resto da UF sai do arquivo da UF. Na demonstração, todos (locais).
+  minimoEleitores: cfg.demo ? null : cfg.municipiosMinimo,
   // Dado de demonstração é inventado e não deve ir para o cache. No real, o ciclo dos municípios é mais
   // lento que o das UFs: são milhares de arquivos.
   cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'municipios')),

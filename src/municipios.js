@@ -12,6 +12,10 @@
 // `revalidarMs` a UF faz uma passada completa (GET condicional em todos os municípios ainda abertos), caso o
 // arquivo de votos saia depois do de acompanhamento. Se a fonte não tiver acompanhamento (demonstração),
 // toda passada consulta todos os municípios abertos.
+//
+// Só os municípios GRANDES são baixados (`minimoEleitores`, mais o maior de cada UF): o tamanho de cada um vem do
+// arquivo de acompanhamento. O resto da UF é derivado do arquivo da UF (ver projecao.js). `minimoEleitores = null`
+// baixa todos.
 
 import { Limitador, pedeCalma, recuoDoErro } from './limitador.js';
 
@@ -20,7 +24,7 @@ const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.(
 
 export class Municipios {
   constructor({
-    fonte, ciclo, cache = null, limitador = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
+    fonte, ciclo, cache = null, limitador = null, minimoEleitores = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
     revalidarMs = 600_000, pausaUfMs = 500, agora = Date.now,
   }) {
     this.fonte = fonte;
@@ -28,6 +32,7 @@ export class Municipios {
     this.cache = cache;
     this.concorrencia = concorrencia;
     this.validadeMs = validadeMs;
+    this.minimoEleitores = minimoEleitores;
     this.revalidarMs = revalidarMs;
     this.pausaUfMs = pausaUfMs;
     // Ritmo das requisições (baixa prioridade). Compartilhado com o ciclo principal quando recebe o mesmo limitador.
@@ -55,6 +60,7 @@ export class Municipios {
       this.entradas.set(chave, {
         chave, itens: new Map(), total: 0, feitos: 0, carregando: false, doDisco: false,
         atualizadoEm: null, validadoEm: 0, erro: null, promessa: null, buscas: 0,
+        selecionados: null, detalhes: null, alvos: 0,
       });
     }
     return this.entradas.get(chave);
@@ -64,11 +70,15 @@ export class Municipios {
     return {
       carregando: entrada.carregando,
       primeiraCarga: entrada.atualizadoEm === null && !entrada.doDisco,
-      progresso: { feitos: entrada.feitos, total: entrada.total },
+      progresso: { feitos: entrada.feitos, total: entrada.alvos || entrada.total },
+      completo: this.minimoEleitores === null, // true = todos os municípios; false = só os grandes (o resto vem da UF)
+      detalhes: entrada.detalhes, // município → { aptos, secoes } de TODOS os municípios da UF, ou null
       atualizadoEm: entrada.atualizadoEm,
       erro: entrada.erro,
       total: entrada.total,
-      dados: [...entrada.itens.values()].filter((i) => i.dados).map((i) => i.dados),
+      dados: [...entrada.itens]
+        .filter(([codigo, i]) => i.dados && (!entrada.selecionados || entrada.selecionados.has(codigo)))
+        .map(([, i]) => i.dados),
       pendente: entrada.promessa, // só para testes aguardarem o fim da carga
     };
   }
@@ -117,22 +127,23 @@ export class Municipios {
     }
   }
 
-  // Número de seções totalizadas e comparecimento de cada município da UF, ou null se não der para saber
+  // Marca (seções totalizadas:comparecimento) e detalhes (tamanho, seções) de cada município da UF, ou null se não der para saber
   // (fonte sem acompanhamento, arquivo indisponível ou falha). Vale para todos os cargos da mesma eleição.
   async #acompanhamento(eleicao, uf) {
     if (!this.fonte.acompanhar) return null;
     const chave = `${eleicao}:${uf}`;
     const anterior = this.acompanhamentos.get(chave);
-    if (anterior && this.agora() - anterior.em < this.validadeMs / 2) return anterior.mapa;
+    if (anterior && this.agora() - anterior.em < this.validadeMs / 2) return anterior;
     try {
       const r = await this.#comLimite(() => this.fonte.acompanhar({ ciclo: this.ciclo, eleicao, uf }, anterior ?? null));
       if (r.status === 'novo') {
-        this.acompanhamentos.set(chave, { etag: r.etag ?? null, mapa: r.mapa, em: this.agora() });
-        return r.mapa;
+        const novo = { etag: r.etag ?? null, mapa: r.mapa, detalhes: r.detalhes ?? null, em: this.agora() };
+        this.acompanhamentos.set(chave, novo);
+        return novo;
       }
       if (r.status === 'inalterado' && anterior) {
         anterior.em = this.agora();
-        return anterior.mapa;
+        return anterior;
       }
     } catch {
       // sem acompanhamento nesta passada
@@ -146,12 +157,16 @@ export class Municipios {
     entrada.feitos = 0;
     try {
       if (!entrada.doDisco && entrada.atualizadoEm === null && this.cache) await this.#lerDisco(entrada);
-      const municipios = (await this.listar(eleicao)).get(uf) ?? [];
-      entrada.total = municipios.length;
+      const todos = (await this.listar(eleicao)).get(uf) ?? [];
+      entrada.total = todos.length;
 
       const completa = this.agora() - entrada.validadoEm >= this.revalidarMs;
       const comAcompanhamento = Boolean(this.fonte.acompanhar);
-      const mapa = await this.#acompanhamento(eleicao, uf);
+      const acompanhamento = await this.#acompanhamento(eleicao, uf);
+      const mapa = acompanhamento?.mapa ?? null;
+      if (acompanhamento?.detalhes) entrada.detalhes = acompanhamento.detalhes;
+      const municipios = this.#escolher(entrada, todos);
+      entrada.alvos = municipios.length;
       // Com acompanhamento disponível, só baixa o que mudou; sem ele (e fora da passada completa) não há
       // como saber, então espera a próxima passada completa em vez de varrer tudo.
       const guiada = comAcompanhamento && !completa;
@@ -203,6 +218,21 @@ export class Municipios {
       entrada.atualizadoEm = this.agora();
       entrada.carregando = false;
     }
+  }
+
+  // Quais municípios baixar. Todos, ou só os grandes (tamanho vindo do acompanhamento). Sem o acompanhamento não
+  // dá para escolher: mantém a seleção anterior, ou desiste desta passada em vez de baixar a UF inteira.
+  #escolher(entrada, todos) {
+    if (this.minimoEleitores === null) return todos;
+    if (!entrada.detalhes) {
+      if (entrada.selecionados) return todos.filter((m) => entrada.selecionados.has(m.codigo));
+      throw new Error('arquivo de acompanhamento indisponível: não deu para escolher os municípios grandes');
+    }
+    const tamanho = (m) => entrada.detalhes.get(m.codigo)?.aptos ?? 0;
+    const ordenados = [...todos].sort((a, b) => tamanho(b) - tamanho(a));
+    const grandes = ordenados.filter((m, i) => i === 0 || tamanho(m) >= this.minimoEleitores);
+    entrada.selecionados = new Set(grandes.map((m) => m.codigo));
+    return grandes;
   }
 
   async #lerDisco(entrada) {

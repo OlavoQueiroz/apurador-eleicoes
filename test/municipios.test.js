@@ -236,3 +236,55 @@ test('manter percorre as UFs pedindo o acompanhamento de cada uma', async () => 
   await rodando;
   assert.deepEqual([...new Set(fonte.pedidos)].sort(), ['mg', 'sp']);
 });
+
+// ---------- só os municípios grandes ----------
+
+test('só baixa os municípios grandes (e o maior de cada UF), escolhidos pelo tamanho do acompanhamento', async () => {
+  const detalhes = new Map([
+    ['1', { aptos: 90_000, secoes: { total: 10, totalizadas: 0 } }],
+    ['2', { aptos: 40_000, secoes: { total: 10, totalizadas: 0 } }],
+    ['3', { aptos: 2_000, secoes: { total: 1, totalizadas: 0 } }],
+    ['4', { aptos: 500, secoes: { total: 1, totalizadas: 0 } }],
+  ]);
+  const fonte = {
+    municipais: [],
+    async listar() { return new Map([['sp', ['1', '2', '3', '4'].map((c) => ({ codigo: c, nome: `M${c}` }))]]); },
+    async acompanhar() { return { status: 'novo', mapa: new Map([...detalhes].map(([k]) => [k, 'x'])), detalhes, etag: null }; },
+    async obter(alvo) { this.municipais.push(alvo.municipio); return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  const { m } = novo(fonte, { minimoEleitores: 30_000 });
+  await m.consultar(consulta).pendente;
+  assert.deepEqual(fonte.municipais.sort(), ['1', '2']);
+  const foto = m.consultar(consulta);
+  assert.equal(foto.dados.length, 2);
+  assert.equal(foto.completo, false);
+  assert.equal(foto.total, 4);
+  assert.equal(foto.detalhes.size, 4);
+  assert.deepEqual(foto.progresso, { feitos: 2, total: 2 });
+});
+
+test('se nenhum passa do corte, ainda baixa o maior da UF', async () => {
+  const detalhes = new Map([['1', { aptos: 900, secoes: { total: 1, totalizadas: 0 } }], ['2', { aptos: 500, secoes: { total: 1, totalizadas: 0 } }]]);
+  const fonte = {
+    municipais: [],
+    async listar() { return new Map([['sp', [{ codigo: '1', nome: 'A' }, { codigo: '2', nome: 'B' }]]]); },
+    async acompanhar() { return { status: 'novo', mapa: new Map([['1', 'x'], ['2', 'x']]), detalhes, etag: null }; },
+    async obter(alvo) { this.municipais.push(alvo.municipio); return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  const { m } = novo(fonte, { minimoEleitores: 30_000 });
+  await m.consultar(consulta).pendente;
+  assert.deepEqual(fonte.municipais, ['1']);
+});
+
+test('sem acompanhamento não dá para escolher os grandes: não baixa a UF inteira', async () => {
+  const fonte = {
+    municipais: [],
+    async listar() { return new Map([['sp', [{ codigo: '1', nome: 'A' }, { codigo: '2', nome: 'B' }]]]); },
+    async acompanhar() { return { status: 'indisponivel' }; },
+    async obter(alvo) { this.municipais.push(alvo.municipio); return { status: 'novo', dados: {}, etag: null }; },
+  };
+  const { m } = novo(fonte, { minimoEleitores: 30_000 });
+  await m.consultar(consulta).pendente;
+  assert.deepEqual(fonte.municipais, []);
+  assert.match(m.consultar(consulta).erro, /acompanhamento indisponível/);
+});

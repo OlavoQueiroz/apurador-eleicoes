@@ -9,7 +9,7 @@
 
 import { appendFile, existsSync, mkdirSync, readFileSync, writeFile } from 'node:fs';
 import path from 'node:path';
-import { projetarBrasil, projetarEstratificado, projetarIngenuo } from './projecao.js';
+import { projetarBrasil, projetarIngenuo, projetarUf, tamanhoUf } from './projecao.js';
 
 export const CARGOS_HISTORICO = [1, 3, 5];
 
@@ -83,7 +83,7 @@ function escolherCandidatos(candidatos) {
 
 // Calcula a projeção de cada modelo para o arquivo de `item` AGORA. Estratificado só com municípios já
 // carregados (não dispara carga nenhuma); sem eles, grava null.
-export async function projecoesDoMomento(item, municipios) {
+export async function projecoesDoMomento(item, municipios, apuracao) {
   const { cargo, uf, eleicao } = item.alvo;
   const ingenuo = projetarIngenuo(item.dados, { limite: 50 });
   let estratificado = null;
@@ -91,14 +91,14 @@ export async function projecoesDoMomento(item, municipios) {
     if (uf === 'br') {
       if (cargo === 1) {
         const ufs = [...(await municipios.listar(eleicao)).keys()];
-        const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }) }));
-        if (fotos.every(({ foto }) => !foto.primeiraCarga && !foto.carregando && foto.dados.length)) {
-          estratificado = projetarBrasil(fotos.map(({ uf: u, foto }) => ({ uf: u, dados: foto.dados, total: foto.total })), { limite: 50 });
+        const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao?.estado.get(`${cargo}:${u}`)?.dados ?? null }));
+        if (fotos.every(({ foto }) => !foto.primeiraCarga && !foto.carregando)) {
+          estratificado = projetarBrasil(fotos.map(({ uf: u, foto, ufDados }) => ({ uf: u, r: projetarUf({ foto, ufDados }), ...tamanhoUf({ foto, ufDados }) })), { limite: 50 });
         }
       }
     } else {
       const foto = municipios.espiar({ eleicao, cargo, uf });
-      if (!foto.primeiraCarga && foto.dados.length) estratificado = projetarEstratificado(foto.dados, { limite: 50, totalMunicipios: foto.total });
+      if (!foto.primeiraCarga) estratificado = projetarUf({ foto, ufDados: item.dados, limite: 50 });
     }
   }
   return {
@@ -115,7 +115,7 @@ export async function registrarCiclo({ chaves, apuracao, municipios, historico }
       const d = item?.dados;
       if (!d || !CARGOS_HISTORICO.includes(item.alvo.cargo) || !d.geradoEm || !(d.secoes.totalizadas > 0)) continue;
       if (historico.ultimoT(chave) === d.geradoEm) continue;
-      const proj = await projecoesDoMomento(item, municipios);
+      const proj = await projecoesDoMomento(item, municipios, apuracao);
       historico.registrar({
         t: d.geradoEm,
         chave,

@@ -111,6 +111,18 @@ export const urlMunicipio = (ciclo, eleicao, uf, municipio, cargo) =>
 export const urlAcompanhamento = (ciclo, eleicao, uf) =>
   `${BASE}/${ciclo}/${eleicao}/dados/${uf}/${uf}-e${pad(eleicao, 6)}-ab.json`;
 
+// Município → { aptos, secoes:{total,totalizadas} } para TODOS os municípios da UF. É daqui que sai o tamanho de
+// cada município (para escolher os grandes) e o total de seções do "resto do estado".
+export function detalhesAcompanhamento(bruto) {
+  const detalhes = new Map();
+  const n = (v) => parseInt(String(v ?? '').replace(/\D/g, ''), 10) || 0;
+  for (const a of bruto.abr ?? []) {
+    if (a.tpabr !== 'mun') continue;
+    detalhes.set(String(a.cdabr), { aptos: n(a.e?.te), secoes: { total: n(a.s?.ts), totalizadas: n(a.s?.st) } });
+  }
+  return detalhes;
+}
+
 export function mapaAcompanhamento(bruto) {
   const mapa = new Map();
   for (const a of bruto.abr ?? []) {
@@ -149,7 +161,8 @@ export function criarFonteMunicipiosTse({ signal } = {}) {
         erro.esperarMs = espera > 0 ? espera * 1000 : null;
         throw erro;
       }
-      return { status: 'novo', mapa: mapaAcompanhamento(await res.json()), etag: res.headers.get('etag') };
+      const bruto = await res.json();
+      return { status: 'novo', mapa: mapaAcompanhamento(bruto), detalhes: detalhesAcompanhamento(bruto), etag: res.headers.get('etag') };
     },
     obter: (alvo, anterior) =>
       base.obter({ ...alvo, url: urlMunicipio(alvo.ciclo, alvo.eleicao, alvo.uf, alvo.municipio, alvo.cargo) }, anterior),

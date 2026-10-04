@@ -118,3 +118,19 @@ test('arquivo de acompanhamento: URL e mapa município → seções:comparecimen
   });
   assert.deepEqual([...mapa], [['61000', '3:1200'], ['61018', '0:0']]);
 });
+
+test('acompanhamento: detalhes de tamanho e seções por município, e opções de linha de comando', async () => {
+  const { detalhesAcompanhamento } = await import('../src/tse.js');
+  const d = detalhesAcompanhamento({
+    abr: [
+      { tpabr: 'uf', cdabr: 'sp', s: { ts: '99' }, e: { te: '9' } },
+      { tpabr: 'mun', cdabr: '71072', s: { ts: '26.683', st: '10' }, e: { te: '9.000.000' } },
+    ],
+  });
+  assert.deepEqual([...d], [['71072', { aptos: 9000000, secoes: { total: 26683, totalizadas: 10 } }]]);
+
+  assert.equal(lerConfig([], {}).municipiosMinimo, 30000);
+  assert.equal(lerConfig(['--municipios-minimo', '50000'], {}).municipiosMinimo, 50000);
+  assert.equal(lerConfig(['--municipios-todos'], {}).municipiosMinimo, null);
+  assert.throws(() => lerConfig(['--municipios-minimo', 'x'], {}), /municipios-minimo/);
+});

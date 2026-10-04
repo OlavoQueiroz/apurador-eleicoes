@@ -836,22 +836,35 @@ function seletorModeloHtml() {
 
 // Só no modelo por município: quanto da projeção depende de municípios que ainda não apuraram nada.
 function municipiosHtml(p) {
-  if (!p.municipios) return '';
-  const m = p.municipios;
   const avisos = [];
-  if (m.semVotos > 0) {
-    avisos.push(`${fmtInt(m.semVotos)} município(s) ainda sem votos entram pela média da UF: eles respondem por <b>${fmtPct(p.parteEstimadaPelaUf * 100, 0)}</b> do total projetado.`);
-    // Quanto mais alta essa parte, menos a projeção vem de dado apurado.
+  // Plano B: arquivos da UF e dos municípios em momentos diferentes, então a projeção é a extrapolação simples.
+  if (p.plano === 'extrapolacao') {
+    avisos.push(`<b>Usando a extrapolação simples nesta UF.</b> ${esc(p.motivoPlano ?? '')} Volta ao modelo por município quando os arquivos se alinharem.`);
   }
+  if (p.ufs?.planoB > 0) avisos.push(`${fmtInt(p.ufs.planoB)} UF(s) estão na extrapolação simples porque os arquivos delas estão em momentos diferentes.`);
+  if (!p.municipios) return avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('');
+
+  const m = p.municipios;
+  const grandes = m.grandes != null;
+  if (m.semVotos > 0 && p.parteEstimadaPelaUf > 0) {
+    avisos.push(grandes
+      ? `${fmtInt(m.semVotos)} município(s) grande(s) ainda sem votos entram pela média do que já foi medido.`
+      : `${fmtInt(m.semVotos)} município(s) ainda sem votos entram pela média da UF.`);
+  }
+  if (p.resto) {
+    avisos.push(`O resto do estado (${fmtInt(p.resto.municipios)} municípios menores) é projetado em bloco: ${p.resto.iniciado ? `${fmtPct(p.resto.fracao * 100, 0)} das seções dele apuradas` : 'ainda sem apuração, entra pelo eleitorado'}. Ele responde por <b>${fmtPct(p.resto.parte * 100, 0)}</b> do total projetado.`);
+  }
+  if (p.parteEstimadaPelaUf > 0) avisos.push(`<b>${fmtPct(p.parteEstimadaPelaUf * 100, 0)}</b> do total projetado vem de partes sem apuração, estimadas pela média do que já foi medido.`);
   if (m.semArquivo > 0) avisos.push(`${fmtInt(m.semArquivo)} município(s) sem arquivo no TSE ficaram de fora, então a projeção está incompleta.`);
   if (p.ufs?.semVotos > 0) avisos.push(`${fmtInt(p.ufs.semVotos)} UF(s) ainda sem nenhum município apurado entram pelo eleitorado e pela média das demais.`);
   if (p.conferencia && Math.abs(p.conferencia.diferencaPct) > 2) {
     avisos.push(`A soma dos municípios (${fmtInt(p.conferencia.municipios)} votos válidos) difere ${fmtPct(Math.abs(p.conferencia.diferencaPct), 1)} do arquivo da UF (${fmtInt(p.conferencia.uf)}). Podem estar em momentos diferentes da apuração.`);
   }
   if (p.aviso) avisos.push(esc(p.aviso));
+  const rotulo = grandes ? 'Municípios grandes com votos' : 'Municípios com votos';
   return `<div class="numeros">
-      <div class="numero"><b>${fmtInt(m.comVotos)}</b><span>Municípios com votos de ${fmtInt(m.total)}</span></div>
-      <div class="numero"><b>${fmtInt(m.semVotos)}</b><span>Municípios ainda sem votos</span></div>
+      <div class="numero"><b>${fmtInt(m.comVotos)}</b><span>${rotulo} de ${fmtInt(grandes ? m.grandes : m.total)}</span></div>
+      <div class="numero"><b>${fmtInt(m.semVotos)}</b><span>${grandes ? 'Grandes ainda sem votos' : 'Municípios ainda sem votos'}</span></div>
     </div>
     ${avisos.map((a) => `<p class="aviso-bloco">${a}</p>`).join('')}`;
 }
