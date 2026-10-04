@@ -1488,11 +1488,17 @@ function renderEstado() {
 
 function conectar() {
   const fonte = new EventSource('/events');
+  // Se o servidor reinicia (ou a conexão cai) e nada muda nos arquivos do TSE, nenhum evento traz "alterados" e a tela ficaria
+  // com o que carregou antes (projeção e resumo velhos). Ao reconectar, recarrega os dados uma vez.
+  let reconectou = false;
   fonte.onopen = () => {
     estado.conexao = 'ao-vivo';
     renderEstado();
+    if (reconectou && estado.resumo.size) atualizar();
+    reconectou = false;
   };
   fonte.onerror = () => {
+    reconectou = true;
     estado.conexao = 'reconectando';
     renderEstado();
   };
