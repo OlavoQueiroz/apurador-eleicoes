@@ -382,24 +382,20 @@ test('situacaoGovernador: eleito, 2º turno, na frente com mais de 50%, na frent
   assert.equal(situacaoGovernador({ vagas: 1, eleitosPorPartido: {}, colocados: [c('PT', 0, 'nenhuma', 0)] }), 'sem-dado');
 });
 
-test('situacaoGovernador: o "Eleito*" pela conta do painel conta como eleito, desde que haja ao menos 60% apurado', () => {
+test('situacaoGovernador: "Eleito*" só pela garantia da conta do painel, sem palpite pelo % atual', () => {
   const c = (partido, votos, pct, situacao = 'nenhuma') => ({ partido, votos, pct, situacao });
   const item = (pctSecoes, colocados) => ({ vagas: 1, eleitosPorPartido: {}, validos: 10000, secoes: { pctTotalizadas: pctSecoes }, colocados });
-  // 60% dos válidos com 66% das seções: passa de 50% mesmo descontada a folga (8,5 p.p.): eleito* pela conta
-  assert.equal(situacaoGovernador(item(66, [c('PSD', 6000, 60), c('UNIÃO', 3900, 39)])), 'eleito-conta');
-  // com poucas seções o início da apuração é enganoso: só "na frente com mais de 50%". Com 47% apurado ninguém é dado como eleito
-  assert.equal(situacaoGovernador(item(20, [c('PSD', 6000, 60), c('UNIÃO', 3900, 39)])), 'provavel-1t');
-  assert.equal(situacaoGovernador(item(47, [c('PSD', 6000, 60), c('UNIÃO', 3900, 39)])), 'provavel-1t');
-  assert.equal(situacaoGovernador(item(47, [c('PSD', 7500, 75), c('UNIÃO', 2400, 24)])), 'provavel-1t');
-  // 52% com 66%: a folga come a vantagem
-  assert.equal(situacaoGovernador(item(66, [c('PSD', 5200, 52), c('UNIÃO', 4700, 47)])), 'provavel-1t');
-  // no mapa: cor cheia (sem listras nem tom claro) e a dica explica o asterisco
-  const m = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'ba', ...item(66, [c('PT', 6000, 60), c('PL', 3900, 39)]) }], ufs: ['ba'] });
+  // 65% dos válidos com 80% das seções: a garantia (abstenção medida, com margem) fecha: eleito pela conta
+  assert.equal(situacaoGovernador(item(80, [c('PSD', 6500, 65), c('UNIÃO', 3000, 30)])), 'eleito-conta');
+  // 60% com 65% das seções: a garantia ainda não fecha, e não há palpite pelo %: só "na frente com mais de 50%"
+  assert.equal(situacaoGovernador(item(65, [c('PSD', 6000, 60), c('UNIÃO', 3900, 39)])), 'provavel-1t');
+  assert.equal(situacaoGovernador(item(46, [c('PSD', 6000, 60), c('UNIÃO', 3900, 39)])), 'provavel-1t');
+  // no mapa: cor cheia, sem listras nem tom claro
+  const m = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'ba', ...item(80, [c('PT', 6500, 65), c('PL', 3000, 30)]) }], ufs: ['ba'] });
   const html = estadosHtml(m, { ...ajuda, mapa: { largura: 100, altura: 100, ufs: { ba: { d: 'M0 0Z' } } } });
-  assert.match(html, /eleito\* pela conta do painel/);
   assert.ok(!html.includes('par-lis') && !html.includes('fill-opacity'));
-  // o 2º turno marcado pelo TSE vale mais que a conta
-  assert.equal(situacaoGovernador(item(66, [c('PSD', 6000, 60, 'segundo-turno'), c('UNIÃO', 3900, 39, 'segundo-turno')])), 'segundo-turno');
+  // o 2º turno marcado pelo TSE vale mais que a conta quando a conta não fecha
+  assert.equal(situacaoGovernador(item(46, [c('PSD', 4000, 40, 'segundo-turno'), c('UNIÃO', 3900, 39, 'segundo-turno')])), 'segundo-turno');
 });
 
 test('mapa de governadores: 2026 listrado (50% ou menos / 2º turno), claro (mais de 50%) e cheio (eleito)', () => {

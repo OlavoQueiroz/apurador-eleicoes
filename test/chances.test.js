@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { elegiveisPelaConta, folgaProvavel, garantidosNoTopo, vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
+import { elegiveisPelaConta, garantidosNoTopo, vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
 
 test('quantosClassificam: Senado = vagas; presidente e governador = 2 no 1º turno e 1 no 2º', () => {
   assert.equal(quantosClassificam({ cargo: 5, vagas: 2, turno: 1 }), 2);
@@ -91,21 +91,16 @@ test('garantidosNoTopo (Senado, 2 vagas): quem fica entre os 2 primeiros mesmo s
   assert.deepEqual(garantidosNoTopo({ votos: [0, 0, 0], k: 2, validos: 0, eleitorado }), [null, null, null]);
 });
 
-test('folgaProvavel: grande no começo, cai com a apuração, nunca abaixo do piso', () => {
-  assert.equal(folgaProvavel(0), null);
-  assert.ok(Math.abs(folgaProvavel(10) - 22.5) < 1e-9);
-  assert.ok(Math.abs(folgaProvavel(80) - 5) < 1e-9);
-  assert.equal(folgaProvavel(100), 4);
-});
-
-test('elegiveisPelaConta: governador do MS (67% aos 68% apurado) é dado como eleito; com 24% apurado, não', () => {
+test('elegiveisPelaConta: só a garantia; sem palpite pelo % atual (governador do MS com 67% aos 68% apurado ainda não é dado como eleito)', () => {
   const votos = [671300, 231100, 76900];
-  const mS = elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 68 });
-  assert.deepEqual(mS, ['provavel', null, null]); // 67,13 − 8 > 50, mas a garantia (pior caso) ainda não fecha
+  // 67,13% aos 68% apurado: o pior caso (todos os votos que faltam para os outros) ainda não fecha; antes da regra "provável" isso
+  // aparecia como Eleito*, hoje não
+  assert.deepEqual(elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 68 }), [null, null, null]);
   assert.deepEqual(elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 24 }), [null, null, null]);
-  assert.deepEqual(elegiveisPelaConta({ votos: [510000, 300000], k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 68 }), [null, null]); // 51% com folga de 8: não
-  assert.deepEqual(elegiveisPelaConta({ votos, k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 59 }), [null, null, null], 'antes de 60% apurado, só a garantia vale');
-  // quando a garantia fecha, ela prevalece sobre a folga
+  assert.deepEqual(elegiveisPelaConta({ votos: [510000, 300000], k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 68 }), [null, null]);
+  // com mais apuração a garantia (abstenção medida, com margem) fecha: 65% aos 80%
+  assert.deepEqual(elegiveisPelaConta({ votos: [650000, 300000], k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 80 }), ['pratica', null]);
+  // quando a garantia fecha pelo teto de eleitores, é a matemática
   assert.deepEqual(elegiveisPelaConta({ votos: [700, 200, 100], k: 2, primeiroTurno: true, validos: 1000, eleitorado: { total: 1100, comparecimento: 1000, abstencao: 50 }, pctSecoes: 90 }), ['matematica', null, null]);
 });
 
@@ -113,11 +108,11 @@ test('elegiveisPelaConta no Senado (2 votos por eleitor): os 2 primeiros isolado
   // % sobre 2 votos por eleitor: 1º 30%, 2º 25%, 3º 12%, 4º 8%; 85% apurado
   const votos = [300000, 250000, 120000, 80000];
   const r = elegiveisPelaConta({ votos, k: 2, validos: 1000000, pctSecoes: 85, votosPorEleitor: 2 });
-  assert.deepEqual(r, ['pratica', 'pratica', null, null]); // a garantia (pela abstenção medida) já fecha e prevalece sobre a folga
-  // um líder de SP com 55% aos 60% apurado (folga de 10 pp) não é dado como eleito
+  assert.deepEqual(r, ['pratica', 'pratica', null, null]); // a garantia (pela abstenção medida) já fecha
+  // um líder com 55% aos 60% apurado não é dado como eleito
   assert.deepEqual(elegiveisPelaConta({ votos: [550000, 380000], k: 2, primeiroTurno: true, validos: 1000000, pctSecoes: 60 }), [null, null]);
-  // 3º colado no 2º: o 2º não está garantido
-  assert.deepEqual(elegiveisPelaConta({ votos: [300000, 250000, 245000], k: 2, validos: 1000000, pctSecoes: 85, votosPorEleitor: 2 }), ['provavel', null, null]);
+  // 3º colado no 2º: ninguém está garantido
+  assert.deepEqual(elegiveisPelaConta({ votos: [300000, 250000, 245000], k: 2, validos: 1000000, pctSecoes: 85, votosPorEleitor: 2 }), [null, null, null]);
 });
 
 test('elegiveisPelaConta: com 47% das seções ninguém é dado como eleito, por maior que seja a vantagem', () => {

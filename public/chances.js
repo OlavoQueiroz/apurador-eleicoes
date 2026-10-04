@@ -85,37 +85,18 @@ export function garantidosNoTopo({ votos, k, validos = 0, eleitorado = null, pct
   return votos.map((_, i) => (seguro(estrito, i) ? 'matematica' : seguro(pratico, i) ? 'pratica' : null));
 }
 
-// Folga, em pontos percentuais, que se desconta do % atual de cada candidato para dizer que ele "provavelmente" fica onde está:
-// o % final pode se afastar do atual porque as regiões chegam em ordens diferentes (interior antes das capitais, por exemplo).
-// Nos ensaios simulados (scripts/ensaio-apuracao.js) o erro de manter o % atual foi de até ~4,6 pp aos 2-5% apurados e ~2 pp aos
-// 20%, mas numa disputa real a ordem de chegada pode pesar muito mais, então a folga é bem maior (cerca de 5 vezes) e o
-// "provável" só vale com boa parte da apuração. Não foi validada com votos reais: é a parte mais frágil da conta.
-export const PISO_FOLGA_PP = 4;
-export const FOLGA_INICIAL_PP = 25;
-export const APURACAO_MINIMA_PROVAVEL = 60; // abaixo disso (% de seções) só vale a garantia
-export const folgaProvavel = (pctSecoes) => (pctSecoes > 0 ? Math.max(PISO_FOLGA_PP, FOLGA_INICIAL_PP * (1 - Math.min(100, pctSecoes) / 100)) : null);
-
-// Quem o painel dá como eleito (ou, no 1º turno de presidente e governador, como vencedor sem 2º turno): array com 'matematica',
-// 'pratica' (as garantias acima), 'provavel' (o % atual, descontada a folga, já decide) ou null. Só os `k` primeiros podem ser.
-// `votosPorEleitor`: 2 no Senado. É uma conta do painel; só o TSE declara o eleito.
+// Quem o painel dá como eleito (ou, no 1º turno de presidente e governador, como vencedor sem 2º turno): array com 'matematica' ou
+// 'pratica' (as garantias acima) ou null. Só entra quem já não pode ser alcançado, mesmo no pior caso (ou no pior caso com a
+// abstenção medida). Não há palpite pelo % atual: com a apuração em andamento, o % final pode se afastar do atual porque as
+// regiões chegam em ordens diferentes. `votosPorEleitor`: 2 no Senado. É uma conta do painel; só o TSE declara o eleito.
 export function elegiveisPelaConta({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null, votosPorEleitor = 1 }) {
-  const garantia = primeiroTurno
+  return primeiroTurno
     ? votos.map((_, i) => (i === 0 ? vitoriaNoPrimeiroTurno({ votos, validos, eleitorado, pctSecoes }) : null))
     : garantidosNoTopo({ votos, k, validos, eleitorado, pctSecoes, votosPorEleitor });
-  const folga = folgaProvavel(pctSecoes);
-  const pct = (v) => (validos > 0 ? (100 * v) / validos : 0);
-  const margem = folga === null ? null : folga / votosPorEleitor; // os % do Senado são sobre 2 votos por eleitor
-  const provavel = (i) => {
-    if (margem === null || pctSecoes < APURACAO_MINIMA_PROVAVEL || !(votos[i] > 0) || i >= k) return false;
-    if (primeiroTurno) return i === 0 && pct(votos[0]) - margem > 50;
-    const adversarios = votos.slice(i + 1).filter((v) => pct(v) + margem > pct(votos[i]) - margem).length;
-    return i + adversarios < k;
-  };
-  return votos.map((_, i) => garantia[i] ?? (provavel(i) ? 'provavel' : null));
 }
 
 // Quem a conta do painel dá como eleito entre os colocados de uma UF (resumo com `colocados`, `vagas`, `turno`, `validos`,
-// `eleitorado` e `secoes`): um valor por colocado (null, 'matematica', 'pratica' ou 'provavel'). Governador e Senado. Quem o
+// `eleitorado` e `secoes`): um valor por colocado (null, 'matematica' ou 'pratica'). Governador e Senado. Quem o
 // TSE já marcou como eleito não entra: ele já conta como eleito.
 export function flagsEleitoPelaConta(item, codigo) {
   const colocados = item.colocados ?? [];

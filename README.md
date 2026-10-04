@@ -146,9 +146,11 @@ resultado do TSE (`public/chances.js`):
   votos válidos já medidos, com margem de 15%. No 1º turno, se o líder já passa de 50% dos válidos mesmo sem receber mais
   nenhum voto, os demais ficam sem chance (não há 2º turno).
 - **Eleito\***: quem o painel dá como eleito (selo verde com asterisco e explicação ao passar o mouse) quando o TSE ainda não o
-  marcou. Vale quando há garantia (os adversários não o alcançam nem recebendo tudo o que falta) ou, a partir de 60% das seções,
-  quando o % atual, descontada uma folga que cai com a apuração (25 pp no início, até 4 pp), já decide. A folga não foi
-  validada com votos reais; a dica do selo mostra a conta usada. O selo oficial "Eleito" continua sendo só o do TSE. Na visão Brasil de governador e senador, uma lista **nome a nome** dos eleitos (TSE ou pela conta) e, no mapa, as UFs com tudo definido ficam em cor cheia, com contorno escuro e ✓ no rótulo (no Senado, contorno tracejado com 1 das 2 vagas).
+  marcou. Vale **só quando há garantia**: os adversários não o alcançam nem recebendo tudo o que falta (garantia matemática, pelo
+  teto de eleitores das seções que faltam) ou nem com os votos que faltam estimados pela abstenção medida, com margem de 15%
+  (garantia prática). **Não há palpite pelo % atual**: uma regra "provável", que dava como eleito quem passava de 50% mesmo
+  descontada uma folga, foi retirada porque, com a apuração em andamento, o % final pode se afastar do atual (as regiões chegam
+  em ordens diferentes). O selo oficial "Eleito" continua sendo só o do TSE. Na visão Brasil de governador e senador, uma lista **nome a nome** dos eleitos (TSE ou pela conta) e, no mapa, as UFs com tudo definido ficam em cor cheia, com contorno escuro e ✓ no rótulo (no Senado, contorno tracejado com 1 das 2 vagas).
 
 ### Visão Análise (partidos e ideologia)
 
