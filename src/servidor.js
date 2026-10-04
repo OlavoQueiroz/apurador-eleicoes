@@ -23,6 +23,7 @@ const TIPOS = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
   '.json': 'application/json; charset=utf-8',
 };
 

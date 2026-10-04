@@ -138,3 +138,15 @@ test('/api/historico: 404 quando não há gravação', async () => {
   assert.equal((await fetch(`${base}/api/historico/1/sp`)).status, 404);
   assert.equal((await fetch(`${base}/api/historico/1/sp?modelo=nenhum`)).status, 404);
 });
+
+test('ícones da aba: favicon.ico, PNG e apple-touch-icon saem com o tipo certo (o Safari não usa SVG como ícone de aba)', async () => {
+  for (const [arquivo, tipo] of [['favicon.ico', 'image/x-icon'], ['favicon-32.png', 'image/png'], ['apple-touch-icon.png', 'image/png'], ['favicon.svg', 'image/svg+xml']]) {
+    const res = await fetch(`${base}/${arquivo}`);
+    assert.equal(res.status, 200, arquivo);
+    assert.equal(res.headers.get('content-type'), tipo, arquivo);
+    assert.ok((await res.arrayBuffer()).byteLength > 100, arquivo);
+  }
+  const html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /rel="icon" href="favicon\.ico"/);
+  assert.match(html, /rel="apple-touch-icon" href="apple-touch-icon\.png"/);
+});
