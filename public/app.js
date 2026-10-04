@@ -901,7 +901,7 @@ function detalheArquivoHtml() {
   } else {
     const chances = avaliarChances({
       votos: candidatos.map((c) => c.votos), k: quantosClassificam({ cargo: d.cargo.codigo, vagas: d.cargo.vagas, turno: d.turno }),
-      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado,
+      primeiroTurno: [1, 3].includes(d.cargo.codigo) && d.turno !== 2, validos: d.votos.validos, eleitorado: d.eleitorado, pctSecoes: d.secoes.pctTotalizadas,
     }).map((x, i) => (candidatos[i].situacao === 'eleito' ? null : x)); // quem o TSE já marcou como eleito nunca é escondido
     const escondidos = estado.mostrarSemChance ? 0 : chances.filter(Boolean).length;
     const visiveisMaj = candidatos.map((c, i) => ({ c, i })).filter(({ i }) => estado.mostrarSemChance || !chances[i]);
@@ -1028,7 +1028,7 @@ function detalheAgregadoHtml() {
       const colocados = item.colocados ?? [];
       const fora = avaliarChances({
         votos: colocados.map((x) => x.votos), k: quantosClassificam({ cargo: meta.codigo, vagas: item.vagas, turno: item.turno }),
-        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado,
+        primeiroTurno: [1, 3].includes(meta.codigo) && item.turno !== 2, validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes.pctTotalizadas,
       }).map((x, i) => (colocados[i].situacao === 'eleito' ? null : x));
       if (fora.some(Boolean)) comSemChance += 1;
       const [a, b, c] = colocados;
