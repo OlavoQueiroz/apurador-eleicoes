@@ -110,3 +110,30 @@ test('SSE: avisa o cliente a cada ciclo, com as chaves alteradas', async () => {
   assert.ok(evento.terminadoEm > 0);
   controle.abort();
 });
+
+test('/api/projecao: modelo indisponível explica o motivo, e sem dados não projeta', async () => {
+  const meta = await (await fetch(`${base}/api/meta`)).json();
+  assert.deepEqual(meta.modelos.map((m) => m.id), ['ingenuo', 'estratificado', 'bayesiano']);
+
+  const estratificado = await (await fetch(`${base}/api/projecao/estratificado/1/br`)).json();
+  assert.equal(estratificado.disponivel, false);
+  assert.ok(estratificado.motivo);
+
+  const semVotos = await (await fetch(`${base}/api/projecao/ingenuo/1/br`)).json();
+  assert.equal(semVotos.disponivel, false, 'arquivo existente mas sem votos');
+
+  const semArquivo = await (await fetch(`${base}/api/projecao/ingenuo/1/sp`)).json();
+  assert.equal(semArquivo.disponivel, false);
+
+  assert.equal((await fetch(`${base}/api/projecao/ingenuo/9/br`)).status, 404);
+});
+
+test('/api/municipios: sem a camada de municípios, ou fora de presidente/governador/senador, responde 404', async () => {
+  assert.equal((await fetch(`${base}/api/municipios/1/sp`)).status, 404);
+  assert.equal((await fetch(`${base}/api/municipios/9/sp`)).status, 404);
+});
+
+test('/api/historico: 404 quando não há gravação', async () => {
+  assert.equal((await fetch(`${base}/api/historico/1/sp`)).status, 404);
+  assert.equal((await fetch(`${base}/api/historico/1/sp?modelo=nenhum`)).status, 404);
+});

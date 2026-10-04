@@ -122,8 +122,24 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
 - A barra de progresso é de **seções totalizadas**, como no app oficial do TSE.
 - Percentuais parciais enganam: capitais e interior, ou regiões diferentes, chegam em ordens diferentes. Por isso o
   painel mostra sempre o quanto já foi totalizado e avisa que o resultado é parcial.
-- O painel **não faz projeção** nem declara vencedor por conta própria. "Eleito", "2º turno" e "matematicamente
-  definido" vêm do TSE.
+- A visão **Apuração** **não faz projeção** nem declara vencedor por conta própria. "Eleito", "2º turno" e
+  "matematicamente definido" vêm do TSE.
+- A visão **Projeção (estimativa)** é separada e sempre rotulada como estimativa do painel, não dado do TSE.
+  Há dois modelos (plano completo em `docs/modelos-simulacao.md`):
+  - **Extrapolação simples**: mantém o percentual atual e projeta o total pela fração de seções totalizadas,
+    ignorando o viés geográfico da ordem de apuração.
+  - **Estratificação por município** (presidente, governador e senador, uma UF por vez): projeta cada município
+    pela fração das seções dele já apuradas e soma. Municípios ainda sem votos entram pelo eleitorado e pela média
+    da UF; a tela mostra quanto da projeção depende disso. Os arquivos dos municípios são buscados só quando
+    alguém abre essa projeção (até ~645 por UF) e atualizados no ritmo do ciclo, com GET condicional.
+    Na presidência, o painel também baixa os municípios do país **em segundo plano** ao ligar (~5,7 mil
+    arquivos, ~5 por segundo, uns 20 minutos na primeira vez; municípios já 100% apurados deixam de ser
+    consultados; e uma UF cujo arquivo (ciclo principal) não mudou desde a última carga é pulada, com revisita
+    de segurança a cada 10 minutos). Isso soma o Brasil na projeção. O resultado fica em `.cache/` e um reinício não rebaixa tudo.
+    `--sem-municipios` desliga a carga em segundo plano. Se o TSE responder 429 (limite de requisições), o
+    painel recua sozinho; o ritmo é deliberadamente baixo.
+  A "faixa possível" são os extremos matemáticos, não um intervalo de confiança.
+  API: `GET /api/projecao/{modelo}/{cargo}/{uf}`.
 - Para cargos sem arquivo nacional (governador, senador, deputados), "Brasil" é a **soma das UFs** calculada
   localmente.
 

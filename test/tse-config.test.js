@@ -81,3 +81,40 @@ test('lerConfig rejeita valores inválidos e intervalo agressivo demais', () => 
   assert.throws(() => lerConfig(['--porta'], {}), /precisa de um valor/);
   assert.doesNotThrow(() => lerConfig(['--demo', '--intervalo', '1'], {}));
 });
+
+test('fonte de municípios monta a URL do arquivo do município', async () => {
+  const { criarFonteMunicipiosTse, urlMunicipio } = await import('../src/tse.js');
+  assert.equal(
+    urlMunicipio('ele2026', 6257, 'sp', '71072', 1),
+    'https://resultados.tse.jus.br/oficial/ele2026/6257/dados/sp/sp71072-c0001-e006257-u.json',
+  );
+  const original = globalThis.fetch;
+  const pedidos = [];
+  globalThis.fetch = async (url) => {
+    pedidos.push(url);
+    return { status: 404, ok: false };
+  };
+  try {
+    const r = await criarFonteMunicipiosTse().obter({ ciclo: 'ele2026', eleicao: 6257, uf: 'sp', municipio: '71072', cargo: 1 }, null);
+    assert.equal(r.status, 'indisponivel');
+    assert.deepEqual(pedidos, ['https://resultados.tse.jus.br/oficial/ele2026/6257/dados/sp/sp71072-c0001-e006257-u.json']);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('arquivo de acompanhamento: URL e mapa município → seções:comparecimento', async () => {
+  const { urlAcompanhamento, mapaAcompanhamento } = await import('../src/tse.js');
+  assert.equal(
+    urlAcompanhamento('ele2026', 6257, 'sp'),
+    'https://resultados.tse.jus.br/oficial/ele2026/6257/dados/sp/sp-e006257-ab.json',
+  );
+  const mapa = mapaAcompanhamento({
+    abr: [
+      { tpabr: 'uf', cdabr: 'sp', s: { st: '9' }, e: { c: '1' } },
+      { tpabr: 'mun', cdabr: '61000', s: { st: '3' }, e: { c: '1200' } },
+      { tpabr: 'mun', cdabr: '61018', s: { st: '0' }, e: { c: '0' } },
+    ],
+  });
+  assert.deepEqual([...mapa], [['61000', '3:1200'], ['61018', '0:0']]);
+});

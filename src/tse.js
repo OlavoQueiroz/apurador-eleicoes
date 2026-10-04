@@ -87,9 +87,71 @@ export function criarFonteTse({ signal } = {}) {
       if (res.status === 304) return { status: 'inalterado' };
       // Antes da apuração, ou fora do turno/UF, o TSE responde 404 (NoSuchKey).
       if (res.status === 404) return { status: 'indisponivel' };
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const erro = new Error(`HTTP ${res.status}`);
+        erro.status = res.status;
+        const espera = Number(res.headers.get('retry-after'));
+        erro.esperarMs = espera > 0 ? espera * 1000 : null; // o TSE pode pedir calma (429/503)
+        throw erro;
+      }
       const bruto = await res.json();
       return { status: 'novo', dados: normalizar(bruto), etag: res.headers.get('etag') };
     },
+  };
+}
+
+// ---------- municípios ----------
+//   {BASE}/{ciclo}/{eleição}/config/mun-e{eleição:6}-cm.json      lista de municípios (e zonas) por UF
+//   {BASE}/{ciclo}/{eleição}/dados/{uf}/{uf}{município:5}-c{cargo:4}-e{eleição:6}-u.json   resultado do município
+// O código de município é o do TSE (5 dígitos, ex.: 71072 = São Paulo), não o do IBGE.
+
+export const urlMunicipio = (ciclo, eleicao, uf, municipio, cargo) =>
+  `${BASE}/${ciclo}/${eleicao}/dados/${uf}/${uf}${municipio}-c${pad(cargo, 4)}-e${pad(eleicao, 6)}-u.json`;
+
+export const urlAcompanhamento = (ciclo, eleicao, uf) =>
+  `${BASE}/${ciclo}/${eleicao}/dados/${uf}/${uf}-e${pad(eleicao, 6)}-ab.json`;
+
+export function mapaAcompanhamento(bruto) {
+  const mapa = new Map();
+  for (const a of bruto.abr ?? []) {
+    if (a.tpabr !== 'mun') continue;
+    mapa.set(String(a.cdabr), `${a.s?.st ?? ''}:${a.e?.c ?? ''}`);
+  }
+  return mapa;
+}
+
+// Contrato compartilhado com a fonte de demonstração (que não tem `acompanhar`):
+//   listar(ciclo, eleicao) → Map uf → [{ codigo, nome, cdi }]
+//   obter(alvoMunicipio, anterior) → mesmo contrato de `criarFonteTse().obter`
+export function criarFonteMunicipiosTse({ signal } = {}) {
+  const base = criarFonteTse({ signal });
+  return {
+    async listar(ciclo, eleicao) {
+      const cfg = await getJson(`${BASE}/${ciclo}/${eleicao}/config/mun-e${pad(eleicao, 6)}-cm.json`, { signal });
+      return new Map((cfg.abr ?? []).map((a) => [
+        String(a.cd).toLowerCase(),
+        (a.mu ?? []).map((m) => ({ codigo: String(m.cd), nome: m.nm, cdi: m.cdi ? String(m.cdi) : null })), // cdi = código IBGE
+      ]));
+    },
+    // Arquivo de acompanhamento da UF: seções totalizadas e comparecimento de TODOS os municípios, sem votos por
+    // candidato. Devolve Map município → "seções totalizadas:comparecimento", que muda quando entram urnas novas.
+    async acompanhar({ ciclo, eleicao, uf }, anterior) {
+      const url = urlAcompanhamento(ciclo, eleicao, uf);
+      const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
+      if (anterior?.etag) headers['if-none-match'] = anterior.etag;
+      const res = await fetch(url, { headers, signal });
+      if (res.status === 304) return { status: 'inalterado' };
+      if (res.status === 404) return { status: 'indisponivel' };
+      if (!res.ok) {
+        const erro = new Error(`HTTP ${res.status}`);
+        erro.status = res.status;
+        const espera = Number(res.headers.get('retry-after'));
+        erro.esperarMs = espera > 0 ? espera * 1000 : null;
+        throw erro;
+      }
+      return { status: 'novo', mapa: mapaAcompanhamento(await res.json()), etag: res.headers.get('etag') };
+    },
+    obter: (alvo, anterior) =>
+      base.obter({ ...alvo, url: urlMunicipio(alvo.ciclo, alvo.eleicao, alvo.uf, alvo.municipio, alvo.cargo) }, anterior),
   };
 }

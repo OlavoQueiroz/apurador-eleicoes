@@ -4,9 +4,12 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lerConfig, SAIDA_PORTA_OCUPADA } from './src/config.js';
-import { criarFonteTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
+import { CARGOS, criarFonteTse, criarFonteMunicipiosTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
 import { criarFonteDemo } from './src/demo.js';
 import { Apuracao } from './src/apuracao.js';
+import { Municipios } from './src/municipios.js';
+import { criarCacheDisco } from './src/cache-disco.js';
+import { Historico, registrarCiclo } from './src/historico.js';
 import { criarServidor } from './src/servidor.js';
 import { abrirNoNavegador } from './src/abrir.js';
 
@@ -40,6 +43,28 @@ if (!alvos.length) {
 const fonteTse = criarFonteTse();
 const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
 const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000 });
+const fonteMunicipiosTse = criarFonteMunicipiosTse();
+const raiz = path.dirname(fileURLToPath(import.meta.url));
+const municipios = new Municipios({
+  fonte: cfg.demo ? fonte.municipios(fonteMunicipiosTse) : fonteMunicipiosTse,
+  ciclo: eleicoes.ciclo,
+  // Dado de demonstração é inventado e não deve ir para o cache. No real, o ciclo dos municípios é mais
+  // lento que o das UFs: são milhares de arquivos.
+  cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'municipios')),
+  // Ritmo de requisições ao TSE (recua sozinho se ele responder 429; já levei 429 numa carga sem freio).
+  espacamentoMs: cfg.demo ? 0 : 200, // ~5 req/s: 5,7 mil arquivos levam uns 20 min na primeira vez
+  validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
+});
+
+// Histórico da apuração (gráfico de evolução): um arquivo por ciclo/turno, em dados/ (fora do git). A
+// demonstração grava num arquivo próprio e recomeça do zero a cada execução.
+const historico = new Historico({
+  arquivo: path.join(raiz, 'dados', 'historico', `${eleicoes.ciclo}-t${cfg.turno}${cfg.demo ? '-demo' : ''}.jsonl`),
+  zerar: cfg.demo,
+});
+apuracao.on('ciclo', (c) => {
+  registrarCiclo({ chaves: c.chavesAlteradas, apuracao, municipios, historico });
+});
 
 // Por padrão o terminal fica quieto: loga o primeiro ciclo e só avisa quando erros ou arquivos
 // indisponíveis mudam (problema ou volta ao normal). Durante a apuração quase todo ciclo traz dados
@@ -58,8 +83,10 @@ apuracao.on('erro', (erro) => log('erro no ciclo:', erro.message));
 
 const servidor = criarServidor({
   apuracao,
+  municipios,
+  historico,
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
-  diretorioPublico: path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'public'),
+  diretorioPublico: path.resolve(raiz, 'public'),
 });
 
 servidor.on('error', (erro) => {
@@ -78,6 +105,13 @@ servidor.listen(cfg.porta, cfg.host, () => {
   log(`${cfg.ano} · ${cfg.turno}º turno · ${alvos.length} arquivos · consulta a cada ${cfg.intervalo}s`);
   if (cfg.demo) log('MODO DEMONSTRAÇÃO: os votos são fictícios (simulação de ~' + cfg.demoMinutos + ' min).');
   const primeiroCiclo = apuracao.iniciar();
+  // Município em segundo plano: começa só depois do primeiro ciclo das UFs, para não competir com ele.
+  const eleicaoPresidente = eleicoes.eleicoes[CARGOS[1].pleito]?.[cfg.turno];
+  if (cfg.municipios && cfg.cargos.includes(1) && eleicaoPresidente) {
+    primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1 }))
+      .catch((erro) => log('erro ao carregar municípios:', erro.message));
+    log('Carregando em segundo plano os municípios da presidência (use --sem-municipios para desligar).');
+  }
 
   if (cfg.abrir) {
     // Só abre depois que o servidor está de pé (se a porta estivesse ocupada, ele já teria saído
@@ -90,8 +124,12 @@ servidor.listen(cfg.porta, cfg.host, () => {
 const encerrar = () => {
   log('Encerrando…');
   apuracao.parar();
-  servidor.close();
-  process.exit(0);
+  municipios.parar();
+  // Deixa terminar a gravação em curso do histórico antes de sair.
+  historico.esvaziar().finally(() => {
+    servidor.close();
+    process.exit(0);
+  });
 };
 process.on('SIGINT', encerrar);
 process.on('SIGTERM', encerrar);

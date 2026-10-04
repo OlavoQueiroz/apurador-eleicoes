@@ -214,8 +214,34 @@ export function criarFonteDemo(fonteBase, { duracaoMin = 8, semente = 2026, agor
   const inicio = agora();
   const esqueletos = new Map();
   const registro = criarRegistroAnonimo();
+  // Municípios fictícios: a lista de municípios é a real (1 arquivo por eleição), mas NENHUM arquivo de município
+  // é baixado. A estrutura de cada um (candidatos, porte) é derivada do esqueleto da UF já anonimizado e os
+  // votos são inventados com o mesmo relógio. Assim a demonstração não manda milhares de requisições ao TSE.
+  const municipios = (fonteMunicipiosBase) => {
+    const esqueletosMunicipio = new Map();
+    return {
+      listar: (ciclo, eleicao) => fonteMunicipiosBase.listar(ciclo, eleicao),
+      async obter(alvo) {
+        let base = esqueletosMunicipio.get(alvo.chave);
+        if (!base) {
+          const uf = esqueletos.get(`${alvo.cargo}:${alvo.uf}`);
+          if (!uf) return { status: 'indisponivel' }; // esqueleto da UF ainda não carregado
+          const r = aleatorio(hash(`${alvo.chave}|porte|${semente}`));
+          const secoes = Math.floor(r() ** 3 * 400) + 3;
+          base = structuredClone(uf);
+          base.secoes = { total: secoes, totalizadas: 0, pctTotalizadas: 0 };
+          base.eleitorado = { ...base.eleitorado, total: secoes * Math.round(250 + r() * 150) };
+          esqueletosMunicipio.set(alvo.chave, base);
+        }
+        const agoraMs = agora();
+        const t = (agoraMs - inicio) / (duracaoMin * 60_000);
+        return { status: 'novo', dados: simular(base, alvo, t, { semente, agora: agoraMs }), etag: null };
+      },
+    };
+  };
   return {
     demo: true,
+    municipios,
     async obter(alvo) {
       let base = esqueletos.get(alvo.chave);
       if (!base) {

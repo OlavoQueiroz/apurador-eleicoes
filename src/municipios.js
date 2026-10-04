@@ -1,0 +1,226 @@
+// Resultados por município, numa camada SEPARADA do ciclo principal (apuracao.js): fila própria, poucas
+// requisições simultâneas e pausa entre os arquivos, para nunca atrapalhar o painel de apuração.
+//
+//  • `consultar` devolve na hora o que se sabe de uma UF e, se o dado estiver velho, atualiza em segundo plano.
+//  • `espiar` só lê o que já foi carregado, sem disparar nada (usado na soma nacional).
+//  • `manter` percorre as UFs de um cargo em sequência, de novo a cada validade (o ciclo lento do nacional).
+// Município com todas as seções totalizadas não muda mais e deixa de ser consultado.
+//
+// Atualização guiada pelo arquivo de acompanhamento: o TSE publica, por UF, UM arquivo com as seções
+// totalizadas e o comparecimento de todos os municípios (sem votos por candidato). Uma passada custa uma
+// requisição por UF e só baixa o arquivo de votos dos municípios cujo número mudou. Por segurança, a cada
+// `revalidarMs` a UF faz uma passada completa (GET condicional em todos os municípios ainda abertos), caso o
+// arquivo de votos saia depois do de acompanhamento. Se a fonte não tiver acompanhamento (demonstração),
+// toda passada consulta todos os municípios abertos.
+
+const cederVez = () => new Promise((resolve) => setImmediate(resolve));
+const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.());
+
+export class Municipios {
+  constructor({
+    fonte, ciclo, cache = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
+    revalidarMs = 600_000, pausaUfMs = 500, agora = Date.now,
+  }) {
+    this.fonte = fonte;
+    this.ciclo = ciclo;
+    this.cache = cache;
+    this.concorrencia = concorrencia;
+    this.validadeMs = validadeMs;
+    this.revalidarMs = revalidarMs;
+    this.pausaUfMs = pausaUfMs;
+    this.espacamentoMs = espacamentoMs; // intervalo mínimo entre inícios de requisição (todas as UFs juntas)
+    this.proximaVez = 0;
+    this.agora = agora;
+    this.parado = false;
+    this.listas = new Map(); // eleição → Promise<Map uf → municípios>
+    this.entradas = new Map(); // eleição:cargo:uf → estado
+    this.acompanhamentos = new Map(); // eleição:uf → { etag, mapa, em } (vale para todos os cargos)
+  }
+
+  listar(eleicao) {
+    if (!this.listas.has(eleicao)) {
+      const promessa = this.fonte.listar(this.ciclo, eleicao);
+      // Falha não pode ficar guardada: a próxima consulta tenta de novo.
+      promessa.catch(() => this.listas.delete(eleicao));
+      this.listas.set(eleicao, promessa);
+    }
+    return this.listas.get(eleicao);
+  }
+
+  #entrada({ eleicao, cargo, uf }) {
+    const chave = `${eleicao}:${cargo}:${uf}`;
+    if (!this.entradas.has(chave)) {
+      this.entradas.set(chave, {
+        chave, itens: new Map(), total: 0, feitos: 0, carregando: false, doDisco: false,
+        atualizadoEm: null, validadoEm: 0, erro: null, promessa: null, buscas: 0,
+      });
+    }
+    return this.entradas.get(chave);
+  }
+
+  #instantaneo(entrada) {
+    return {
+      carregando: entrada.carregando,
+      primeiraCarga: entrada.atualizadoEm === null && !entrada.doDisco,
+      progresso: { feitos: entrada.feitos, total: entrada.total },
+      atualizadoEm: entrada.atualizadoEm,
+      erro: entrada.erro,
+      total: entrada.total,
+      dados: [...entrada.itens.values()].filter((i) => i.dados).map((i) => i.dados),
+      pendente: entrada.promessa, // só para testes aguardarem o fim da carga
+    };
+  }
+
+  espiar(consulta) {
+    return this.#instantaneo(this.#entrada(consulta));
+  }
+
+  consultar(consulta) {
+    const entrada = this.#entrada(consulta);
+    const velha = entrada.atualizadoEm === null || this.agora() - entrada.atualizadoEm >= this.validadeMs;
+    if (!entrada.carregando && velha) entrada.promessa = this.#carregar(entrada, consulta);
+    return this.#instantaneo(entrada);
+  }
+
+  // Passada completa por todas as UFs de um cargo, uma de cada vez, repetida a cada validade.
+  async manter({ eleicao, cargo }) {
+    while (!this.parado) {
+      const ufs = [...(await this.listar(eleicao)).keys()];
+      for (const uf of ufs) {
+        if (this.parado) return;
+        const entrada = this.#entrada({ eleicao, cargo, uf });
+        const buscasAntes = entrada.buscas;
+        await this.consultar({ eleicao, cargo, uf }).pendente;
+        if (entrada.buscas !== buscasAntes) await dormir(this.pausaUfMs); // UF sem novidade não gasta pausa
+      }
+      await dormir(this.validadeMs);
+    }
+  }
+
+  parar() {
+    this.parado = true;
+  }
+
+  // Limita a taxa global de requisições ao TSE. Fila de ordem de chegada: cada chamada reserva o próximo
+  // horário livre, então vários trabalhadores nunca disparam juntos.
+  async #vez() {
+    const horario = Math.max(this.agora(), this.proximaVez);
+    this.proximaVez = horario + this.espacamentoMs;
+    const espera = horario - this.agora();
+    if (espera > 0) await dormir(espera);
+  }
+
+  // Executa uma requisição respeitando o limite. Em 429/503 todo mundo recua (e o ritmo passa a ser mais
+  // lento) e a requisição é repetida algumas vezes; outros erros sobem na hora.
+  async #comLimite(pedido) {
+    for (let tentativa = 0; ; tentativa += 1) {
+      await this.#vez();
+      try {
+        return await pedido();
+      } catch (erro) {
+        const pedeCalma = erro.status === 429 || erro.status === 503;
+        if (!pedeCalma || tentativa >= 4 || this.parado) throw erro;
+        const recuo = erro.esperarMs ?? Math.min(30_000, 2000 * 2 ** tentativa);
+        this.proximaVez = Math.max(this.proximaVez, this.agora() + recuo);
+        this.espacamentoMs = Math.min(2000, Math.ceil(this.espacamentoMs * 2));
+      }
+    }
+  }
+
+  // Número de seções totalizadas e comparecimento de cada município da UF, ou null se não der para saber
+  // (fonte sem acompanhamento, arquivo indisponível ou falha). Vale para todos os cargos da mesma eleição.
+  async #acompanhamento(eleicao, uf) {
+    if (!this.fonte.acompanhar) return null;
+    const chave = `${eleicao}:${uf}`;
+    const anterior = this.acompanhamentos.get(chave);
+    if (anterior && this.agora() - anterior.em < this.validadeMs / 2) return anterior.mapa;
+    try {
+      const r = await this.#comLimite(() => this.fonte.acompanhar({ ciclo: this.ciclo, eleicao, uf }, anterior ?? null));
+      if (r.status === 'novo') {
+        this.acompanhamentos.set(chave, { etag: r.etag ?? null, mapa: r.mapa, em: this.agora() });
+        return r.mapa;
+      }
+      if (r.status === 'inalterado' && anterior) {
+        anterior.em = this.agora();
+        return anterior.mapa;
+      }
+    } catch {
+      // sem acompanhamento nesta passada
+    }
+    return null;
+  }
+
+  async #carregar(entrada, { eleicao, cargo, uf }) {
+    entrada.carregando = true;
+    entrada.erro = null;
+    entrada.feitos = 0;
+    try {
+      if (!entrada.doDisco && entrada.atualizadoEm === null && this.cache) await this.#lerDisco(entrada);
+      const municipios = (await this.listar(eleicao)).get(uf) ?? [];
+      entrada.total = municipios.length;
+
+      const completa = this.agora() - entrada.validadoEm >= this.revalidarMs;
+      const comAcompanhamento = Boolean(this.fonte.acompanhar);
+      const mapa = await this.#acompanhamento(eleicao, uf);
+      // Com acompanhamento disponível, só baixa o que mudou; sem ele (e fora da passada completa) não há
+      // como saber, então espera a próxima passada completa em vez de varrer tudo.
+      const guiada = comAcompanhamento && !completa;
+
+      const fila = [...municipios];
+      let falhas = 0;
+      let primeiroErro = '';
+      const trabalhador = async () => {
+        while (fila.length && !this.parado) {
+          const { codigo, nome, cdi = null } = fila.shift();
+          const item = entrada.itens.get(codigo) ?? { dados: null, etag: null, marca: null };
+          entrada.itens.set(codigo, item);
+          const marca = mapa?.get(codigo) ?? null;
+          const inalterado = item.dados && marca !== null && marca === item.marca;
+          if (item.dados?.totalizacaoFinal || (guiada && (mapa ? inalterado : true) && item.dados)) {
+            entrada.feitos += 1; // fechado, ou sem mudança desde a última carga
+            continue;
+          }
+          try {
+            const alvo = { chave: `${cargo}:${uf}:${codigo}`, cargo, uf, municipio: codigo, nome, eleicao, ciclo: this.ciclo };
+            entrada.buscas += 1;
+            const r = await this.#comLimite(() => this.fonte.obter(alvo, item));
+            if (r.status === 'novo') {
+              item.dados = { ...r.dados, codigoMunicipio: codigo, nomeMunicipio: nome, codigoIbge: cdi };
+              item.etag = r.etag ?? null;
+            }
+            if (r.status === 'novo' || r.status === 'inalterado') item.marca = marca;
+          } catch (erro) {
+            falhas += 1; // mantém o último dado deste município, se houver
+            primeiroErro ||= erro.message;
+          }
+          entrada.feitos += 1;
+          await cederVez(); // deixa o servidor responder ao painel entre um arquivo e outro
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(this.concorrencia, fila.length) }, trabalhador));
+      if (falhas) entrada.erro = `${falhas} município(s) não puderam ser atualizados (${primeiroErro})`;
+      // Mesmo com falhas: quem falhou continua sem dado/marca e é retomado na próxima passada guiada.
+      if (completa) entrada.validadoEm = this.agora();
+      if (this.cache) {
+        await this.cache.gravar(entrada.chave, {
+          validadoEm: entrada.validadoEm,
+          itens: [...entrada.itens].map(([codigo, i]) => [codigo, { dados: i.dados, etag: i.etag, marca: i.marca }]),
+        });
+      }
+    } catch (erro) {
+      entrada.erro = erro.message;
+    } finally {
+      entrada.atualizadoEm = this.agora();
+      entrada.carregando = false;
+    }
+  }
+
+  async #lerDisco(entrada) {
+    const salvo = await this.cache.ler(entrada.chave);
+    for (const [codigo, item] of salvo?.itens ?? []) {
+      entrada.itens.set(codigo, { dados: item.dados ?? null, etag: item.etag ?? null, marca: item.marca ?? null });
+    }
+    entrada.validadoEm = salvo?.validadoEm ?? 0;
+    entrada.doDisco = entrada.itens.size > 0;
+  }
+}

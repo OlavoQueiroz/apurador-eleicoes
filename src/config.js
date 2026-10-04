@@ -30,6 +30,8 @@ export function lerConfig(
     cargos: env.CARGOS ?? null,
     demo: env.DEMO === '1',
     demoMinutos: Number(env.DEMO_MINUTOS) || 8,
+    // Baixa em segundo plano os municípios da presidência para a projeção do Brasil (~5,7 mil arquivos, devagar).
+    municipios: env.MUNICIPIOS !== '0',
     verboso: env.VERBOSO === '1', // loga todo ciclo de consultas, mesmo sem novidade
     // Abre o navegador ao iniciar. Por padrão só num terminal interativo: execuções automatizadas
     // (testes, servidores de preview, scripts) não devem fazer janelas aparecerem sozinhas.
@@ -53,6 +55,7 @@ export function lerConfig(
     else if (arg === '--cargos') cfg.cargos = valor();
     else if (arg === '--ano') cfg.ano = Number(valor());
     else if (arg === '--verboso') cfg.verboso = true;
+    else if (arg === '--sem-municipios') cfg.municipios = false;
     else if (arg === '--demo-minutos') cfg.demoMinutos = Number(valor());
     else if (arg === '--abrir') cfg.abrir = true;
     else if (arg === '--sem-abrir') cfg.abrir = false;
