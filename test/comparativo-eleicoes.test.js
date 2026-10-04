@@ -5,7 +5,7 @@ import { Apuracao } from '../src/apuracao.js';
 import { criarAnterior } from '../src/anterior.js';
 import { criarServidor } from '../src/servidor.js';
 import {
-  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, terceirosSelecionados, itemDoAtual, regiaoDaUf, FRACAO_MINIMA, PERIODOS,
+  ESCALA_SALDO, calcular, comparativoHtml, ligarComparativo, corDoMapa, terceirosSelecionados, itemDoAtual, regiaoDaUf, FRACAO_MINIMA, PERIODOS,
 } from '../public/comparativo-eleicoes.js';
 
 const ajuda = {
@@ -103,6 +103,37 @@ test('comparativoHtml (região aberta): lista só as UFs da região e oferece vo
   assert.doesNotMatch(html, /href="#\/1\/sp\/comparativo"/);
   assert.match(html, /data-comp-limpar/);
   assert.match(html, /data-comp-regiao="Sudeste"[^>]*aria-expanded="false"/);
+});
+
+test('comparativoHtml (todas recolhidas): regiao "" não deixa nenhuma região aberta nem lista UFs', () => {
+  const html = comparativoHtml(modelo, { uf: 'br', regiao: '' }, ajuda);
+  assert.equal(html.match(/data-comp-regiao="[^"]*"[^>]*aria-expanded="false"/g).length, 5); // as cinco regiões, todas fechadas
+  assert.doesNotMatch(html, /aria-expanded="true"/);
+  assert.doesNotMatch(html, /class="comp-uf"/);
+  assert.doesNotMatch(html, /data-comp-limpar/); // já é a visão do Brasil
+});
+
+test('ligarComparativo: clicar numa região aberta a recolhe (todas podem ficar fechadas); numa fechada abre só ela', () => {
+  const elemento = (dataset, aberto) => {
+    const ouvintes = {};
+    return { dataset, getAttribute: (n) => (n === 'aria-expanded' ? String(aberto) : null), addEventListener: (ev, fn) => { ouvintes[ev] = fn; }, clicar: () => ouvintes.click() };
+  };
+  const nordeste = elemento({ compRegiao: 'Nordeste' }, true); // aberta (por padrão ou por escolha)
+  const sul = elemento({ compRegiao: 'Sul' }, false);
+  const brasil = elemento({}, false);
+  const raiz = {
+    querySelectorAll: (seletor) => ({ '[data-comp-regiao]': [nordeste, sul], '[data-comp-limpar]': [brasil] }[seletor] ?? []),
+  };
+  const ui = { regiao: null };
+  let mudancas = 0;
+  ligarComparativo(raiz, ui, () => { mudancas += 1; });
+  nordeste.clicar();
+  assert.equal(ui.regiao, ''); // recolheu a única aberta: nenhuma fica aberta
+  sul.clicar();
+  assert.equal(ui.regiao, 'Sul');
+  brasil.clicar();
+  assert.equal(ui.regiao, ''); // "Brasil" também recolhe tudo
+  assert.equal(mudancas, 3);
 });
 
 test('comparativoHtml (UF): cartões das duas candidaturas, variação e impacto; UF abaixo do mínimo avisa', () => {

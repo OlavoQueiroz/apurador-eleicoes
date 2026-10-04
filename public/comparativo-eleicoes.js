@@ -160,7 +160,7 @@ export function corDoMapa(u, escala = ESCALA_SALDO) {
   return { candidato: u.saldo >= 0 ? 'pt' : 'pl', forca: Math.round(Math.min(100, (Math.abs(u.saldo) / escala) * 100)) };
 }
 
-// `ui`: { uf: 'br' | sigla, regiao: null | nome }  ·  `ajuda`: { esc, fmtInt, corPartido, nomeUf, hrefUf, demo }
+// `ui`: { uf: 'br' | sigla, regiao: null (padrão: a de maior impacto aberta) | nome (essa aberta) | '' (todas recolhidas) }  ·  `ajuda`: { esc, fmtInt, corPartido, nomeUf, hrefUf, demo }
 export function comparativoHtml(modelo, ui, ajuda) {
   return ui.uf === 'br' ? brasilHtml(modelo, ui, ajuda) : ufHtml(modelo, ui, ajuda);
 }
@@ -204,7 +204,7 @@ function brasilHtml(modelo, ui, ajuda) {
   // Regiões e UFs: do maior para o menor impacto (em módulo); sem apuração suficiente vêm depois, por peso.
   const porImpacto = (a, b) => ((b.impacto != null) - (a.impacto != null)) || (Math.abs(b.impacto ?? 0) - Math.abs(a.impacto ?? 0)) || (b.peso - a.peso);
   const regioes = [...modelo.regioes].sort(porImpacto);
-  const aberta = ui.regiao ?? regioes[0]?.nome; // sem escolha, a de maior impacto fica aberta (o mapa só recua com escolha explícita)
+  const aberta = ui.regiao ?? regioes[0]?.nome; // sem escolha, a de maior impacto fica aberta; '' recolhe todas (o mapa só recua com escolha explícita)
   const maximo = Math.max(0.1, ...[...modelo.ufs, ...modelo.regioes].map((x) => Math.abs(x.impacto ?? 0)));
   const impacto = (v, barra = true) => (v == null ? '<span class="muted">—</span>'
     : `<span class="comp-imp">${barra ? `<span class="b"><i style="width:${Math.min(100, (100 * Math.abs(v)) / maximo).toFixed(1)}%;--cor:${v >= 0 ? cores.pt : cores.pl}"></i></span>` : ''}<b>${sinal(v)}</b></span>`);
@@ -278,11 +278,13 @@ export function ligarComparativo(raiz, ui, aoMudar) {
     el.addEventListener('click', fn);
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
   };
+  // Clicar numa região aberta a recolhe (todas podem ficar recolhidas: ''); clicar numa fechada abre só ela. A aberta é a
+  // que a tabela desenhou, inclusive a que está aberta por padrão sem escolha do usuário.
   raiz.querySelectorAll('[data-comp-regiao]').forEach((el) => aoAtivar(el, () => {
-    ui.regiao = ui.regiao === el.dataset.compRegiao ? null : el.dataset.compRegiao;
+    ui.regiao = el.getAttribute('aria-expanded') === 'true' ? '' : el.dataset.compRegiao;
     aoMudar();
   }));
-  raiz.querySelectorAll('[data-comp-limpar]').forEach((el) => aoAtivar(el, () => { ui.regiao = null; aoMudar(); }));
+  raiz.querySelectorAll('[data-comp-limpar]').forEach((el) => aoAtivar(el, () => { ui.regiao = ''; aoMudar(); }));
   raiz.querySelectorAll('[data-comp-terceiro]').forEach((b) => b.addEventListener('click', () => {
     const atuais = (b.closest('[data-sel]').dataset.sel || '').split(',').filter(Boolean);
     ui.terceiros = atuais.includes(b.dataset.compTerceiro) ? atuais.filter((id) => id !== b.dataset.compTerceiro) : [...atuais, b.dataset.compTerceiro];
