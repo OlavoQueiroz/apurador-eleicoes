@@ -86,7 +86,7 @@ export function listarCadeiras(bancadas, pendentes) {
 // Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
 const dicaCadeira = (c) => {
   const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
-  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}${c.vaga ? ' · vaga do partido, ainda sem eleito marcado (nome pelo ranking da lista)' : ''}`;
+  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}${c.pessoa?.conta ? ' · eleito pela conta do painel (o TSE ainda não marcou)' : ''}${c.vaga ? ' · vaga do partido, ainda sem eleito marcado (nome pelo ranking da lista)' : ''}`;
 };
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
