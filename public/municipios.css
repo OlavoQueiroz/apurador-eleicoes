@@ -7,6 +7,7 @@
   stroke-linejoin: round;
   transition: fill 0.5s ease;
 }
+.mun { cursor: pointer; }
 .mun:hover { stroke: var(--text); stroke-width: 1.4; }
 
 .mun-titulo { position: absolute; left: 0; top: 0; max-width: 60%; line-height: 1.25; pointer-events: none; }
