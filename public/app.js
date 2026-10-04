@@ -60,6 +60,7 @@ const estado = {
   comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
   mapaProj: undefined, // projeção de cada UF para pintar o mapa: { chave, porUf: Map uf → { lider, margem } }
   historico: undefined, // histórico gravado da UF aberta: { chave, dados }; undefined = sem gráfico
+  munDetalhe: undefined, // resultado completo do município escolhido (clique no mapa ou busca): { chave, dados } ou undefined
   mun: undefined, // municípios da UF aberta: { chave, geo, resultados, porCodigo }; undefined = mapa do Brasil
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
@@ -272,6 +273,22 @@ async function carregarEleitos() {
   }
 }
 
+// Município escolhido (clique no mapa ou busca), na visão Apuração: o painel da direita mostra o resultado dele, não o da UF.
+async function carregarDetalheMunicipio() {
+  const id = estado.destaque?.tipo === 'm' ? estado.destaque.id : null;
+  if (!id || !modoMunicipal() || estado.visao !== 'apuracao') {
+    estado.munDetalhe = undefined;
+    return;
+  }
+  const chave = `${chaveAtual()}:${id}`;
+  try {
+    const { dados } = await getJson(`/api/municipio/${estado.cargo}/${estado.uf}/${id}`);
+    if (chave === `${chaveAtual()}:${estado.destaque?.id}`) estado.munDetalhe = { chave, dados };
+  } catch {
+    if (chave === `${chaveAtual()}:${estado.destaque?.id}`) estado.munDetalhe = { chave, dados: null };
+  }
+}
+
 // ---------- municípios da UF aberta (mapa de municípios) ----------
 
 // Só os cargos majoritários com resultado por município; Brasil, exterior e DF (um município só) ficam de fora.
@@ -327,6 +344,7 @@ function montarGraficoEvolucao(raiz) {
   const h = estado.historico;
   const ancora = raiz.querySelector(estado.visao === 'projecao' ? '.numeros' : '.mais-num'); // na projeção, logo abaixo dos votos projetados
   if (!querHistorico() || !h || h.chave !== chaveHistorico() || !ancora) return;
+  if (raiz.querySelector('[data-painel-municipio]')) return; // o histórico gravado é o da UF, não o do município escolhido
   const secao = document.createElement('section');
   secao.className = 'grafico';
   secao.innerHTML = `<h3 class="secao">${estado.visao === 'projecao' ? 'Evolução da projeção' : 'Evolução da apuração'}</h3><div class="gr-corpo"></div>`;
@@ -353,6 +371,7 @@ async function atualizar() {
         await Promise.all([carregarResumo().then(carregarDetalhesFoco), carregarHistoricoPartidos()]); // a aba Partidos usa os resumos das UFs; "Um partido", também o arquivo de cada UF
       } else {
         await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico(), carregarMapaProjecao(), carregarHistoricoPartidos()]);
+        await carregarDetalheMunicipio();
         await carregarEleitos();
       }
       render();
@@ -411,6 +430,7 @@ async function aplicarHash() {
   estado.comparacao = undefined;
   estado.mapaProj = undefined;
   estado.mun = undefined;
+  estado.munDetalhe = undefined;
   estado.eleitos = null;
   estado.lideres = null;
   estado.inferidos = null;
@@ -449,6 +469,34 @@ function destacarMunicipio() {
   if (!forma) return;
   forma.classList.add('sel');
   forma.parentNode.append(forma); // por último, para o contorno não ficar escondido pelos vizinhos
+}
+
+// Painel da direita com o resultado do município escolhido (candidatos, seções e números), no lugar do da UF. Devolve null
+// se não há município escolhido, ou enquanto o resultado dele não chegou (aí vale o painel da UF com o cartão do município).
+function painelMunicipioHtml() {
+  const id = estado.destaque?.tipo === 'm' ? estado.destaque.id : null;
+  const det = estado.munDetalhe;
+  if (!id || !modoMunicipal() || !det || det.chave !== `${chaveAtual()}:${id}` || !det.dados) return null;
+  const d = det.dados;
+  const nome = nomeProprio(d.nomeMunicipio ?? estado.mun?.geo.municipios[id]?.n ?? '');
+  const candidatos = d.candidatos;
+  const semVotos = candidatos.every((c) => !c.votos);
+  let topo = '';
+  if (candidatos.length > 1 && candidatos[0].votos > 0) {
+    const [a, b] = candidatos;
+    topo = `<p class="aviso-bloco"><b>${esc(a.nomeUrna)}</b> está ${fmtInt(a.votos - b.votos)} votos (${fmtPct(a.pct - b.pct)} pontos) à frente de <b>${esc(b.nomeUrna)}</b> neste município.</p>`;
+  }
+  const parcial = d.secoes.totalizadas > 0 && !d.totalizacaoFinal && d.secoes.totalizadas < d.secoes.total
+    ? '<p class="aviso-bloco">Resultado parcial do município: os percentuais refletem só as seções já totalizadas e mudam até o fim.</p>' : '';
+  return `<span hidden data-painel-municipio></span><div class="detalhe-topo"><div><h2>${esc(nome)}</h2>
+      <p class="muted pequeno">${esc(cargoMeta().nome)} · município de ${esc(nomeUf(estado.uf))}</p></div>
+      <div class="topo-acoes"><a class="voltar" href="${hashPara(estado.cargo, estado.uf)}">‹ Voltar a ${esc(nomeUf(estado.uf))}</a></div></div>
+    ${parcial}
+    ${progressoHtml(d.secoes)}
+    ${numerosHtml(d)}
+    ${topo ? `<div style="margin-top:14px">${topo}</div>` : ''}
+    <h3 class="secao">Candidatos</h3>
+    <ol class="candidatos">${candidatos.filter((c, i) => i < 15 || c.votos > 0).map((c, i) => candidatoHtml(c, i + 1, c.pct, semVotos)).join('')}</ol>`;
 }
 
 function municipioSelecionadoHtml() {
@@ -1311,7 +1359,7 @@ function renderDetalhe() {
 
   if (ehComparativo()) raiz.innerHTML = comparativoPainelHtml();
   else if (ehAgregado()) raiz.innerHTML = estado.visao === 'projecao' ? projecaoAgregadoHtml() : detalheAgregadoHtml();
-  else raiz.innerHTML = (estado.visao === 'projecao' ? detalheProjecaoHtml() : municipioSelecionadoHtml() + detalheArquivoHtml());
+  else raiz.innerHTML = (estado.visao === 'projecao' ? detalheProjecaoHtml() : painelMunicipioHtml() ?? municipioSelecionadoHtml() + detalheArquivoHtml());
 
   // "Voltar ao Brasil" vai para o canto do cabeçalho do painel, ao lado dos selos, sem empurrar o título.
   const topoDetalhe = $('.detalhe-topo', raiz);
