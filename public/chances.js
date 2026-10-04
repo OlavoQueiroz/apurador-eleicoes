@@ -61,6 +61,28 @@ export function vitoriaNoPrimeiroTurno({ votos, validos = 0, eleitorado = null, 
   return decide(estimados) ? 'pratica' : null;
 }
 
+// O 2º turno é inevitável? Verdadeiro se o líder não passa de 50% dos válidos nem recebendo TODOS os votos que faltam:
+// (V + R) ÷ (válidos + R) ≤ 1/2, ou seja, 2V + R ≤ válidos. 'matematica' (R = teto de todos os eleitores aptos que faltam) ou
+// 'pratica' (R estimado pela abstenção medida, com margem); `null` se ainda dá para fechar no 1º turno. Presidente e governador,
+// 1º turno. É uma conta do painel: quem marca o 2º turno é o TSE.
+export function segundoTurnoGarantido({ votos, validos = 0, eleitorado = null, pctSecoes = null }) {
+  if (!(votos[0] > 0) || !(validos > 0)) return null;
+  const inevitavel = (restantes) => restantes != null && 2 * (votos[0] + restantes) <= validos + restantes;
+  if (eleitorado && inevitavel(votosRestantes(eleitorado))) return 'matematica';
+  const estimados = eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes(validos, pctSecoes);
+  return inevitavel(estimados) ? 'pratica' : null;
+}
+
+// Governador de uma UF (item do resumo): 'tse' (o TSE já marcou 2º turno), 'matematica' ou 'pratica' (a conta do painel) ou null.
+// Quem já tem eleito (TSE) não vai ao 2º turno; no 2º turno de verdade não há o que contar.
+export function segundoTurnoDoGovernador(item) {
+  if (item.turno === 2) return null;
+  const colocados = item.colocados ?? [];
+  if (colocados.some((c) => c.situacao === 'eleito')) return null;
+  if (colocados.some((c) => c.situacao === 'segundo-turno')) return 'tse';
+  return segundoTurnoGarantido({ votos: colocados.map((c) => c.votos), validos: item.validos, eleitorado: item.eleitorado, pctSecoes: item.secoes?.pctTotalizadas ?? null });
+}
+
 export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null, votosPorEleitor = 1 }) {
   const restantesSecoes = restantesPorSecoes(validos, pctSecoes, votosPorEleitor);
   if (!eleitorado && restantesSecoes === null) return votos.map(() => null);

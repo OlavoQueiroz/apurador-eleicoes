@@ -3,7 +3,7 @@
 import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
-import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam } from './chances.js';
+import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam, segundoTurnoDoGovernador } from './chances.js';
 import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
@@ -858,6 +858,13 @@ const DICA_ELEITO = {
 };
 // Dica de "Eleito*": a explicação do tipo (garantia matemática ou pela abstenção medida).
 const dicaEleito = (tipo) => DICA_ELEITO[tipo];
+const DICA_SEGUNDO_TURNO = {
+  tse: 'O TSE marcou 2º turno neste estado.',
+  matematica: 'Vai para o 2º turno pela conta do painel: mesmo que o líder recebesse todos os votos que faltam, não chegaria a 50% dos válidos. O TSE ainda não marcou.',
+  pratica: 'Vai para o 2º turno pela conta do painel: nem recebendo todos os votos que faltam, estimados pela abstenção medida (com margem), o líder chega a 50% dos válidos. O TSE ainda não marcou.',
+};
+// Selo "2º turno" (TSE) ou "2º turno*" (conta do painel), para governador.
+const seloSegundoTurno = (tipo) => (tipo ? `<span class="pill segundo-turno" style="white-space:nowrap" title="${esc(DICA_SEGUNDO_TURNO[tipo])}">2º turno${tipo === 'tse' ? '' : '*'}</span>` : '');
 const DICA_CHANCE = {
   matematica: 'Sem chance matemática: mesmo com todos os votos que ainda podem entrar, não alcança os classificados.',
   pratica: 'Sem chance pela abstenção, brancos e nulos já medidos nas seções apuradas (com margem de segurança). Pode mudar se as seções que faltam votarem muito diferente.',
@@ -1096,6 +1103,21 @@ function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
   }, estado.cadeiras, { esc, corPartido, fmtInt });
 }
 
+// Governador: estados que vão para o 2º turno (TSE, ou pela conta do painel: o líder não passa de 50% nem com todos os votos que faltam).
+function segundoTurnoNomeANomeHtml(codigo, itens) {
+  if (codigo !== 3) return '';
+  const linhas = itens.map(({ uf, item }) => ({ uf, item, tipo: segundoTurnoDoGovernador(item) })).filter((l) => l.tipo)
+    .sort((x, y) => nomeUf(x.uf).localeCompare(nomeUf(y.uf), 'pt-BR'));
+  if (!linhas.length) return '';
+  const nConta = linhas.filter((l) => l.tipo !== 'tse').length;
+  const nome = (c) => (c ? `<div class="colocado-nome">${esc(c.nomeUrna)}</div><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span> <span class="muted pequeno">${fmtPct(c.pct)}</span>` : '—');
+  return `<h3 class="secao">Vão para o 2º turno (${linhas.length} de 27)</h3>
+    <div class="tabela-rolagem"><table class="tabela tabela-eleitos"><thead><tr><th>UF</th><th>1º hoje</th><th>2º hoje</th><th>Situação</th></tr></thead><tbody>
+    ${linhas.map(({ uf, item, tipo }) => `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td><td>${nome(item.colocados?.[0])}</td><td>${nome(item.colocados?.[1])}</td><td>${seloSegundoTurno(tipo)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted pequeno">${fmtInt(linhas.length - nConta)} marcado(s) pelo TSE e ${fmtInt(nConta)} pela conta do painel* (o líder não passa de 50% dos válidos nem recebendo todos os votos que faltam). Quem disputa o 2º turno ainda pode mudar até o fim da apuração.</p>`;
+}
+
 // Governador e Senado: quem está eleito, nome a nome (TSE ou pela conta do painel), por UF.
 function eleitosNomeANomeHtml(codigo, itens) {
   if (![3, 5].includes(codigo)) return '';
@@ -1189,7 +1211,7 @@ function detalheAgregadoHtml() {
       if (fora.some(Boolean)) comSemChance += 1;
       const eleitos = flagsEleitoPelaConta(item, meta.codigo);
       const [a, b, c] = colocados;
-      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a, fora[0], eleitos[0], item.secoes.pctTotalizadas)}${celula(b, fora[1], eleitos[1], item.secoes.pctTotalizadas)}${celula(c, fora[2], eleitos[2], item.secoes.pctTotalizadas)}
+      return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}${meta.codigo === 3 ? seloSegundoTurno(segundoTurnoDoGovernador(item)) : ''}</td>${celula(a, fora[0], eleitos[0], item.secoes.pctTotalizadas)}${celula(b, fora[1], eleitos[1], item.secoes.pctTotalizadas)}${celula(c, fora[2], eleitos[2], item.secoes.pctTotalizadas)}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     const listaEleitos = meta.codigo === 3 ? 'Governadores eleitos' : 'Senadores eleitos';
@@ -1206,7 +1228,7 @@ function detalheAgregadoHtml() {
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
-    ${barras}${eleitosNomeANomeHtml(meta.codigo, itens)}${tabela}`;
+    ${barras}${eleitosNomeANomeHtml(meta.codigo, itens)}${segundoTurnoNomeANomeHtml(meta.codigo, itens)}${tabela}`;
 }
 
 // ---------- desenho: projeção (estimativa do painel, não é dado do TSE) ----------
