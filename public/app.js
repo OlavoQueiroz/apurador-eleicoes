@@ -874,8 +874,7 @@ function detalheAgregadoHtml() {
         <tbody>${linhas}</tbody></table></div>`;
   }
 
-  return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2>
-      <p class="muted pequeno">Soma das UFs. Selecione uma UF no mapa para ver os candidatos.</p></div></div>
+  return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
     ${secoes.totalizadas === 0 ? '<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>' : ''}
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}

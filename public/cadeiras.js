@@ -182,7 +182,6 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     <svg class="cad-svg" viewBox="${-MARGEM} ${-MARGEM} ${LARGURA + 2 * MARGEM} ${ALTURA + 2 * MARGEM}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
     ${aviso}${porVaga}${frente}${ocupadas}${naoDefinido}
-    <p class="muted pequeno">Ideologia é uma classificação aproximada do painel, não um dado do TSE; veja <code>public/ideologia.js</code>.</p>
   </section>`;
 }
 
