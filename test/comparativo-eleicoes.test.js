@@ -5,12 +5,12 @@ import { Apuracao } from '../src/apuracao.js';
 import { criarAnterior } from '../src/anterior.js';
 import { criarServidor } from '../src/servidor.js';
 import {
-  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, terceirosSelecionados, itemDoAtual, regiaoDaUf, seletorPeriodoHtml, FRACAO_MINIMA, PERIODOS,
+  ESCALA_SALDO, calcular, comparativoHtml, corDoMapa, terceirosSelecionados, itemDoAtual, regiaoDaUf, FRACAO_MINIMA, PERIODOS,
 } from '../public/comparativo-eleicoes.js';
 
 const ajuda = {
   esc: (t) => String(t), fmtInt: (n) => String(n), corPartido: (p) => (p === 'PT' ? '#d00' : '#00d'),
-  nomeUf: (uf) => uf.toUpperCase(), hrefUf: (uf) => `#/1/${uf}/comparativo`, hrefPeriodo: (id) => `#/1/br/comparativo/${id}`, demo: false,
+  nomeUf: (uf) => uf.toUpperCase(), hrefUf: (uf) => `#/1/${uf}/comparativo`, demo: false,
 };
 const perto = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≠ ${b}`);
 
@@ -79,14 +79,7 @@ test('períodos: três, com a eleição base e os nomes certos de cada candidatu
   assert.equal(PERIODOS['2026x2022'].vivo, true);
 });
 
-test('seletorPeriodoHtml: um link por período, o escolhido marcado', () => {
-  const html = seletorPeriodoHtml('2022x2018', ajuda.hrefPeriodo);
-  assert.match(html, /href="#\/1\/br\/comparativo\/2026x2022"/);
-  assert.match(html, /href="#\/1\/br\/comparativo\/2022x2018" aria-current="page">2022 × 2018</);
-  assert.equal(html.match(/aria-current="page"/g).length, 1);
-});
-
-test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, regiões, UFs e seletor de período', () => {
+test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, regiões e UFs', () => {
   const ui = { uf: 'br', regiao: null };
   const vazio = comparativoHtml(calcular(base, () => undefined), ui, ajuda);
   assert.match(vazio, /Aguardando apuração suficiente/);
@@ -100,7 +93,6 @@ test('comparativoHtml (Brasil): aviso sem apuração; com apuração, impacto, r
   assert.match(html, /href="#\/1\/ba\/comparativo"/); // a região de maior impacto (Nordeste, com a BA pronta) já vem aberta
   assert.match(comparativoHtml(modelo, { uf: 'br', regiao: 'Sudeste' }, ajuda), /30% apurado/); // SP ainda abaixo do mínimo
   assert.match(html, /Lula contra Lula 2022 · Flávio Bolsonaro contra Bolsonaro 2022/);
-  assert.match(html, /href="#\/1\/br\/comparativo\/2022x2018"/); // seletor de período
   assert.match(html, /não é transferência de votos/i);
 });
 

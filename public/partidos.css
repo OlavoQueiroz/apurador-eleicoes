@@ -5,6 +5,12 @@
 
 .par-agrupar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 
+.par-cartoes { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+.par-cartoes .seg { margin: 0; }
+.par-duplo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.par-duplo:has(.par-fig:only-child) { grid-template-columns: 1fr; }
+.par-fig { margin: 0; text-align: center; }
+.par-fig figcaption { font-size: 13px; font-weight: 650; color: var(--muted); }
 .par-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .par-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border-top: 3px solid var(--cor); }
 .par-card-nome { font-size: 12.5px; color: var(--muted); }
@@ -56,3 +62,12 @@
   .par-duas, .par-estados { grid-template-columns: 1fr; }
 }
 .par-uf { cursor: default; }
+
+/* Presidente na aba Análises: seletores no topo e o mapa e a tabela do comparativo no mesmo cartão. */
+.topo-analises { grid-column: 1 / -1; }
+.principal.analises-comparativo { position: relative; isolation: isolate; padding: 36px 40px; }
+.principal.analises-comparativo::before { content: ""; position: absolute; inset: 16px 20px; z-index: -1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--sombra); }
+.principal.analises-comparativo .mapa, .principal.analises-comparativo .detalhe { background: none; border: 0; box-shadow: none; padding: 0; }
+.principal.analises-comparativo .par-topo { margin-bottom: 0; }
+@media (max-width: 720px) { .par-duplo { grid-template-columns: 1fr; } }
+.topo-analises[hidden] { display: none; }

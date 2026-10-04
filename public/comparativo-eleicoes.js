@@ -160,23 +160,16 @@ export function corDoMapa(u, escala = ESCALA_SALDO) {
   return { candidato: u.saldo >= 0 ? 'pt' : 'pl', forca: Math.round(Math.min(100, (Math.abs(u.saldo) / escala) * 100)) };
 }
 
-// Seletor do período (links, como os outros seletores do painel). `hrefPeriodo(id)` monta o endereço.
-export function seletorPeriodoHtml(periodoId, hrefPeriodo) {
-  const itens = Object.values(PERIODOS).map((p) =>
-    `<a class="aba" href="${hrefPeriodo(p.id)}" ${p.id === periodoId ? 'aria-current="page"' : ''}>${p.rotulo}</a>`).join('');
-  return `<div class="seg seg-periodo" role="group" aria-label="Período comparado">${itens}</div>`;
-}
-
-// `ui`: { uf: 'br' | sigla, regiao: null | nome }  ·  `ajuda`: { esc, fmtInt, corPartido, nomeUf, hrefUf, hrefPeriodo, demo }
+// `ui`: { uf: 'br' | sigla, regiao: null | nome }  ·  `ajuda`: { esc, fmtInt, corPartido, nomeUf, hrefUf, demo }
 export function comparativoHtml(modelo, ui, ajuda) {
   return ui.uf === 'br' ? brasilHtml(modelo, ui, ajuda) : ufHtml(modelo, ui, ajuda);
 }
 
 function cabecalho(modelo, ajuda, subtitulo) {
-  const { esc, hrefPeriodo } = ajuda;
+  const { esc } = ajuda;
   const p = modelo.periodo;
   return `<div class="detalhe-topo"><div><h2>Presidente · ${esc(p.rotulo)}</h2>
-      <p class="muted pequeno">${subtitulo}</p></div></div>${seletorPeriodoHtml(p.id, hrefPeriodo)}`;
+      <p class="muted pequeno">${subtitulo}</p></div></div>`;
 }
 
 // Barra de uma eleição para uma linha: PT | terceiros escolhidos | demais (cinza) | campo de Bolsonaro, em % dos votos

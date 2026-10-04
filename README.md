@@ -137,13 +137,17 @@ municípios ficam o exterior (sem geometria) e o DF (um município só).
 
 ### Aba Análises (partidos e ideologia)
 
-Ao lado dos cargos, a aba **Análises** reúne o Comparativo da presidência (abaixo) e mostra Senado, Câmara e Governadores por **bloco ideológico** (Esquerda, Centrão,
-Direita, Independente) e por partido, em quatro análises: **Placar** (cartões com a variação de cadeiras desde a eleição
-anterior e o hemiciclo), **Ganhos e perdas** (barras por partido), **Viradas por estado** (mapa de Governadores e Câmara em
-que cada UF é dividida ao meio quando mudou de bloco: esquerda = eleição anterior, direita = 2026) e **Série histórica**
-(participação de cada bloco desde 2014). Em todas elas, o seletor **Agrupar por** troca entre **Ideologia** (os quatro
-blocos) e **Partido** (os maiores partidos e as cores de cada um). O endereço guarda a escolha (`#/partidos/6/serie` ou
-`#/partidos/6/serie/partido`).
+Ao lado dos cargos, a aba **Análises** reúne o Comparativo da presidência (abaixo) e mostra Senado, Câmara e Governadores
+por **bloco ideológico** (Esquerda, Centrão, Direita, Independente) e por partido. Cada cargo tem, numa linha só, o seletor de
+cargo, o de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as cores de cada um):
+
+- **Placar**: dois hemiciclos lado a lado (eleição anterior e 2026) e cartões que se leem de três jeitos, à escolha em
+  **Cartões**: cadeiras na eleição anterior, cadeiras em 2026 ou a **variação** entre as duas.
+- **Viradas por estado** (só Governadores): mapa em que cada UF é dividida ao meio quando mudou (esquerda = eleição
+  anterior, direita = 2026).
+- **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
+
+O endereço guarda a escolha (`#/partidos/6/placar/partido/delta`: agrupamento por partido, cartões de variação).
 
 - Os blocos são uma **classificação editorial** (`public/ideologia.js`), não um dado oficial. Edite as listas à vontade.
 - Os eleitos de 2014, 2018 e 2022 vêm de `dados-historicos/eleitos.json`, gerado por `node scripts/gerar-eleitos.js` (três
@@ -153,7 +157,7 @@ blocos) e **Partido** (os maiores partidos e as cores de cada um). O endereço g
   de `public/senado-ocupadas.json` (com o partido atual de cada senador).
 - Durante a apuração, as vagas que o TSE ainda não marcou como eleitas entram como "na frente" (contorno no hemiciclo e tom
   mais claro no mapa), então os números mudam até a totalização final. A Câmara usa também as vagas já dadas a cada
-  partido ou federação. Na Câmara, a UF recebe a cor do bloco com mais cadeiras; diferença menor que 10% das cadeiras = "disputado".
+  partido ou federação. 
 
 ### Comparativo com eleições anteriores
 
