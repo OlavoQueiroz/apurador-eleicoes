@@ -4,6 +4,7 @@
 
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
+import { focoHtml } from './partido-foco.js';
 
 // Cargos com análise de bancadas (a presidência tem o comparativo, em comparativo-eleicoes.js). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
 // Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes, então 2014 fica de fora).
@@ -19,7 +20,9 @@ export const cargoPartidos = (codigo) => CARGOS_PARTIDOS.find((c) => c.codigo ==
 export const ABAS = [
   { id: 'placar', nome: 'Placar' },
   { id: 'serie', nome: 'Série histórica' },
+  { id: 'foco', nome: 'Um partido', cargos: [6, 7] }, // só deputados: federal (Brasil) e estadual (SP e RJ)
 ];
+export const abasDoCargo = (codigo) => ABAS.filter((a) => !a.cargos || a.cargos.includes(Number(codigo)));
 
 export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
 const PENDENTE = { id: 'pendente', nome: '2026 ainda não definido', cor: 'var(--vazio)' }; // metade cinza do mapa
@@ -504,10 +507,10 @@ export function estadosHtml(modelo, ajuda) {
 export const MODOS = [{ id: 'ideologia', nome: 'Ideologia' }, { id: 'partido', nome: 'Partido' }];
 // Endereço da visão Análise (#/cargo/uf/analise/aba/partido): a análise Placar e o agrupamento por ideologia são o padrão e
 // não vão no endereço. A UF só conta no deputado estadual; nos outros cargos é "br".
-export const hashPartidos = (cargo, aba, agrupar, uf) => {
+export const hashPartidos = (cargo, aba, agrupar, uf, partido = null) => {
   const ufs = cargoPartidos(cargo)?.ufs;
   const ufDe = ufs ? (uf && uf in ufs ? uf : Object.keys(ufs)[0]) : 'br';
-  return `#/${cargo}/${ufDe}/analise${aba && aba !== 'placar' ? `/${aba}` : ''}${agrupar === 'partido' ? '/partido' : ''}`;
+  return `#/${cargo}/${ufDe}/analise${aba && aba !== 'placar' ? `/${aba}` : ''}${aba === 'foco' && partido ? `/p-${partido}` : ''}${agrupar === 'partido' ? '/partido' : ''}`;
 };
 
 // Endereços de versões anteriores (#/partidos/..., #/1/br/comparativo/...) viram os atuais (#/cargo/uf/analise/...);
@@ -515,7 +518,7 @@ export const hashPartidos = (cargo, aba, agrupar, uf) => {
 export function hashAntigoParaNovo(hash, periodoPadrao) {
   const comp = /^#\/(?:partidos\/1\/comparativo|1\/([a-z]{2})\/comparativo)(?:\/(\d{4}x\d{4}))?(?:\/([a-z]{2}))?$/.exec(hash);
   if (comp) return `#/1/${comp[1] ?? comp[3] ?? 'br'}/analise/${comp[2] ?? periodoPadrao}`;
-  const p = /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?((?:\/[a-z0-9]+)*)$/.exec(hash);
+  const p = /^#\/partidos(?:\/(\d+))?(?:\/([a-z]+))?((?:\/[a-z0-9-]+)*)$/.exec(hash);
   if (!p) return null;
   const cargo = Number(p[1]) || 6;
   if (cargo === 1) return `#/1/br/analise/${periodoPadrao}`;
@@ -529,15 +532,18 @@ export function hashAntigoParaNovo(hash, periodoPadrao) {
 export function partidosHtml(modelo, ui, ajuda) {
   const { esc } = ajuda;
   const modo = ui.agrupar === 'partido' ? 'partido' : 'ideologia';
-  const aba = ABAS.some((a) => a.id === ui.aba) ? ui.aba : 'placar';
+  const aba = abasDoCargo(modelo.cargo.codigo).some((a) => a.id === ui.aba) ? ui.aba : 'placar';
+  const foco = aba === 'foco';
   const agrupar = MODOS.map((m) =>
     `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, aba, m.id, modelo.uf)}" ${m.id === modo ? 'aria-current="page"' : ''}>${esc(m.nome)}</a>`).join('');
-  const abas = ABAS.map((a) =>
-    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo, modelo.uf)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
+  const abas = abasDoCargo(modelo.cargo.codigo).map((a) =>
+    `<a class="aba" href="${hashPartidos(modelo.cargo.codigo, a.id, modo, modelo.uf, ui.partido)}" ${a.id === aba ? 'aria-current="page"' : ''}>${esc(a.nome)}</a>`).join('');
   const aj = { ...ajuda, modo };
-  const corpo = !modelo.historico && aba !== 'placar'
-    ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
-    : { placar: placarHtml, serie: serieHtml }[aba](modelo, aj);
+  const corpo = foco
+    ? focoHtml(modelo, ui, aj)
+    : !modelo.historico && aba !== 'placar'
+      ? '<p class="aviso-bloco espera">Dados de eleições anteriores não carregados (rode <code>node scripts/gerar-eleitos.js</code>).</p>'
+      : { placar: placarHtml, serie: serieHtml }[aba](modelo, aj);
   // Os três seletores na mesma linha (quebra em telas estreitas); o agrupamento fica na ponta direita.
   const ufs = modelo.cargo.ufs
     ? `<div class="seg seg-modelo" role="group" aria-label="UF">${(ui.ufs ?? Object.keys(modelo.cargo.ufs)).map((u) =>
@@ -545,6 +551,6 @@ export function partidosHtml(modelo, ui, ajuda) {
     : '';
   return `<div class="par-topo">${ufs}
     <div class="seg seg-modelo" role="group" aria-label="Análise">${abas}</div>
-    <div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div></div>${corpo}
-    <p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>`;
+    ${foco ? '' : `<div class="par-agrupar"><span>Agrupar por</span><div class="seg seg-modelo" role="group" aria-label="Agrupar por">${agrupar}</div></div>`}</div>${corpo}
+    ${foco ? '' : '<p class="par-nota par-rodape">Os blocos seguem a classificação editorial de ideologia.js (simplificação, não dado oficial).</p>'}`;
 }
