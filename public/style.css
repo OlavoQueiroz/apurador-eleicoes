@@ -478,3 +478,6 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 /* Sem chance matemática de classificação: apagado, mas ainda legível. */
 .tabela td.sem-chance { opacity: 0.55; }
 .candidatos > li.sem-chance { opacity: 0.6; }
+
+/* Eleito pela conta do painel (o TSE ainda não marcou). */
+.tabela b.eleito-conta { color: var(--ok); }
