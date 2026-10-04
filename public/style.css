@@ -474,3 +474,7 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 /* Cabeçalho ordenável da tabela de governador e senador. */
 .tabela th .ordenar { all: unset; cursor: pointer; font: inherit; color: inherit; }
 .tabela th .ordenar:hover, .tabela th .ordenar:focus-visible { color: var(--accent); text-decoration: underline; }
+
+/* Sem chance matemática de classificação: apagado, mas ainda legível. */
+.tabela td.sem-chance { opacity: 0.55; }
+.candidatos > li.sem-chance { opacity: 0.6; }
