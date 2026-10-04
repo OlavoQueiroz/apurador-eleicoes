@@ -62,6 +62,7 @@ const estado = {
   busca: '',
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
+  ordemUfs: { campo: 'uf', dir: 1 }, // tabela de governador e senador: ordena por nome da UF ('uf') ou por % de seções totalizadas ('pct')
   numerosAbertos: false, // detalhe do arquivo: os quatro números (comparecimento etc.) abertos ou só o resumo
   cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
   inferidos: null, // Câmara: Map partido → [{ nome, uf }] das vagas já conquistadas por `vag` cujo eleito o TSE ainda não marcou
@@ -995,14 +996,20 @@ function detalheAgregadoHtml() {
           <div class="colocado-info"><span class="partido" style="--cor:${corPartido(c.partido)}">${esc(c.partido)}</span>
           <span class="muted pequeno">${fmtPct(c.pct)}${c.situacao === 'eleito' ? ' · eleito' : ''}</span></div></td>`
       : '<td class="muted">—</td>');
-    const linhas = itens.slice().sort(porNome).map(({ uf, item }) => {
+    const { campo, dir } = estado.ordemUfs;
+    const ordenado = itens.slice().sort(campo === 'pct'
+      ? (a, b) => dir * (a.item.secoes.pctTotalizadas - b.item.secoes.pctTotalizadas) || porNome(a, b)
+      : (a, b) => dir * porNome(a, b));
+    const cabecalho = (id, rotulo, classe = '') => `<th${classe ? ` class="${classe}"` : ''} aria-sort="${campo === id ? (dir > 0 ? 'ascending' : 'descending') : 'none'}">
+      <button type="button" class="ordenar" data-ordem="${id}">${rotulo}<span aria-hidden="true">${campo === id ? (dir > 0 ? ' ▲' : ' ▼') : ''}</span></button></th>`;
+    const linhas = ordenado.map(({ uf, item }) => {
       const [a, b, c] = item.colocados ?? [];
       return `<tr class="clicavel" data-uf="${uf}"><td>${esc(nomeUf(uf))}</td>${celula(a)}${celula(b)}${celula(c)}
         <td class="num">${fmtPct(item.secoes.pctTotalizadas)}</td></tr>`;
     }).join('');
     tabela = `<h3 class="secao">Mais votados em cada UF</h3>
       <div class="tabela-rolagem"><table class="tabela tabela-colocados">
-        <thead><tr><th>UF</th><th>1º</th><th>2º</th><th>3º</th><th class="num">Totalizadas</th></tr></thead>
+        <thead><tr>${cabecalho('uf', 'UF')}<th>1º</th><th>2º</th><th>3º</th>${cabecalho('pct', 'Totalizadas', 'num')}</tr></thead>
         <tbody>${linhas}</tbody></table></div>`;
   }
 
@@ -1193,6 +1200,12 @@ function renderDetalhe() {
     estado.mostrarTodos = !estado.mostrarTodos;
     renderDetalhe();
   });
+  raiz.querySelectorAll('[data-ordem]').forEach((b) => b.addEventListener('click', () => {
+    const campo = b.dataset.ordem;
+    const o = estado.ordemUfs;
+    estado.ordemUfs = campo === o.campo ? { campo, dir: -o.dir } : { campo, dir: campo === 'pct' ? -1 : 1 }; // % começa pelo mais apurado
+    renderDetalhe();
+  }));
   raiz.querySelectorAll('tr[data-uf]').forEach((linha) => {
     linha.addEventListener('click', () => {
       location.hash = hashPara(estado.cargo, linha.dataset.uf);
