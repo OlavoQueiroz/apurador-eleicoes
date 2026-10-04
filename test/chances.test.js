@@ -57,3 +57,12 @@ test('avaliarChances: matemática, prática (pela abstenção) e vitória do lí
   // Sem dados do eleitorado, ninguém é eliminado
   assert.deepEqual(avaliarChances({ votos: [500, 100, 5], k: 2, eleitorado: null }), [null, null, null]);
 });
+
+test('avaliarChances sem o eleitorado (servidor antigo): usa a proporção de seções apuradas', () => {
+  // DF da tela: 85,59% apurado; 1º 49,71%, 2º 34,62%, 3º 8,45% (em % dos válidos)
+  const votos = [497100, 346200, 84500];
+  const r = avaliarChances({ votos, k: 2, primeiroTurno: true, validos: 1000000, eleitorado: null, pctSecoes: 85.59 });
+  assert.deepEqual(r, [null, null, 'pratica']);
+  assert.deepEqual(avaliarChances({ votos, k: 2, validos: 1000000, eleitorado: null, pctSecoes: 5 }), [null, null, null]); // muito cedo: ainda cabe tudo
+  assert.deepEqual(avaliarChances({ votos, k: 2, validos: 1000000, eleitorado: null, pctSecoes: null }), [null, null, null]);
+});

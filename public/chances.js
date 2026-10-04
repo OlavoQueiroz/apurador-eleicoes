@@ -42,14 +42,18 @@ export function votosRestantesEstimados({ total, comparecimento, abstencao, vali
 
 // Para cada candidato (votos do mais votado para o menos): 'matematica', 'pratica' ou null. `primeiroTurno`: vale a
 // vitória do líder sem 2º turno (presidente e governador). `eleitorado` = { total, comparecimento, abstencao }.
-export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null }) {
-  if (!eleitorado) return votos.map(() => null);
+//
+// Sem os dados do eleitorado (servidor antigo, ainda sem o campo), só o nível 'pratica' é calculado, e os votos que faltam saem
+// da proporção de seções apuradas: `validos × (100 − p) ÷ p`, com a mesma margem. `pctSecoes` = % de seções totalizadas.
+export function avaliarChances({ votos, k, primeiroTurno = false, validos = 0, eleitorado = null, pctSecoes = null }) {
+  const restantesPorSecoes = pctSecoes > 0 ? (pctSecoes >= 100 ? 0 : (validos * (100 - pctSecoes) * MARGEM_SEGURANCA) / pctSecoes) : null;
+  if (!eleitorado && restantesPorSecoes === null) return votos.map(() => null);
   const fora = (restantes) => {
     const porLugar = semChanceMatematica(votos, k, restantes);
     const liderDecide = primeiroTurno && restantes != null && votos[0] > 0 && 2 * votos[0] > validos + restantes;
     return porLugar.map((f, i) => f || (liderDecide && i >= 1));
   };
-  const estrito = fora(votosRestantes(eleitorado));
-  const pratico = fora(votosRestantesEstimados({ ...eleitorado, validos }));
+  const estrito = eleitorado ? fora(votosRestantes(eleitorado)) : votos.map(() => false);
+  const pratico = fora(eleitorado ? votosRestantesEstimados({ ...eleitorado, validos }) : restantesPorSecoes);
   return votos.map((_, i) => (estrito[i] ? 'matematica' : pratico[i] ? 'pratica' : null));
 }
