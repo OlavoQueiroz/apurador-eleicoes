@@ -4,7 +4,7 @@
 > | --- | --- | --- |
 > | 1. Extrapolação simples | Implementado | `projetarIngenuo`, todos os cargos de UF. |
 > | 2. Estratificação geográfica | Implementado, **com mudanças** | A unidade é o **município** (não a zona). Só os **municípios grandes** (30 mil eleitores ou mais, mais o maior de cada UF) são baixados; o **resto do estado** é o arquivo da UF menos os grandes, projetado em bloco. Não usa abstenção histórica: usa a fração de seções apuradas de cada parte. Presidente, governador e senador. |
-> | 3. Swing histórico | Implementado **só para presidente** | Por município e resto do estado, não por "zonas de perfil semelhante": o swing é medido nos lugares com 50% ou mais apurado e aplicado ao que falta. A herança de votos de 2022 é editável (`dados-historicos/mapeamento-presidente.json`). |
+> | 3. Swing histórico | Implementado **só para presidente** | Por município e resto do estado, não por "zonas de perfil semelhante": o swing é medido nos lugares já apurados, com peso que cresce até 50% apurado, e aplicado ao que falta. A herança de votos de 2022 é editável (`dados-historicos/mapeamento-presidente.json`). |
 > | 4. Bayesiano com pesquisas | **Não implementado** | Depende de pesquisas em formato estruturado e de MRP. A curva de pesos abaixo é uma proposta sem calibração. |
 >
 > As fórmulas e decisões do que existe estão em [arquitetura.md](arquitetura.md). Nenhum modelo foi validado com votos

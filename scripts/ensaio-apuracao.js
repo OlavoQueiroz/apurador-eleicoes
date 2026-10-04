@@ -5,6 +5,7 @@
 //
 //   node scripts/ensaio-apuracao.js [--swing 3] [--ruido 1.5] [--swing-uf 0] [--swing-porte 0] [--semente 1] [--uf sp]
 //                                   [--ordem pequenos|aleatoria|grandes] [--brasil-media] [--sem-swing-grupo] [--ruido-secoes 2]
+//                                   [--oscilacao]   (mede o zigue-zague: projeção a cada 1% de apuração, de 5% a 50%)
 //
 // A "verdade" de 2026 é montada a partir de 2022: o campo de A (13) ganha `--swing` pontos e o de B (22) perde, e os
 // votos de 2022 sem herdeiro (Tebet, Ciro, Soraya) vão em parte para um candidato novo (55), em parte para A e B.
@@ -159,6 +160,7 @@ function projecoesUf(uf, t) {
     grandes: projetarUf({ foto, ufDados, limite: 50 }),
     swing: projetarUfSwing({ foto, ufDados, anterior, limite: 50, swingPorGrupo: SWING_GRUPO }),
     swingTodos: projetarUfSwing({ foto: fotoTodos, ufDados, anterior, limite: 50 }),
+    swingSeco: projetarUfSwing({ foto, ufDados, anterior, limite: 50, swingPorGrupo: SWING_GRUPO, pesoGradual: false }), // o corte seco de 50% antigo
   };
 }
 
@@ -181,6 +183,7 @@ const modelos = [
   ['municipio', 'Todos os municípios'],
   ['grandes', 'Grandes + resto'],
   ['swing', 'Swing (grandes+resto)'],
+  ['swingSeco', 'Swing (corte seco)'],
   ['swingTodos', 'Swing (todos)'],
 ];
 
@@ -233,3 +236,29 @@ tabela('Erro da diferença 13−22 (pontos percentuais):', linhasLead);
 console.log('UFs com projeção disponível por modelo (de', ufs.length, '):');
 console.log(cab.map((c, i) => (i === 0 ? c.padEnd(8) : c.slice(0, 22).padStart(24))).join(''));
 for (const [alvo, ...v] of dispon) console.log(`${`${(alvo * 100).toFixed(0)}%`.padEnd(8)}${v.map((x) => String(x).padStart(24)).join('')}`);
+
+// Oscilação: o quanto a projeção do Brasil (diferença 13−22) mexe de um instante para o seguinte, a cada 1% de apuração. Uma boa
+// projeção converge sem zigue-zague; a média dos saltos e o maior salto medem a instabilidade, e o erro quadrático médio
+// (RMSE) mostra o quanto ela fica longe da verdade nesse trecho.
+if (process.argv.includes('--oscilacao')) {
+  const verdadeLead = pctVerdade.get('13') - pctVerdade.get('22');
+  const series = new Map(modelos.map(([chave]) => [chave, []]));
+  for (let alvo = 0.05; alvo <= 0.5001; alvo += 0.01) {
+    const t = instante(alvo);
+    const porUf = ufs.map((uf) => ({ uf, p: projecoesUf(uf, t) }));
+    for (const [chave] of modelos) {
+      const soma = projetarBrasil(porUf.map(({ uf, p }) => ({ uf, r: p[chave], ...tamanhoUf({ foto: { dados: [] }, ufDados: p.ufDados }) })), { limite: 50, anteriorPorUf: BRASIL_MEDIA ? null : anterior.porUf() });
+      const a = achar(soma, '13');
+      const b = achar(soma, '22');
+      if (a !== null && b !== null) series.get(chave).push(a - b);
+    }
+  }
+  console.log('\nOscilação da projeção da diferença 13−22 (pontos percentuais), de 5% a 50% de apuração, a cada 1%:');
+  console.log(['modelo'.padEnd(24), 'salto médio'.padStart(12), 'maior salto'.padStart(12), 'RMSE'.padStart(8)].join(''));
+  for (const [chave, nome] of modelos) {
+    const v = series.get(chave);
+    const saltos = v.slice(1).map((x, i) => Math.abs(x - v[i]));
+    const rmse = Math.sqrt(v.reduce((s, x) => s + (x - verdadeLead) ** 2, 0) / v.length);
+    console.log([nome.padEnd(24), (saltos.reduce((s, x) => s + x, 0) / saltos.length).toFixed(3).padStart(12), Math.max(...saltos).toFixed(2).padStart(12), rmse.toFixed(2).padStart(8)].join(''));
+  }
+}

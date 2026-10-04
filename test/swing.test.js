@@ -180,3 +180,22 @@ test('swing por grupo: municípios grandes e interior têm swings próprios', ()
   assert.ok(votosA(geral) < votosA(porGrupo), 'o swing único dilui o dos grandes');
   assert.equal(projetarSwing(entrada).candidatos[0].votosProjetados, porGrupo.candidatos[0].votosProjetados, 'o padrão é por grupo');
 });
+
+test('swing: o peso do lugar cresce com a fração apurada, sem salto quando ele passa de fracaoMinima', () => {
+  // m1 e m2 apurados (swing +10). m3 muda de reduto (80/20 contra 50/50 em 2022, swing +30) e tem 49 ou 51 de 100 seções.
+  const anterior = criarAnterior(historico({ m1: [500, 500], m2: [500, 500], m3: [500, 500], m4: [500, 500] }), mapeamento);
+  const projecao = (totalizadas, pesoGradual) => projetarSwing({
+    completo: true,
+    anterior,
+    pesoGradual,
+    ufDados: ufArquivo({ a: 1200 + 8 * totalizadas, b: 800 + 2 * totalizadas, total: 130, totalizadas: 20 + totalizadas, aptos: 4000 }),
+    grandes: [
+      municipioAtual('m1', 600, 400), municipioAtual('m2', 600, 400),
+      municipioAtual('m3', 8 * totalizadas, 2 * totalizadas, { total: 100, totalizadas }),
+      municipioAtual('m4', 0, 0, { totalizadas: 0 }),
+    ],
+  }).swing.find((s) => s.numero === '13').pontos;
+  const salto = (g) => Math.abs(projecao(51, g) - projecao(49, g));
+  assert.ok(salto(false) > 5, `o corte seco dá um salto grande (${salto(false).toFixed(2)} pp)`);
+  assert.ok(salto(true) < salto(false) / 3, `o peso gradual suaviza (${salto(true).toFixed(2)} pp)`);
+});
