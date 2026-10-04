@@ -26,10 +26,17 @@
     <div id="busca-global" class="busca-global" role="search"></div>
     <nav id="modo" class="modo-global" aria-label="Visão"></nav>
     <div class="estado" aria-live="polite">
-      <span id="pulso" class="pulso" data-estado="conectando"></span>
-      <div>
-        <div id="estado-texto" class="estado-texto">Conectando…</div>
-        <div id="estado-detalhe" class="muted pequeno"></div>
+      <div id="cel-conexao" class="cel">
+        <span class="cab">Conexão</span>
+        <span class="v"><span id="pulso" class="pulso" data-estado="conectando"></span><span id="estado-texto">Conectando…</span></span>
+      </div>
+      <div class="cel">
+        <span id="tse-rotulo" class="cab">Arquivo do TSE</span>
+        <span id="tse-hora" class="v">—</span>
+      </div>
+      <div class="cel">
+        <span class="cab">Apuração</span>
+        <span id="apuracao-estado" class="v">—</span>
       </div>
     </div>
   </header>

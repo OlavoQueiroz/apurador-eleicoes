@@ -707,9 +707,7 @@ function detalheArquivoHtml() {
   const d = det.dados;
   const aviso = [];
   if (det.status === 'erro') aviso.push(`<p class="aviso-bloco erro">Falha ao atualizar: ${esc(det.erro)}.</p>`);
-  if (d.secoes.totalizadas === 0) {
-    aviso.push('<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>');
-  } else if (!d.totalizacaoFinal) {
+  if (d.secoes.totalizadas > 0 && !d.totalizacaoFinal) {
     aviso.push('<p class="aviso-bloco">Resultado parcial: os percentuais refletem só as seções já totalizadas e podem mudar bastante, porque as regiões chegam em ordens diferentes.</p>');
   }
 
@@ -753,8 +751,9 @@ function detalheArquivoHtml() {
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
+  const subtitulo = ehProporcional(d.cargo.codigo) ? `${fmtInt(candidatos.length)} candidatos${vagas}` : d.cargo.vagas > 1 ? `${d.cargo.vagas} vagas` : '';
   return `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
-      <p class="muted pequeno">${ehProporcional(d.cargo.codigo) ? `${fmtInt(candidatos.length)} candidatos${vagas}` : `${d.cargo.vagas > 1 ? `${d.cargo.vagas} vagas · ` : ''}${estado.meta.demo ? 'Simulação de' : 'Dados do TSE de'} ${esc(fmtDataHora(d.geradoEm))}`}</p></div>
+      ${subtitulo ? `<p class="muted pequeno">${subtitulo}</p>` : ''}</div>
       ${selosHtml(d, det.status)}</div>
     ${aviso.join('')}
     ${progressoHtml(d.secoes)}
@@ -875,7 +874,6 @@ function detalheAgregadoHtml() {
   }
 
   return `<div class="detalhe-topo"><div><h2>${esc(meta.nome)} · Brasil</h2></div></div>
-    ${secoes.totalizadas === 0 ? '<p class="aviso-bloco espera">Aguardando o início da apuração: os arquivos do TSE já existem, mas ainda não têm votos.</p>' : ''}
     ${progressoHtml(secoes, 'Seções totalizadas (todas as UFs)')}
     ${cadeirasAgregadoHtml(meta.codigo, vagas, porPartido)}
     ${meta.codigo === 3 ? '' : numeros}${barras}${tabela}`;
@@ -1080,14 +1078,52 @@ function render() {
   renderEstado();
 }
 
+// O que o card do topo resume: o arquivo aberto (UF ou Brasil da presidência) ou, nas visões "Brasil" somadas
+// (governador, senado, câmara), as UFs juntas, com a hora do arquivo mais recente.
+function origemEstado() {
+  if (ehAgregado()) {
+    const itens = itensDoCargo();
+    if (!itens.length) return null;
+    const { totalizadas, pct } = agregadoSecoes();
+    const geradoEm = itens.map(({ item }) => item.geradoEm).filter(Boolean).sort().at(-1) ?? null;
+    return { geradoEm, totalizadas, pct, final: itens.every(({ item }) => item.totalizacaoFinal) };
+  }
+  const fonte = estado.detalhe?.dados ?? itemResumo(estado.cargo, estado.uf);
+  if (!fonte?.secoes) return null;
+  return { geradoEm: fonte.geradoEm ?? null, totalizadas: fonte.secoes.totalizadas, pct: fonte.secoes.pctTotalizadas, final: !!fonte.totalizacaoFinal };
+}
+
 function renderEstado() {
   const textos = { 'ao-vivo': 'Ao vivo', reconectando: 'Reconectando…', conectando: 'Conectando…' };
   $('#pulso').dataset.estado = estado.conexao;
   $('#estado-texto').textContent = textos[estado.conexao];
-  const verificado = estado.ultimoCicloEm
+  $('#cel-conexao').title = estado.ultimoCicloEm
     ? `Verificado há ${Math.max(0, Math.round((Date.now() - estado.ultimoCicloEm) / 1000))} s · a cada ${estado.meta.intervaloSegundos} s`
     : 'Aguardando a primeira verificação…';
-  $('#estado-detalhe').textContent = verificado;
+
+  const origem = origemEstado();
+  $('#tse-rotulo').textContent = estado.meta.demo ? 'Simulação' : 'Arquivo do TSE';
+  $('#tse-hora').textContent = origem?.geradoEm ? fmtDataHora(origem.geradoEm) : '—';
+
+  const ap = $('#apuracao-estado');
+  let texto = '—';
+  let tom = '';
+  let dica = '';
+  if (origem) {
+    if (origem.totalizadas === 0) {
+      texto = 'Aguardando início';
+      dica = 'Os arquivos do TSE já existem, mas ainda não têm votos.';
+    } else if (origem.final) {
+      texto = 'Apuração concluída';
+      tom = 'final';
+    } else {
+      texto = `Em apuração · ${fmtPct(origem.pct, 1)}`;
+      tom = 'parcial';
+    }
+  }
+  ap.textContent = texto;
+  ap.className = `v ${tom}`.trim();
+  ap.title = dica;
 }
 
 // ---------- tempo real ----------
