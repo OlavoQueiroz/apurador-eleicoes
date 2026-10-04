@@ -32,6 +32,34 @@ Os votos "chegam" ao longo de ~8 minutos (`--demo-minutos 1` para acelerar). Can
 trocados por códigos fictícios de propósito: votos inventados nunca ficam atribuídos a pessoas reais, para que um
 print do demo não possa ser confundido com resultado.
 
+## Comandos npm
+
+| Comando | O que faz |
+| --- | --- |
+| `npm start` | Sobe o painel (o mesmo que `node server.js`). |
+| `npm run dev` | Sobe o painel e **reinicia sozinho** quando o `server.js` ou algo em `src/` muda; o navegador abre só na primeira vez. Se a porta já estiver ocupada, avisa e sai. Mudanças em `public/` não precisam de reinício: basta recarregar a página. |
+| `npm run stop` | Encerra o painel que está rodando (por padrão, o da porta 3000). |
+| `npm run demo` | Sobe o painel com dados fictícios. |
+| `npm test` | Roda os testes. |
+
+As opções do servidor vão depois de `--`: `npm run dev -- --demo --porta 3001`.
+
+### `npm run stop`
+
+```bash
+npm run stop                    # o painel da porta 3000 (ou da variável PORT)
+npm run stop -- --porta 3001    # o de outra porta
+npm run stop -- --todos         # todos os painéis deste projeto
+npm run stop -- --listar        # só mostra o que seria encerrado, sem encerrar
+```
+
+Só é encerrado um processo `node` que esteja rodando o `server.js` ou o `scripts/dev.js` **deste projeto**: outro
+projeto que também tenha um `server.js`, ou qualquer outro programa, nunca é tocado. Sem `--todos`, painéis deste
+projeto em outras portas também não: aparecem só como aviso. O `stop` não usa arquivo de PID; ele consulta `ps` e
+`lsof`, então também acha um painel iniciado direto com `node server.js`. Funciona em macOS e Linux; no Windows, use
+Ctrl+C no terminal do painel. `npm stop` (sem `run`) faz o mesmo. Para parar um painel no terminal onde ele roda,
+Ctrl+C continua valendo.
+
 ## Opções
 
 | Opção | Padrão | O que faz |
@@ -101,7 +129,8 @@ node --test
 ```
 
 Cobrem normalização (com fixtures reais do TSE), regra de situação do candidato, motor de polling (ETag, erros,
-recuperação, concorrência), simulação, configuração e o servidor HTTP/SSE.
+recuperação, concorrência), simulação, configuração e o servidor HTTP/SSE. Os testes do `dev` e do `stop` usam
+processos de verdade em pastas temporárias, incluindo um "estranho" que precisa sobreviver ao `stop`.
 
 As fixtures em `test/fixtures/` são cópias de arquivos públicos de resultado publicados pelo TSE em
 `resultados.tse.jus.br`, usadas só para testar a leitura do formato. Foram colhidas antes da votação, então trazem
@@ -118,6 +147,10 @@ src/servidor.js      HTTP, API e SSE
 src/demo.js          simulação com dados fictícios
 src/config.js        opções e variáveis de ambiente
 src/abrir.js         abre o painel no navegador ao iniciar
+src/supervisor.js    npm run dev: reinicia o servidor quando o código muda
+src/parar.js         npm run stop: acha e encerra só o painel deste projeto
 public/              interface (HTML, CSS e JS sem build)
+scripts/dev.js       npm run dev (usa src/supervisor.js)
+scripts/stop.js      npm run stop (usa src/parar.js)
 test/                testes e fixtures
 ```

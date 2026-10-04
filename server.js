@@ -3,7 +3,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lerConfig } from './src/config.js';
+import { lerConfig, SAIDA_PORTA_OCUPADA } from './src/config.js';
 import { criarFonteTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
 import { criarFonteDemo } from './src/demo.js';
 import { Apuracao } from './src/apuracao.js';
@@ -57,10 +57,11 @@ const servidor = criarServidor({
 
 servidor.on('error', (erro) => {
   if (erro.code === 'EADDRINUSE') {
-    console.error(`A porta ${cfg.porta} já está em uso. Tente outra: node server.js --porta ${cfg.porta + 1}`);
-  } else {
-    console.error(erro);
+    console.error(`A porta ${cfg.porta} já está em uso. Se for o próprio painel rodando em outro terminal, pare-o com: npm run stop`);
+    console.error(`Ou use outra porta: node server.js --porta ${cfg.porta + 1}`);
+    process.exit(SAIDA_PORTA_OCUPADA);
   }
+  console.error(erro);
   process.exit(1);
 });
 

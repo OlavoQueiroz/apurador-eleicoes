@@ -9,6 +9,8 @@
   },
   "scripts": {
     "start": "node server.js",
+    "dev": "node scripts/dev.js",
+    "stop": "node scripts/stop.js",
     "demo": "node server.js --demo",
     "test": "node --test"
   }

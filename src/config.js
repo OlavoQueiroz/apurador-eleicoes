@@ -9,6 +9,12 @@ import { CARGOS, CARGOS_PADRAO } from './tse.js';
 // só gera tráfego inútil. Na demonstração não há rede envolvida, então vale um ciclo curto.
 export const INTERVALO_MINIMO_REAL = 30;
 
+// Compartilhados com `npm run dev` (supervisor) e `npm run stop`.
+export const PORTA_PADRAO = 3000;
+// Código de saída do servidor quando a porta já está em uso: nesse caso o supervisor do `dev`
+// desiste em vez de esperar uma alteração de arquivo que não resolveria nada.
+export const SAIDA_PORTA_OCUPADA = 98;
+
 // `ambiente` existe para os testes poderem simular outra plataforma ou um terminal não interativo.
 export function lerConfig(
   argv = process.argv.slice(2),
@@ -16,7 +22,7 @@ export function lerConfig(
   ambiente = { plataforma: process.platform, interativo: Boolean(process.stdout.isTTY) },
 ) {
   const cfg = {
-    porta: Number(env.PORT) || 3000,
+    porta: Number(env.PORT) || PORTA_PADRAO,
     host: env.HOST || '127.0.0.1',
     ano: Number(env.ANO) || 2026,
     turno: Number(env.TURNO) || 1,
