@@ -3,8 +3,8 @@
 Painel local que acompanha a apuração em tempo real a partir dos **arquivos públicos de resultado do TSE**
 (`resultados.tse.jus.br`). Não conta votos: lê o que o TSE publica, normaliza e mostra.
 
-Cargos: presidente, governador, senador, deputado federal e deputado distrital (DF).
-Deputado estadual fica de fora por padrão (ver [Opções](#opções)).
+Cargos: presidente, governador, senador e deputado federal.
+Deputado estadual e deputado distrital (DF) ficam de fora por padrão (ver [Opções](#opções)).
 
 ## Como rodar
 
@@ -67,7 +67,7 @@ Ctrl+C continua valendo.
 | `--porta N` (`PORT`) | 3000 | Porta do painel. |
 | `--intervalo S` (`INTERVALO`) | 60 | Segundos entre consultas ao TSE. Mínimo de 30, para não sobrecarregar o servidor. |
 | `--turno N` (`TURNO`) | 1 | `2` acompanha o 2º turno (só presidente e governador). |
-| `--cargos LISTA` (`CARGOS`) | `1,3,5,6,8` | Códigos: 1 presidente, 3 governador, 5 senador, 6 dep. federal, 7 dep. estadual, 8 dep. distrital. Use `1,3,5,6,7,8` para incluir estaduais. |
+| `--cargos LISTA` (`CARGOS`) | `1,3,5,6` | Códigos: 1 presidente, 3 governador, 5 senador, 6 dep. federal, 7 dep. estadual, 8 dep. distrital. Use `1,3,5,6,7,8` para incluir estaduais e distrital. |
 | `--demo` (`DEMO=1`) | desligado | Modo demonstração (dados fictícios). |
 | `--demo-minutos N` | 8 | Duração da simulação. |
 | `--sem-abrir` (`ABRIR=0`) | abre sozinho em terminal interativo | Não abre o navegador ao iniciar. `--abrir` (ou `ABRIR=1`) força a abertura mesmo fora de um terminal interativo. |
@@ -86,8 +86,8 @@ TSE (JSON estático, CDN)  →  poller  →  normalização  →  memória  → 
   (em 2026: federal 6257/6258, estadual 6259/6260). Nada de código de eleição fixo.
 - **Arquivos**: um por cargo × abrangência, no padrão
   `…/oficial/ele2026/{eleição}/dados/{uf}/{uf}-c{cargo}-e{eleição}-u.json` (o `-u` é o "resultado unificado").
-  São 111 arquivos no 1º turno: presidente (Brasil, 27 UFs e exterior), governador, senador e deputado federal
-  (27 UFs cada) e deputado distrital (DF).
+  São 110 arquivos no 1º turno: presidente (Brasil, 27 UFs e exterior), governador, senador e deputado federal
+  (27 UFs cada).
 - **Polling educado**: o TSE serve esses arquivos por CDN com `max-age` de ~1 min e `ETag`. O painel reenvia o
   `ETag` (GET condicional) e só reprocessa o que mudou; com no máximo 6 requisições simultâneas.
 - **Tempo real no navegador**: o servidor avisa a página por SSE (`/events`) a cada ciclo, com a lista de arquivos

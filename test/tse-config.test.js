@@ -19,17 +19,17 @@ test('urlResultado segue o layout do arquivo unificado do TSE', () => {
   );
 });
 
-test('1º turno com os cargos padrão: tudo menos deputado estadual', () => {
+test('1º turno com os cargos padrão: sem deputado estadual nem distrital', () => {
   const alvos = montarAlvos({ ...eleicoes2026, turno: 1 });
   const por = (cargo) => alvos.filter((a) => a.cargo === cargo);
-  assert.deepEqual(CARGOS_PADRAO, [1, 3, 5, 6, 8]);
+  assert.deepEqual(CARGOS_PADRAO, [1, 3, 5, 6]);
   assert.equal(por(1).length, 29); // br + 27 UFs + exterior
   assert.equal(por(3).length, 27);
   assert.equal(por(5).length, 27);
   assert.equal(por(6).length, 27);
-  assert.deepEqual(por(8).map((a) => a.uf), ['df']);
+  assert.equal(por(8).length, 0, 'deputado distrital fora por padrão');
   assert.equal(por(7).length, 0, 'deputado estadual fora por padrão');
-  assert.equal(alvos.length, 111);
+  assert.equal(alvos.length, 110);
   assert.equal(new Set(alvos.map((a) => a.chave)).size, alvos.length, 'chaves únicas');
   assert.ok(por(1).every((a) => a.eleicao === '6257'));
   assert.ok(por(5).every((a) => a.eleicao === '6259'));
@@ -60,7 +60,7 @@ test('lerConfig: padrões, flags e ambiente', () => {
   assert.equal(padrao.host, '127.0.0.1', 'só local por padrão');
   assert.equal(padrao.intervalo, 60);
   assert.equal(padrao.demo, false);
-  assert.deepEqual(padrao.cargos, [1, 3, 5, 6, 8]);
+  assert.deepEqual(padrao.cargos, [1, 3, 5, 6]);
 
   const demo = lerConfig(['--demo'], {});
   assert.equal(demo.demo, true);

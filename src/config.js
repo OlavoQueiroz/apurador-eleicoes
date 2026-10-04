@@ -1,5 +1,5 @@
 // Opções de linha de comando e variáveis de ambiente.
-//   node server.js [--demo [--demo-minutos 8]] [--turno 2] [--porta 3000] [--intervalo 60] [--cargos 1,3,5,6,8]
+//   node server.js [--demo [--demo-minutos 8]] [--turno 2] [--porta 3000] [--intervalo 60] [--cargos 1,3,5,6]
 //                  [--sem-abrir] [--navegador Safari] [--verboso]
 // Equivalentes por ambiente: DEMO=1 TURNO PORT HOST INTERVALO CARGOS ANO DEMO_MINUTOS ABRIR NAVEGADOR
 

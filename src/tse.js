@@ -28,7 +28,7 @@ export const CARGOS = {
 
 // Deputado estadual fica de fora por padrão (são milhares de candidatos por UF e o painel
 // não foi pensado para eles). Inclua com CARGOS=1,3,5,6,7,8.
-export const CARGOS_PADRAO = [1, 3, 5, 6, 8];
+export const CARGOS_PADRAO = [1, 3, 5, 6];
 
 const pad = (valor, tamanho) => String(valor).padStart(tamanho, '0');
 
