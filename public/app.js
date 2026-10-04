@@ -310,12 +310,12 @@ function progressoHtml({ total, totalizadas, pct, pctTotalizadas }, rotulo = 'Se
 function numerosHtml(dados) {
   const { eleitorado: e, votos: v } = dados;
   const caixa = (rotulo, valor, pct) => `<div class="numero"><b>${fmtPct(pct)}</b><span>${rotulo}</span><span class="valor">${fmtInt(valor)}</span></div>`;
-  return `<div class="numeros">
+  // Brancos e nulos não entram no cálculo de quem vence, então ficam juntos num bloco só.
+  return `<div class="numeros quatro">
     ${caixa('Comparecimento', e.comparecimento, e.pctComparecimento)}
     ${caixa('Abstenção', e.abstencao, e.pctAbstencao)}
     ${caixa('Votos válidos', v.validos, v.pctValidos)}
-    ${caixa('Brancos', v.brancos, v.pctBrancos)}
-    ${caixa('Nulos', v.nulos, v.pctNulos)}
+    ${caixa('Brancos e nulos', v.brancos + v.nulos, v.pctBrancos + v.pctNulos)}
   </div>`;
 }
 

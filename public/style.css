@@ -307,6 +307,14 @@ button { font: inherit; color: inherit; }
   gap: 10px;
   margin-top: 12px;
 }
+/* Os quatro números do arquivo ficam numa linha só; a fonte acompanha a largura do painel e, se ele ficar estreito
+   demais, os blocos voltam a quebrar. */
+.detalhe { container-type: inline-size; }
+.numeros.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.numeros.quatro .numero { padding: 9px 8px 9px 10px; }
+.numeros.quatro .numero b { font-size: clamp(14px, 3cqw, 18px); white-space: nowrap; }
+.numeros.quatro .numero span { font-size: clamp(11px, 1.9cqw, 12.5px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 440px) { .numeros.quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .numero { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .numero b { display: block; font-size: 18px; letter-spacing: -0.01em; }
 .numero span { display: block; font-size: 12px; color: var(--muted); }
