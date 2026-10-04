@@ -45,7 +45,8 @@ export function posicoesHemiciclo(n) {
 export function ordenarBancadas(partidos) {
   const ordemGrupo = new Map(GRUPOS.map((g, i) => [g.id, i]));
   return Object.entries(partidos)
-    .map(([sigla, { eleitos = 0, ocupadas = 0 }]) => ({ sigla, eleitos, ocupadas, total: eleitos + ocupadas, grupo: grupoDoPartido(sigla) }))
+    .map(([sigla, { eleitos = 0, ocupadas = 0, pessoasEleitas = [], pessoasOcupadas = [] }]) =>
+      ({ sigla, eleitos, ocupadas, pessoasEleitas, pessoasOcupadas, total: eleitos + ocupadas, grupo: grupoDoPartido(sigla) }))
     .filter((b) => b.total > 0)
     .sort((a, b) => ordemGrupo.get(a.grupo) - ordemGrupo.get(b.grupo) || b.total - a.total || a.sigla.localeCompare(b.sigla, 'pt-BR'));
 }
@@ -54,12 +55,18 @@ export function ordenarBancadas(partidos) {
 export function listarCadeiras(bancadas, pendentes) {
   const cadeiras = [];
   for (const b of bancadas) {
-    for (let i = 0; i < b.ocupadas; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: true });
-    for (let i = 0; i < b.eleitos; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false });
+    for (let i = 0; i < b.ocupadas; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: true, pessoa: b.pessoasOcupadas[i] });
+    for (let i = 0; i < b.eleitos; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, pessoa: b.pessoasEleitas[i] });
   }
   for (let i = 0; i < pendentes; i += 1) cadeiras.push({ sigla: null, grupo: null, ocupada: false });
   return cadeiras;
 }
+
+// Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
+const dicaCadeira = (c) => {
+  const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
+  return `${quem}${c.sigla}${c.ocupada ? ' · mandato até 2031' : ''}`;
+};
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
 
@@ -88,9 +95,9 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     const p = pontos[i];
     const cor = corCadeira(c);
     const r = c.ocupada ? raio * 0.6 : raio;
-    const rotulo = c.sigla ? `${c.sigla}${c.ocupada ? ' · cadeira fora de disputa' : ''}` : 'Em apuração';
+    const rotulo = c.sigla ? dicaCadeira(c) : 'Em apuração';
     const estilo = [cor ? `fill:${cor}` : '', noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
-    return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}><title>${esc(rotulo)}</title></circle>`;
+    return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" data-dica="${esc(rotulo)}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}></circle>`;
   }).join('');
 
   // Texto no vão central: o foco, ou o total de cadeiras definidas.
@@ -141,6 +148,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
       <h3 class="secao">${esc(dados.titulo)}</h3>
       <div class="gr-seg" role="group" aria-label="Agrupar cadeiras">${modo('partido', 'Por partido')}${modo('ideologia', 'Por ideologia')}</div>
     </div>
+    <div class="cad-dica" hidden></div>
     <svg class="cad-svg" viewBox="0 0 ${LARGURA} ${ALTURA}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
     ${aviso}${ocupadas}${naoDefinido}
@@ -150,6 +158,22 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
 
 // Liga os cliques do mapa de cadeiras (modo e drill-down) ao estado da interface.
 export function ligarCadeiras(raiz, ui, aoMudar) {
+  // Dica própria: a nativa (title) demora quase um segundo para aparecer.
+  const caixa = raiz.querySelector('.cad-dica');
+  const svg = raiz.querySelector('.cad-svg');
+  if (caixa && svg) {
+    svg.addEventListener('mousemove', (e) => {
+      const alvo = e.target.closest?.('circle[data-dica]');
+      if (!alvo) { caixa.hidden = true; return; }
+      const area = caixa.parentElement.getBoundingClientRect();
+      caixa.textContent = alvo.dataset.dica;
+      caixa.hidden = false;
+      const x = Math.min(e.clientX - area.left + 12, area.width - caixa.offsetWidth - 4);
+      caixa.style.left = `${Math.max(4, x)}px`;
+      caixa.style.top = `${e.clientY - area.top - caixa.offsetHeight - 14}px`;
+    });
+    svg.addEventListener('mouseleave', () => { caixa.hidden = true; });
+  }
   raiz.querySelectorAll('[data-cad-modo]').forEach((b) => b.addEventListener('click', () => {
     ui.modo = b.dataset.cadModo;
     ui.foco = null;

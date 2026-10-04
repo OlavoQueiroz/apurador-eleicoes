@@ -57,6 +57,7 @@ const estado = {
   destaque: null, // resultado escolhido na busca global: { tipo: 'c' (candidato, por sq) | 'm' (município, por código), id }
   mostrarTodos: false,
   cadeiras: { modo: 'partido', foco: null }, // mapa de cadeiras (Senado e Câmara): agrupamento e drill-down
+  eleitos: null, // nomes dos eleitos do cargo aberto no Brasil (hover do mapa de cadeiras): Map partido → [{ nome, uf }]
   senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
   conexao: 'conectando',
   ultimoCicloEm: null,
@@ -141,6 +142,32 @@ async function carregarDetalhe() {
 }
 let recarga = null;
 
+// Nomes dos eleitos de cada UF, para o hover do mapa de cadeiras. Só no Brasil de senador e deputado federal.
+let chaveEleitos = '';
+async function carregarEleitos() {
+  if (!ehAgregado() || ![5, 6].includes(estado.cargo)) {
+    estado.eleitos = null;
+    chaveEleitos = '';
+    return;
+  }
+  const itens = itensDoCargo().filter(({ item }) => item.eleitos > 0);
+  const chave = `${estado.cargo}|${itens.map(({ uf, item }) => `${uf}${item.alteradoEm}`).join()}`;
+  if (chave === chaveEleitos) return;
+  chaveEleitos = chave;
+  const porPartido = new Map();
+  await Promise.all(itens.map(async ({ uf }) => {
+    try {
+      const { dados } = await getJson(`/api/resultado/${estado.cargo}/${uf}`);
+      for (const c of dados?.candidatos ?? []) {
+        if (c.situacao !== 'eleito') continue;
+        if (!porPartido.has(c.partido)) porPartido.set(c.partido, []);
+        porPartido.get(c.partido).push({ nome: c.nomeUrna, uf });
+      }
+    } catch { /* sem o nome, o hover mostra só o partido */ }
+  }));
+  if (chave.startsWith(`${estado.cargo}|`) && ehAgregado()) estado.eleitos = porPartido;
+}
+
 // ---------- municípios da UF aberta (mapa de municípios) ----------
 
 // Só os cargos majoritários com resultado por município; Brasil, exterior e DF (um município só) ficam de fora.
@@ -219,6 +246,7 @@ async function atualizar() {
     do {
       atualizarDeNovo = false;
       await Promise.all([carregarResumo(), carregarDetalhe(), carregarMunicipios(), buscarHistorico()]);
+      await carregarEleitos();
       render();
     } while (atualizarDeNovo);
   } catch (erro) {
@@ -257,6 +285,8 @@ async function aplicarHash() {
   estado.detalhe = undefined;
   estado.projecao = undefined;
   estado.mun = undefined;
+  estado.eleitos = null;
+  chaveEleitos = '';
   render();
   await atualizar();
 }
@@ -657,13 +687,17 @@ function agregadoSecoes() {
 function cadeirasAgregadoHtml(codigo, vagas, porPartido) {
   if (codigo !== 5 && codigo !== 6) return '';
   const partidos = {};
-  for (const [sigla, n] of Object.entries(porPartido)) partidos[sigla] = { eleitos: n };
+  for (const [sigla, n] of Object.entries(porPartido)) partidos[sigla] = { eleitos: n, pessoasEleitas: estado.eleitos?.get(sigla) ?? [] };
   let ocupadas = false;
   if (codigo === 5 && estado.senadoOcupadas) {
     ocupadas = true;
-    for (const { partido } of estado.senadoOcupadas) {
+    for (const { partido, nome, uf } of estado.senadoOcupadas) {
       const sigla = partido.toUpperCase();
-      partidos[sigla] = { ...partidos[sigla], ocupadas: (partidos[sigla]?.ocupadas ?? 0) + 1 };
+      partidos[sigla] = {
+        ...partidos[sigla],
+        ocupadas: (partidos[sigla]?.ocupadas ?? 0) + 1,
+        pessoasOcupadas: [...(partidos[sigla]?.pessoasOcupadas ?? []), { nome, uf }],
+      };
     }
   }
   const eleitos = Object.values(porPartido).reduce((s, n) => s + n, 0);

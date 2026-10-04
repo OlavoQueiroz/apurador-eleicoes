@@ -1,5 +1,5 @@
 /* Mapa de cadeiras (ver cadeiras.js). Usa as variáveis de cor de style.css. */
-.cadeiras { margin: 18px 0 8px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.cadeiras { position: relative; margin: 18px 0 8px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .cad-topo { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .cad-topo .secao { margin: 0; }
 .cad-svg { display: block; width: 100%; max-width: 640px; height: auto; margin: 8px auto 4px; }
@@ -18,3 +18,10 @@
 .cad-chip[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
 .cad-voltar { color: var(--accent); font-weight: 600; padding-left: 11px; }
 .cadeiras p { margin-top: 4px; }
+
+.cad-dica {
+  position: absolute; z-index: 5; padding: 5px 10px; font-size: 12.5px; font-weight: 600; white-space: nowrap; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 6px 24px rgba(15, 27, 45, 0.18);
+}
+.cad-dica[hidden] { display: none; }
+.cad:hover { stroke: var(--text); stroke-width: 1.5; }
