@@ -146,20 +146,62 @@ export function normalizar(bruto) {
   };
 }
 
-// Câmara: cadeiras por partido contando também as vagas que o TSE já deu a um partido ou federação (`vag`) antes de
-// marcar os eleitos. Dentro de cada lista as vagas vão para os mais votados, então os que faltam são os próximos do
-// ranking (mesma regra do mapa de cadeiras da interface). Os candidatos já vêm em ordem de votos.
-function cadeirasPorPartido(dados) {
-  const saida = {};
-  for (const agr of dados.agrupamentos) {
-    const lista = dados.candidatos.filter((c) => c.agrupamentoId === agr.id);
-    const eleitos = lista.filter((c) => c.situacao === 'eleito');
-    const faltam = Math.max(0, agr.vagas - eleitos.length);
-    for (const c of [...eleitos, ...lista.filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, faltam)]) {
-      saida[c.partido] = (saida[c.partido] ?? 0) + 1;
+// Distribuição das vagas de um cargo proporcional entre as listas (partidos ou federações), pelo método do TSE: quociente
+// eleitoral = votos válidos ÷ vagas (fração até 0,5 desprezada, acima disso arredonda para cima); cada lista leva
+// floor(votos ÷ quociente) vagas; as que sobram vão uma a uma para a maior média votos ÷ (vagas já obtidas + 1). Desde a
+// decisão do STF (ADI 7263, valendo a partir de 2022), todas as listas disputam as sobras, sem as barreiras de 80% do
+// quociente (partido) e 20% (candidato). Devolve as vagas de cada lista, na mesma ordem de `votos`.
+export function distribuirVagas(votos, vagas) {
+  const total = votos.reduce((s, v) => s + v, 0);
+  const vagasPorLista = votos.map(() => 0);
+  if (!total || !vagas) return vagasPorLista;
+  const exato = total / vagas;
+  const quociente = Math.max(1, exato - Math.floor(exato) > 0.5 ? Math.ceil(exato) : Math.floor(exato));
+  for (let i = 0; i < votos.length; i += 1) vagasPorLista[i] = Math.floor(votos[i] / quociente);
+  let somadas = vagasPorLista.reduce((s, n) => s + n, 0);
+  const media = (i, extra = 0) => votos[i] / (vagasPorLista[i] + 1 + extra);
+  while (somadas < vagas) { // sobras: maior média; empate fica com a lista mais votada
+    let melhor = -1;
+    for (let i = 0; i < votos.length; i += 1) {
+      if (votos[i] > 0 && (melhor < 0 || media(i) > media(melhor) || (media(i) === media(melhor) && votos[i] > votos[melhor]))) melhor = i;
     }
+    if (melhor < 0) break;
+    vagasPorLista[melhor] += 1;
+    somadas += 1;
   }
-  return saida;
+  while (somadas > vagas) { // quociente arredondado para baixo pode passar de `vagas`: tira da menor média
+    let pior = -1;
+    for (let i = 0; i < votos.length; i += 1) {
+      if (vagasPorLista[i] > 0 && (pior < 0 || votos[i] / vagasPorLista[i] < votos[pior] / vagasPorLista[pior])) pior = i;
+    }
+    vagasPorLista[pior] -= 1;
+    somadas -= 1;
+  }
+  return vagasPorLista;
+}
+
+// Câmara e Assembleia: cadeiras por partido contando também as vagas ainda sem eleito marcado. Se o TSE já distribuiu todas
+// as vagas entre as listas (`vag`), vale a distribuição dele; senão, com votos já apurados, o painel estima a distribuição
+// pelo quociente eleitoral (distribuirVagas) e marca `estimativa`, porque ela muda até o fim da apuração. Dentro de cada
+// lista as vagas vão para os mais votados (os candidatos já vêm em ordem de votos); os eleitos que o TSE já marcou contam
+// sempre.
+function cadeirasPorPartido(dados) {
+  const lista = dados.agrupamentos;
+  const votos = lista.map((a) => a.votos ?? 0);
+  const tseCompleto = lista.reduce((s, a) => s + a.vagas, 0) >= dados.cargo.vagas;
+  const estimativa = !tseCompleto && votos.some((v) => v > 0);
+  const vagasEstimadas = estimativa ? distribuirVagas(votos, dados.cargo.vagas) : null;
+  const porPartido = {};
+  lista.forEach((agr, i) => {
+    const candidatos = dados.candidatos.filter((c) => c.agrupamentoId === agr.id);
+    const eleitos = candidatos.filter((c) => c.situacao === 'eleito');
+    const vagasDaLista = estimativa ? Math.max(vagasEstimadas[i], eleitos.length) : agr.vagas;
+    const faltam = Math.max(0, vagasDaLista - eleitos.length);
+    for (const c of [...eleitos, ...candidatos.filter((x) => x.situacao !== 'eleito' && x.votos > 0).slice(0, faltam)]) {
+      porPartido[c.partido] = (porPartido[c.partido] ?? 0) + 1;
+    }
+  });
+  return { porPartido, estimativa };
 }
 
 // Visão compacta usada nos mapas/tiles e nos totais nacionais (sem a lista inteira de candidatos).
@@ -188,8 +230,8 @@ export function resumir(dados) {
     colocados: dados.candidatos.slice(0, 3).filter((c) => c.votos > 0).map(compacto), // 1º, 2º e 3º (tabela do Senado)
     eleitos: Object.values(eleitosPorPartido).reduce((soma, n) => soma + n, 0),
     eleitosPorPartido,
-    // Câmara: eleitos mais as vagas já conquistadas por partido/federação, para a aba de partidos.
-    ...([6, 7].includes(dados.cargo.codigo) ? { cadeirasPorPartido: cadeirasPorPartido(dados) } : {}),
+    // Câmara e Assembleia: eleitos mais as vagas já conquistadas (ou estimadas, se `cadeirasEstimadas`) por partido/federação.
+    ...([6, 7].includes(dados.cargo.codigo) ? (({ porPartido, estimativa }) => ({ cadeirasPorPartido: porPartido, cadeirasEstimadas: estimativa }))(cadeirasPorPartido(dados)) : {}),
     segundoTurno,
   };
 }

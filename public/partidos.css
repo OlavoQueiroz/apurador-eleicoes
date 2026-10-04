@@ -88,3 +88,5 @@
 }
 .par-dica[hidden] { display: none; }
 .par-dica strong { font-size: 13px; }
+
+.par-uf path.par-lis { stroke: none; pointer-events: none; }
