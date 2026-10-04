@@ -142,17 +142,17 @@ estadual e Governadores por **bloco ideológico** (Esquerda, Centrão, Direita, 
 numa linha só, o seletor de cargo, o de análise e o **Agrupar por** (**Ideologia** ou **Partido**, os maiores e as cores de
 cada um):
 
-- **Placar**: dois hemiciclos lado a lado (eleição anterior e 2026) e cartões que se leem de três jeitos, à escolha em
-  **Cartões**: cadeiras na eleição anterior, cadeiras em 2026 ou a **variação** entre as duas. Ao passar o mouse numa
-  cadeira ou na legenda, o bloco ou partido é destacado e uma dica mostra o total nas duas eleições. Em **Governadores**,
-  no lugar dos hemiciclos há o mapa em que cada UF é dividida ao meio quando mudou (esquerda = eleição anterior, direita =
-  2026), com as listas de viradas e de bastiões.
+- **Placar**: dois hemiciclos lado a lado (eleição anterior e 2026) e, em cima, um cartão por bloco ou partido com as
+  cadeiras de 2026, a variação e uma barra em que a parte da eleição anterior fica clara e a diferença se destaca (a mais,
+  cheia; a menos, hachurada), com o valor da eleição anterior embaixo. Ao passar o mouse numa cadeira ou na legenda, o bloco
+  ou partido é destacado e uma dica mostra o total nas duas eleições. Em **Governadores**, no lugar dos hemiciclos há o mapa
+  em que cada UF é dividida ao meio quando mudou (esquerda = eleição anterior, direita = 2026), com as listas de viradas e de
+  bastiões.
 - **Série histórica**: participação de cada bloco (ou dos maiores partidos) desde 2014.
 - **Deputado estadual** só existe para SP e RJ (um seletor de UF aparece ao lado do cargo): é a Assembleia Legislativa, com
   94 e 70 cadeiras.
 
-O endereço guarda a escolha (`#/partidos/6/placar/partido/delta`: agrupamento por partido, cartões de variação;
-`#/partidos/7/placar/rj`: Assembleia do RJ).
+O endereço guarda a escolha (`#/partidos/6/placar/partido`: agrupamento por partido; `#/partidos/7/placar/rj`: Assembleia do RJ).
 
 - Os blocos são uma **classificação editorial** (`public/ideologia.js`), não um dado oficial. Edite as listas à vontade.
 - Os eleitos de 2014, 2018 e 2022 vêm de `dados-historicos/eleitos.json`, gerado por `node scripts/gerar-eleitos.js` (três

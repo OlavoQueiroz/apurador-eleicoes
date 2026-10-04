@@ -205,33 +205,38 @@ test('por partido: o mapa lidera pelo partido, não pelo bloco, e os endereços 
 test('Presidente na aba Análises: o endereço é o do comparativo e o seletor de cargo o inclui', () => {
   assert.equal(hashPartidos(1, 'placar', 'partido'), '#/partidos/1/comparativo');
   assert.equal(hashPartidos(6, 'serie', 'partido'), '#/partidos/6/serie/partido');
-  assert.equal(hashPartidos(6, 'placar', 'ideologia', '2022'), '#/partidos/6/placar/2022');
-  assert.equal(hashPartidos(6, 'placar', 'partido', 'delta'), '#/partidos/6/placar/partido/delta');
-  assert.equal(hashPartidos(6, 'placar', 'ideologia', '2026'), '#/partidos/6/placar');
+  assert.equal(hashPartidos(6, 'placar', 'ideologia'), '#/partidos/6/placar');
   const html = seletorCargosHtml({ cargos: [PRESIDENTE, ...CARGOS_PARTIDOS], atual: 1, aba: 'placar', modo: 'ideologia', esc: (t) => t });
   assert.match(html, /href="#\/partidos\/1\/comparativo" aria-current="page">Presidente/);
   assert.match(html, /href="#\/partidos\/6\/placar"/);
 });
 
-test('placar: dois hemiciclos (eleição anterior e 2026) e três leituras dos cartões', () => {
+test('placar: dois hemiciclos (eleição anterior e 2026) e cartões com 2026, variação e 2022 de uma vez', () => {
   const itens = [{ uf: 'sp', vagas: 8, eleitosPorPartido: { PT: 5 }, cadeirasPorPartido: { PT: 5, PL: 1 } }];
   const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: [] });
   const html = placarHtml(m, ajuda);
   assert.equal(html.match(/class="par-hemi"/g).length, 2);
   assert.match(html, /Eleição de 2022/);
   assert.match(html, /2026 · em apuração/);
-  for (const id of ['2022', 'delta']) assert.match(html, new RegExp(`/partidos/6/placar/${id}"`));
+  assert.ok(!html.includes('aria-label="Cartões"')); // não há mais seletor de cartões
 
-  const valor = (cartoes, nome) => {
-    const h = placarHtml(m, { ...ajuda, cartoes });
-    return new RegExp(`${nome}</span><b class="[^"]*">([^<]+)</b>`).exec(h)?.[1];
-  };
-  assert.equal(valor('2022', 'Esquerda'), '7'); // PT 7 em 2022 (SP 2 + BA 5)
-  assert.equal(valor('2026', 'Esquerda'), '5');
-  assert.equal(valor('delta', 'Esquerda'), '-2');
+  const cartao = (nome) => new RegExp(`${nome}</span>\\s*<div class="par-card-topo"><b>(\\d+)</b><span class="(\\w*)">([^<]*)</span></div>\\s*<div class="par-barra">(.*?)</div>\\s*<span class="par-card-d">([^<]*)</span>`).exec(html);
+  const [, atual, classe, variacao, barra, base] = cartao('Esquerda'); // PT 7 em 2022 (SP 2 + BA 5) → 5
+  assert.equal(atual, '5');
+  assert.equal(classe, 'desce');
+  assert.equal(variacao, '▼ -2');
+  assert.equal(base, '2022: 7');
+  assert.match(barra, /class="perda"/); // quem perdeu mostra o trecho a menos
+  const direita = cartao('Direita'); // PL 1 em 2026; 2022: 6
+  assert.match(direita[4], /perda/);
+  assert.ok(html.indexOf('par-cards') < html.indexOf('par-duplo'));
 
   const sem = criarModelo({ cargo: cargo(6), historico: null, itens: [], ufs: [] });
-  assert.equal(placarHtml(sem, ajuda).match(/class="par-hemi"/g).length, 1); // sem histórico, só o de 2026
+  const semHtml = placarHtml(sem, ajuda);
+  assert.equal(semHtml.match(/class="par-hemi"/g).length, 1); // sem histórico, só o de 2026
+  assert.match(semHtml, /sem dado da eleição anterior/);
+  const ganho = criarModelo({ cargo: cargo(6), historico, itens: [{ uf: 'sp', vagas: 20, eleitosPorPartido: { PT: 20 }, cadeirasPorPartido: { PT: 20 } }], ufs: [] });
+  assert.match(placarHtml(ganho, ajuda), /class="ganho"/); // quem ganhou mostra o trecho a mais
 });
 
 test('hover: dica com as cadeiras do grupo nas duas eleições e a variação; cadeiras ainda sem definição', () => {
@@ -275,8 +280,8 @@ test('Deputado estadual (SP ou RJ): bancada da Assembleia, UF no endereço e no 
   assert.match(html, /href="#\/partidos\/7\/serie\/rj"/);
   assert.match(html, /href="#\/partidos\/7\/placar\/sp" >SP|href="#\/partidos\/7\/placar\/sp"[^>]*>SP</);
   assert.match(html, /Dep\. estadual · RJ: composição/);
-  assert.equal(hashPartidos(7, 'placar', 'partido', 'delta', 'rj'), '#/partidos/7/placar/rj/partido/delta');
-  assert.equal(hashPartidos(6, 'placar', 'ideologia', '2026', 'rj'), '#/partidos/6/placar'); // só o deputado estadual leva UF
+  assert.equal(hashPartidos(7, 'placar', 'partido', 'rj'), '#/partidos/7/placar/rj/partido');
+  assert.equal(hashPartidos(6, 'placar', 'ideologia', 'rj'), '#/partidos/6/placar'); // só o deputado estadual leva UF
   // sem UF escolhida, usa o total padrão de cada Assembleia só quando a UF é conhecida
   assert.equal(criarModelo({ cargo: dep, historico: hist, itens: [], ufs: ['sp'], uf: 'sp' }).vivo.total, 94);
 });
