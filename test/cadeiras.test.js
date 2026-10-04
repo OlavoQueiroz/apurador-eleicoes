@@ -47,3 +47,17 @@ test('cadeirasHtml: uma cadeira por ponto e legenda conforme o modo e o foco', (
   assert.doesNotMatch(aberto, /data-cad-foco="p:PT"/);
   assert.match(aberto, /Todos os grupos/);
 });
+
+test('cadeiras de quem está na frente: contorno, contam na bancada, não contam como definidas', () => {
+  const dados = {
+    titulo: 'Senado', total: 6, pendentes: 1,
+    partidos: { PT: { eleitos: 1, lideres: 2, pessoasLideres: [{ nome: 'Ana', uf: 'sp' }] }, PL: { ocupadas: 2 } },
+    ocupadas: true,
+  };
+  const html = cadeirasHtml(dados, { modo: 'partido', foco: null }, ajuda);
+  assert.equal(html.match(/<circle/g).length, 6);
+  assert.equal(html.match(/stroke-width:2\.2/g).length, 2);
+  assert.match(html, /Ana \(SP\) · PT · na frente, ainda não eleito/);
+  assert.match(html, /<text class="cad-num"[^>]*>3<\/text>/); // 1 eleito + 2 fora de disputa
+  assert.match(html, /data-cad-foco="p:PT"[^>]*>.*?<b>3<\/b>/);
+});

@@ -46,8 +46,8 @@ export function posicoesHemiciclo(n) {
 export function ordenarBancadas(partidos) {
   const ordemGrupo = new Map(GRUPOS.map((g, i) => [g.id, i]));
   return Object.entries(partidos)
-    .map(([sigla, { eleitos = 0, ocupadas = 0, pessoasEleitas = [], pessoasOcupadas = [] }]) =>
-      ({ sigla, eleitos, ocupadas, pessoasEleitas, pessoasOcupadas, total: eleitos + ocupadas, grupo: grupoDoPartido(sigla) }))
+    .map(([sigla, { eleitos = 0, ocupadas = 0, lideres = 0, pessoasEleitas = [], pessoasOcupadas = [], pessoasLideres = [] }]) =>
+      ({ sigla, eleitos, ocupadas, lideres, pessoasEleitas, pessoasOcupadas, pessoasLideres, total: eleitos + ocupadas + lideres, grupo: grupoDoPartido(sigla) }))
     .filter((b) => b.total > 0)
     .sort((a, b) => ordemGrupo.get(a.grupo) - ordemGrupo.get(b.grupo) || b.total - a.total || a.sigla.localeCompare(b.sigla, 'pt-BR'));
 }
@@ -58,6 +58,7 @@ export function listarCadeiras(bancadas, pendentes) {
   for (const b of bancadas) {
     for (let i = 0; i < b.ocupadas; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: true, pessoa: b.pessoasOcupadas[i] });
     for (let i = 0; i < b.eleitos; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, pessoa: b.pessoasEleitas[i] });
+    for (let i = 0; i < b.lideres; i += 1) cadeiras.push({ sigla: b.sigla, grupo: b.grupo, ocupada: false, lider: true, pessoa: b.pessoasLideres[i] });
   }
   for (let i = 0; i < pendentes; i += 1) cadeiras.push({ sigla: null, grupo: null, ocupada: false });
   return cadeiras;
@@ -66,7 +67,7 @@ export function listarCadeiras(bancadas, pendentes) {
 // Texto do hover: "Nome (UF) · PARTIDO". Sem o nome (ainda não carregou), só o partido.
 const dicaCadeira = (c) => {
   const quem = c.pessoa ? `${c.pessoa.nome}${c.pessoa.uf ? ` (${c.pessoa.uf.toUpperCase()})` : ''} · ` : '';
-  return `${quem}${c.sigla}`;
+  return `${quem}${c.sigla}${c.lider ? ' · na frente, ainda não eleito' : ''}`;
 };
 
 const somar = (bancadas, filtro) => bancadas.filter(filtro).reduce((s, b) => s + b.total, 0);
@@ -78,7 +79,8 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
   const bancadas = ordenarBancadas(dados.partidos);
   const cadeiras = listarCadeiras(bancadas, dados.pendentes);
   const { pontos, raio } = posicoesHemiciclo(cadeiras.length);
-  const definidas = cadeiras.length - dados.pendentes;
+  const definidas = cadeiras.filter((c) => c.sigla && !c.lider).length;
+  const naFrente = cadeiras.filter((c) => c.lider).length;
   const foco = ui.foco;
 
   // Por ideologia, sem foco, cada cadeira leva a cor do grupo; ao abrir um grupo (ou um partido), a cor do partido.
@@ -99,7 +101,9 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     const rotulo = c.sigla ? dicaCadeira(c) : 'Em apuração';
     // Cadeira fora de disputa: a mesma cor, mais clara, para distinguir de quem foi eleito agora.
     const preenchimento = cor && c.ocupada ? `color-mix(in srgb, ${cor} 42%, var(--surface))` : cor;
-    const estilo = [preenchimento ? `fill:${preenchimento}` : '', noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
+    // Na frente (ainda não eleito): só o contorno na cor do partido.
+    const estilo = [
+      c.lider ? `fill:color-mix(in srgb, ${cor} 12%, var(--surface));stroke:${cor};stroke-width:2.2` : (preenchimento ? `fill:${preenchimento}` : ''), noFoco(c) ? '' : 'opacity:.14'].filter(Boolean).join(';');
     return `<circle class="${c.sigla ? 'cad' : 'cad vaga'}" data-dica="${esc(rotulo)}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" ${estilo ? `style="${estilo}"` : ''}></circle>`;
   }).join('');
 
@@ -137,6 +141,9 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     ? `<button type="button" class="cad-voltar" data-cad-foco="">← ${ui.modo === 'ideologia' ? 'Todos os grupos' : 'Todos os partidos'}</button>`
     : '';
 
+  const frente = naFrente
+    ? `<p class="muted pequeno">Contorno: ${fmtInt(naFrente)} cadeiras em que o candidato ainda não foi eleito, mas está entre os mais votados da UF neste momento (tantos quantas forem as vagas). Pode mudar até a totalização.</p>`
+    : '';
   const aviso = definidas === 0
     ? `<p class="muted pequeno">Nenhum eleito ainda: as cadeiras cinza serão preenchidas conforme o TSE totalizar os votos.</p>`
     : '';
@@ -154,7 +161,7 @@ export function cadeirasHtml(dados, ui, { esc, corPartido, fmtInt }) {
     <div class="cad-dica" hidden></div>
     <svg class="cad-svg" viewBox="${-MARGEM} ${-MARGEM} ${LARGURA + 2 * MARGEM} ${ALTURA + 2 * MARGEM}" role="img" aria-label="${esc(`${dados.titulo}: ${definidas} de ${cadeiras.length} cadeiras definidas`)}">${circulos}${centro}</svg>
     <div class="cad-legenda">${voltar}${legenda}</div>
-    ${aviso}${ocupadas}${naoDefinido}
+    ${aviso}${frente}${ocupadas}${naoDefinido}
     <p class="muted pequeno">Ideologia é uma classificação aproximada do painel, não um dado do TSE; veja <code>public/ideologia.js</code>.</p>
   </section>`;
 }
