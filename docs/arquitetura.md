@@ -239,18 +239,21 @@ src/limitador.js             ritmo único ao TSE: prioridade, recuo em 429, cont
 src/projecao.js              extrapolação simples, estratificação por município, soma do Brasil
 src/swing.js                 swing histórico
 src/anterior.js              resultado de 2022 traduzido pelo mapeamento de herança
+src/partidos.js              eleitos de 2014, 2018 e 2022 por partido, com a tabela de sucessão (/api/partidos)
 src/historico.js             gravador do histórico e leitura da série
 src/busca.js                 busca global
 src/servidor.js              HTTP, API e SSE
 src/demo.js                  simulação com dados fictícios (não baixa municípios do TSE)
 src/config.js                opções e variáveis de ambiente
 src/abrir.js, supervisor.js, parar.js   abrir navegador, npm run dev, npm run stop
-public/                      interface (app.js, municipios.js, grafico.js, busca.js, cadeiras.js, CSS)
+public/                      interface (app.js, municipios.js, grafico.js, busca.js, cadeiras.js, comparativo-eleicoes.js,
+                             partidos.js e ideologia.js da visão Análise, CSS)
 public/municipios/           contornos municipais por UF (IBGE), indexados pelo código do TSE
-dados-historicos/            2022 por município e mapeamento de herança (versionados)
+dados-historicos/            2022 e 2018 por município, mapeamentos de herança, eleitos de 2014 a 2022 e sucessão de
+                             partidos (versionados)
 dados/                       histórico da apuração gravado (fora do git)
 .cache/                      cache de municípios (fora do git)
-scripts/                     geradores (mapa, municípios, senado, histórico de 2022), dev e stop
+scripts/                     geradores (mapa, municípios, senado, eleitos, histórico de 2022 e 2018), dev e stop
 test/                        testes e fixtures
 ```
 
@@ -265,6 +268,9 @@ test/                        testes e fixtures
 - **O TSE pode responder 429.** Já aconteceu uma vez num teste com carga sem freio (bloqueio de alguns minutos por IP).
   O painel recua sozinho. Acompanhe `requisicoes.limitadas` em `/api/meta`. Não tente contornar o limite com várias
   máquinas ou IPs: o caminho é pedir menos.
+- **Veja se já há um painel rodando antes de subir outro.** Se `npm start` disser que a porta 3000 está em uso, é quase
+  sempre o próprio painel (confira com `lsof -nP -iTCP:3000 -sTCP:LISTEN`). Demonstrações em outras portas também somam
+  pedidos ao TSE: encerre-as com `npm run stop -- --porta N`.
 - **Antes de abrir:** confira em `/api/projecao/estratificado/1/br` se a carga das 28 UFs terminou, e se
   `dados/historico/ele2026-t1.jsonl` começa a crescer quando entrarem as primeiras urnas.
 
@@ -280,6 +286,12 @@ test/                        testes e fixtures
 - **Swing só para presidente**, e a herança de votos é uma escolha editorial.
 - **Atraso na carga dos municípios no auge** da apuração: o teto de ~5 req/s significa que um município pode ficar até
   ~20 minutos sem atualizar; o dado por UF não é afetado.
+- **A visão Análise não foi vista com votos reais.** Duas partes dependem de como o TSE publica durante a contagem: a
+  prévia das vagas de deputado (estimada pelo quociente eleitoral se o TSE ainda não distribuiu as vagas entre as listas;
+  precisa do campo de votos por lista preenchido) e a situação de cada governador no mapa (clara se lidera com mais de 50%
+  dos válidos, listrada com 50% ou menos ou com 2º turno marcado). Ambas são estimativas e mudam até o fim. A visão foi
+  desenhada para o 1º turno; no 2º (`--turno 2`) valem só presidente e governador, e o mapa de governadores compara 2022 com o
+  turno em curso sem tratamento próprio.
 - Conselheiro Distrital (Fernando de Noronha) não é acompanhado; deputado estadual só é acompanhado em SP e RJ (sem projeção) e é
   volumoso e menos testado; a classificação ideológica do mapa de cadeiras é editorial e aproximada.
 
