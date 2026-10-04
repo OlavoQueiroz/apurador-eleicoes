@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
+import { vitoriaNoPrimeiroTurno, avaliarChances, MARGEM_SEGURANCA, quantosClassificam, semChanceMatematica, votosRestantes, votosRestantesEstimados } from '../public/chances.js';
 
 test('quantosClassificam: Senado = vagas; presidente e governador = 2 no 1º turno e 1 no 2º', () => {
   assert.equal(quantosClassificam({ cargo: 5, vagas: 2, turno: 1 }), 2);
@@ -65,4 +65,17 @@ test('avaliarChances sem o eleitorado (servidor antigo): usa a proporção de se
   assert.deepEqual(r, [null, null, 'pratica']);
   assert.deepEqual(avaliarChances({ votos, k: 2, validos: 1000000, eleitorado: null, pctSecoes: 5 }), [null, null, null]); // muito cedo: ainda cabe tudo
   assert.deepEqual(avaliarChances({ votos, k: 2, validos: 1000000, eleitorado: null, pctSecoes: null }), [null, null, null]);
+});
+
+test('vitoriaNoPrimeiroTurno: o líder passa de 50% mesmo sem receber mais voto algum', () => {
+  const eleitorado = { total: 1100, comparecimento: 1000, abstencao: 50 }; // faltam 50 aptos
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [700, 200, 100], validos: 1000, eleitorado }), 'matematica');
+  // 55%: com o teto (todos os aptos que faltam) ainda não fecha; só pela abstenção medida
+  const folgado = { total: 1500, comparecimento: 800, abstencao: 200 }; // faltam 500 aptos
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [600, 100, 50], validos: 750, eleitorado: folgado }), 'pratica'); // 1200 > 750 + 500·0,8·0,94·1,15 = 1156
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [450, 300], validos: 750, eleitorado: folgado }), null);
+  // sem o eleitorado: pela proporção de seções (68% apurado, líder com 67% dos válidos não fecha; 90% apurado fecha)
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [670, 230, 100], validos: 1000, pctSecoes: 68 }), null);
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [670, 230, 100], validos: 1000, pctSecoes: 90 }), 'pratica');
+  assert.equal(vitoriaNoPrimeiroTurno({ votos: [0, 0], validos: 0, pctSecoes: 50 }), null);
 });
