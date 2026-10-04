@@ -213,12 +213,15 @@ test('endereços da visão Análise: #/cargo/uf/analise[/aba][/partido]; o cargo
   assert.match(html, /aria-label="Agrupar por"/);
 });
 
-test('placar: dois hemiciclos (eleição anterior e 2026) e cartões com 2026, variação e 2022 de uma vez', () => {
+test('placar: hemiciclos de 2018, 2022 e 2026 e cartões com 2026, variação e 2022 de uma vez', () => {
   const itens = [{ uf: 'sp', vagas: 8, eleitosPorPartido: { PT: 5 }, cadeirasPorPartido: { PT: 5, PL: 1 } }];
   const m = criarModelo({ cargo: cargo(6), historico, itens, ufs: [] });
   const html = placarHtml(m, ajuda);
-  assert.equal(html.match(/class="par-hemi"/g).length, 2);
+  assert.equal(html.match(/class="par-hemi"/g).length, 3); // as duas últimas eleições passadas e 2026 (2014 fica de fora)
+  assert.match(html, /Eleição de 2018/);
   assert.match(html, /Eleição de 2022/);
+  assert.ok(!html.includes('Eleição de 2014'));
+  assert.match(html, /--n:3/);
   assert.match(html, /2026 · em apuração/);
   assert.ok(!html.includes('aria-label="Cartões"')); // não há mais seletor de cartões
 
@@ -231,11 +234,12 @@ test('placar: dois hemiciclos (eleição anterior e 2026) e cartões com 2026, v
   assert.match(barra, /class="perda"/); // quem perdeu mostra o trecho a menos
   const direita = cartao('Direita'); // PL 1 em 2026; 2022: 6
   assert.match(direita[4], /perda/);
-  assert.ok(html.indexOf('par-cards') < html.indexOf('par-duplo'));
+  assert.ok(html.indexOf('par-cards') < html.indexOf('par-figs'));
 
   const sem = criarModelo({ cargo: cargo(6), historico: null, itens: [], ufs: [] });
   const semHtml = placarHtml(sem, ajuda);
   assert.equal(semHtml.match(/class="par-hemi"/g).length, 1); // sem histórico, só o de 2026
+  assert.match(semHtml, /--n:1/);
   assert.match(semHtml, /sem dado da eleição anterior/);
   const ganho = criarModelo({ cargo: cargo(6), historico, itens: [{ uf: 'sp', vagas: 20, eleitosPorPartido: { PT: 20 }, cadeirasPorPartido: { PT: 20 } }], ufs: [] });
   assert.match(placarHtml(ganho, ajuda), /class="ganho"/); // quem ganhou mostra o trecho a mais
@@ -255,6 +259,7 @@ test('hover: dica com as cadeiras do grupo nas duas eleições e a variação; c
   assert.match(dica, /<strong>Esquerda<\/strong>/);
   assert.match(dica, /2022: <b>7<\/b> cadeiras \(\d+%\)/);
   assert.match(dica, /2026: <b>5<\/b> cadeiras/);
+  assert.match(dica, /2018: <b>7<\/b> cadeiras/); // a dica traz também o hemiciclo de 2018
   assert.match(dica, /Variação: -2/);
   assert.match(dicaGrupoHtml(totais, '_vaga', ajuda), /cadeiras sem definição/);
   assert.equal(dicaGrupoHtml(totais, 'inexistente', ajuda), '');
@@ -302,4 +307,29 @@ test('endereços antigos (#/partidos/... e comparativo) são traduzidos para #/c
   assert.equal(novo('#/partidos/7/placar'), '#/7/sp/analise');
   assert.equal(novo('#/3/br'), null);
   assert.equal(novo('#/1/br/analise/2026x2022'), null);
+});
+
+test('Senado: hemiciclo de 2018 (2014 + 2018) ao lado de 2022 e 2026', () => {
+  const hist = { anos: {
+    2014: { governador: {}, senador: { sp: ['PSDB'], ba: ['PT'] }, deputadoFederal: {} },
+    2018: { governador: {}, senador: { sp: ['PL', 'PSD'], ba: ['PSD', 'PT'] }, deputadoFederal: {} },
+    2022: { governador: {}, senador: { sp: ['PL'], ba: ['PT'] }, deputadoFederal: {} },
+  } };
+  const m = criarModelo({ cargo: cargo(5), historico: hist, itens: [], ufs: [] });
+  assert.deepEqual(m.series.map((x) => x.ano), [2018, 2022]);
+  const html = placarHtml(m, ajuda);
+  assert.equal(html.match(/class="par-hemi"/g).length, 3);
+  assert.match(html, /Eleição de 2018/);
+});
+
+test('mapa de governadores: 2026 ainda não definido = metade da cor de 2022, metade cinza', () => {
+  const m = criarModelo({ cargo: cargo(3), historico, itens: [], ufs: ['sp', 'ba'] });
+  const html = estadosHtml(m, ajuda);
+  assert.match(html, /url\(#par-sp\)/);
+  assert.match(html, /url\(#par-ba\)/);
+  assert.match(html, /<linearGradient id="par-ba"[^>]*><stop offset="0.5" style="stop-color:#d9363e"\/><stop offset="0.5" style="stop-color:var\(--vazio\)"\/>/); // BA era PT (esquerda)
+  assert.match(html, /2026 ainda não definido/);
+  // com 2026 definido e igual a 2022, volta a cor única
+  const definido = criarModelo({ cargo: cargo(3), historico, itens: [{ uf: 'ba', vagas: 1, eleitosPorPartido: { PT: 1 }, colocados: [] }], ufs: ['ba'] });
+  assert.ok(!estadosHtml(definido, ajuda).includes('url(#par-ba)'));
 });

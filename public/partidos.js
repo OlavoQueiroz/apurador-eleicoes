@@ -22,6 +22,7 @@ export const ABAS = [
 ];
 
 export const DISPUTADO = { id: 'disputado', nome: 'Disputado', cor: '#b8bec9' };
+const PENDENTE = { id: 'pendente', nome: '2026 ainda não definido', cor: 'var(--vazio)' }; // metade cinza do mapa
 const ORDEM_BLOCOS = GRUPOS.map((g) => g.id);
 
 const norma = (sigla) =>
@@ -188,10 +189,12 @@ function gruposDe(modelo, ajuda, max = 4) {
 const fonteAoVivo = (modelo) => ({
   confirmadas: unir(modelo.vivo.confirmados, modelo.vivo.ocupadas), frente: modelo.vivo.naFrente, pendentes: modelo.vivo.pendentes, total: modelo.vivo.total, definidas: modelo.vivo.definidas,
 });
-const fonteBase = (modelo) => {
-  const total = somaValores(modelo.base.porPartido);
-  return { confirmadas: modelo.base.porPartido, frente: {}, pendentes: 0, total, definidas: total };
+const fonteHistorica = (serie) => {
+  const total = somaValores(serie.porPartido);
+  return { confirmadas: serie.porPartido, frente: {}, pendentes: 0, total, definidas: total };
 };
+// Eleições passadas que ganham hemiciclo: as duas mais recentes (ex.: 2018 e 2022), ao lado de 2026.
+const historicasDoPlacar = (modelo) => modelo.series.slice(-2);
 
 // Cadeiras na ordem do hemiciclo: da esquerda para a direita por ideologia; por partido, os partidos de cada bloco juntos.
 function cadeirasDoHemiciclo(fonte, ajuda) {
@@ -232,42 +235,45 @@ function hemiciclo(fonte, modelo, ajuda) {
 }
 
 function legendaGrupos(grupos, { esc }, extra = '') {
-  return `<div class="par-leg">${grupos.map((g) => `<span${g.id && g.id !== 'outros' && g.id !== 'disputado' ? ` data-g="${esc(g.id)}"` : ''}><i style="background:${g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
+  return `<div class="par-leg">${grupos.map((g) => `<span${g.id && g.id !== 'outros' && g.id !== 'disputado' && g.id !== 'pendente' ? ` data-g="${esc(g.id)}"` : ''}><i style="background:${g.cor}"></i>${esc(g.nome)}</span>`).join('')}${extra}</div>`;
 }
 
 // ---------- hover: total do grupo (bloco ou partido) ----------
 
 const VAGA = '_vaga'; // identificador das cadeiras ainda sem definição
 
-// Cadeiras de cada grupo na eleição anterior e em 2026 (confirmadas, na frente e fora de disputa), para a dica.
+// Cadeiras de cada grupo em cada hemiciclo (eleições passadas e 2026, esta com confirmadas, na frente e fora de disputa),
+// para a dica.
 function totaisPorGrupo(modelo, ajuda) {
   const modo = modoDe(ajuda);
-  const atual = agrupar(unir(modelo.vivo.confirmados, modelo.vivo.ocupadas, modelo.vivo.naFrente), modo);
-  const antes = modelo.base ? agrupar(modelo.base.porPartido, modo) : null;
+  const porAno = Object.fromEntries(historicasDoPlacar(modelo).map((x) => [x.ano, agrupar(x.porPartido, modo)]));
+  porAno[2026] = agrupar(unir(modelo.vivo.confirmados, modelo.vivo.ocupadas, modelo.vivo.naFrente), modo);
+  const anos = Object.keys(porAno).map(Number);
   const grupos = {};
-  for (const id of new Set([...Object.keys(atual), ...Object.keys(antes ?? {})])) {
-    grupos[id] = { nome: infoGrupo(id, modo, ajuda).nome, antes: antes ? (antes[id] ?? 0) : null, atual: atual[id] ?? 0 };
+  for (const id of new Set(anos.flatMap((ano) => Object.keys(porAno[ano])))) {
+    grupos[id] = { nome: infoGrupo(id, modo, ajuda).nome, valores: Object.fromEntries(anos.map((ano) => [ano, porAno[ano][id] ?? 0])) };
   }
-  return { grupos, anoBase: modelo.base?.ano ?? null, totalAntes: antes ? somaValores(antes) : null, totalAtual: modelo.vivo.total, pendentes: modelo.vivo.pendentes };
+  const totais = Object.fromEntries(historicasDoPlacar(modelo).map((x) => [x.ano, somaValores(x.porPartido)]));
+  totais[2026] = modelo.vivo.total;
+  return { grupos, anos, totais, pendentes: modelo.vivo.pendentes };
 }
 
-// Texto da dica ao passar o mouse num grupo: cadeiras e participação nas duas eleições, e a variação.
+// Texto da dica ao passar o mouse num grupo: cadeiras e participação em cada eleição mostrada, e a variação da última
+// eleição passada para 2026.
 export function dicaGrupoHtml(totais, id, { esc, fmtInt }) {
   if (id === VAGA) return `<strong>Em apuração</strong><span>${fmtInt(totais.pendentes)} cadeiras sem definição</span>`;
   const g = totais.grupos[id];
   if (!g) return '';
   const pct = (n, t) => `${t ? Math.round((100 * n) / t) : 0}%`;
-  const linhas = [];
-  if (g.antes !== null) linhas.push(`<span>${esc(totais.anoBase)}: <b>${fmtInt(g.antes)}</b> cadeiras (${pct(g.antes, totais.totalAntes)})</span>`);
-  linhas.push(`<span>2026: <b>${fmtInt(g.atual)}</b> cadeiras (${pct(g.atual, totais.totalAtual)})</span>`);
-  if (g.antes !== null) {
-    const d = g.atual - g.antes;
+  const linhas = totais.anos.map((ano) => `<span>${esc(ano)}: <b>${fmtInt(g.valores[ano])}</b> cadeiras (${pct(g.valores[ano], totais.totais[ano])})</span>`);
+  if (totais.anos.length > 1) {
+    const d = g.valores[2026] - g.valores[totais.anos[totais.anos.length - 2]];
     linhas.push(`<span class="${classeDelta(d)}">Variação: ${d > 0 ? '+' : ''}${fmtInt(d)}</span>`);
   }
   return `<strong>${esc(g.nome)}</strong>${linhas.join('')}`;
 }
 
-// Liga o hover: ao passar o mouse numa cadeira ou item da legenda, destaca o grupo nos dois hemiciclos e mostra a dica.
+// Liga o hover: ao passar o mouse numa cadeira ou item da legenda, destaca o grupo em todos os hemiciclos e mostra a dica.
 export function ligarHover(raiz, ajuda) {
   for (const caixa of raiz.querySelectorAll('.par-caixa[data-totais]')) {
     const totais = JSON.parse(caixa.dataset.totais);
@@ -337,7 +343,8 @@ export function placarHtml(modelo, ajuda) {
   const extra = modelo.cargo.codigo === 6 ? bancadasHtml(modelo, ajuda) : '';
   const porPartido = modo === 'partido';
   const figura = (rotulo, fonte) => `<figure class="par-fig"><figcaption>${esc(rotulo)}</figcaption>${hemiciclo(fonte, modelo, ajuda)}</figure>`;
-  const hemiciclos = `<div class="par-duplo">${base ? figura(`Eleição de ${base.ano}`, fonteBase(modelo)) : ''}${figura(vivo.pendentes > 0 ? '2026 · em apuração' : '2026', fonteAoVivo(modelo))}</div>`;
+  const figuras = [...historicasDoPlacar(modelo).map((x) => figura(`Eleição de ${x.ano}`, fonteHistorica(x))), figura(vivo.pendentes > 0 ? '2026 · em apuração' : '2026', fonteAoVivo(modelo))];
+  const hemiciclos = `<div class="par-figs" style="--n:${figuras.length}">${figuras.join('')}</div>`;
   return `<div class="par-cards">${cartoesHtml(modelo, grupos, ajuda)}</div>
     <div class="par-caixa" data-totais="${esc(JSON.stringify(totaisPorGrupo(modelo, ajuda)))}"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: composição</h3>${hemiciclos}${legendaGrupos(porPartido ? grupos.filter((g) => g.id !== 'outros') : grupos, ajuda)}
     <p class="par-nota">${fmtInt(confirmadas)} confirmadas pelo TSE em 2026${modelo.cargo.codigo === 5 ? ' (inclui as 27 cadeiras fora de disputa em 2026)' : ''}.${porPartido ? ' Os demais partidos aparecem com a cor própria nos hemiciclos.' : ''}</p>${parcial}</div>${extra}`;
@@ -409,12 +416,13 @@ export function estadosHtml(modelo, ajuda) {
     if (!s) return `<g class="uf inativa"><path d="${forma.d}"/></g>`;
     const a = lider(s, anterior);
     const d = lider(s, 2026);
-    const fill = a === d || !d ? cor(d ?? a) : `url(#par-${uf})`;
+    // Meio a meio quando mudou, e também quando 2026 ainda não está definido (metade da cor de 2022, metade cinza).
+    const fill = a === d || (!a && !d) ? cor(d ?? a) : `url(#par-${uf})`;
     if (fill.startsWith('url')) {
-      defs.push(`<linearGradient id="par-${uf}" x1="0" x2="1" y1="0" y2="0"><stop offset="0.5" stop-color="${cor(a)}"/><stop offset="0.5" stop-color="${cor(d)}"${s.provisorio ? ' stop-opacity="0.55"' : ''}/></linearGradient>`);
+      defs.push(`<linearGradient id="par-${uf}" x1="0" x2="1" y1="0" y2="0"><stop offset="0.5" style="stop-color:${cor(a)}"/><stop offset="0.5" style="stop-color:${cor(d)}${s.provisorio && d ? ';stop-opacity:0.55' : ''}"/></linearGradient>`);
     }
     const mudou = d && a !== d;
-    const dica = `${nomeUf(uf)}: ${nome(a)} (${anterior}) → ${d ? `${nome(d)} (2026${s.provisorio ? ', parcial' : ''})` : '2026 sem dado'}`;
+    const dica = `${nomeUf(uf)}: ${nome(a)} (${anterior}) → ${d ? `${nome(d)} (2026${s.provisorio ? ', parcial' : ''})` : '2026 ainda não definido'}`;
     return `<g class="uf par-uf${mudou ? ' virou' : ''}"><path d="${forma.d}" style="fill:${fill}${!mudou && d && s.provisorio ? ';fill-opacity:0.6' : ''}"><title>${esc(dica)}</title></path></g>`;
   }).join('');
   const valido = (id) => id && id !== DISPUTADO.id;
@@ -432,7 +440,7 @@ export function estadosHtml(modelo, ajuda) {
   const regra = `Cada UF recebe a cor ${alvoCor} do governador (na frente, enquanto não eleito, em tom mais claro).`;
   return `<div class="par-estados"><div class="par-caixa"><h3 class="par-h">${esc(modelo.rotulo ?? modelo.cargo.nome)}: ${anterior} → 2026</h3>
       <svg class="par-mapa" viewBox="0 0 ${mapa.largura} ${mapa.altura}" role="img" aria-label="Mapa de UFs por ${modo === 'partido' ? 'partido' : 'bloco'}"><defs>${defs.join('')}</defs>${formas}<g class="rotulos">${rotulos}</g></svg>
-      ${legendaGrupos(legenda, ajuda, `<span class="par-meio"><i></i>${anterior} | 2026</span>`)}
+      ${legendaGrupos([...legenda, PENDENTE], ajuda, `<span class="par-meio"><i></i>${anterior} | 2026</span>`)}
       <p class="par-nota">${esc(regra)} Esquerda da UF = ${anterior}; direita = 2026.</p></div>
     <div><div class="par-caixa"><h3 class="par-h">Viradas (${viradas.length})</h3>${viradas.map(itemV).join('') || '<p class="par-nota">Nenhuma até agora.</p>'}</div>
     <div class="par-caixa"><h3 class="par-h">Bastiões (mesmo ${modo === 'partido' ? 'partido' : 'bloco'} desde ${anos[0]})</h3><div>${bastioes.map((s) => `<span class="par-tag" style="border-color:${cor(lider(s, anos[0]))}">${esc(s.uf.toUpperCase())}</span>`).join('') || '<p class="par-nota">Nenhum.</p>'}</div></div></div></div>`;
