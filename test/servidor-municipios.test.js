@@ -55,6 +55,17 @@ test('/api/municipios devolve líder e apuração de cada município, e a proje�
     assert.equal(sp.secoes.totalizadas, 5);
     assert.equal(r.municipios.find((m) => m.codigo === '1').lider, null, 'sem votos, sem líder');
 
+    // resultado completo de um município (painel da direita ao clicar na cidade)
+    const um = await (await fetch(`${base}/api/municipio/1/sp/71072`)).json();
+    assert.equal(um.dados.codigoMunicipio, '71072');
+    assert.equal(um.dados.nomeMunicipio, 'SÃO PAULO');
+    assert.equal(um.dados.candidatos.length, 2);
+    assert.equal(um.dados.candidatos[0].votos, 300);
+    assert.equal(um.dados.secoes.totalizadas, 5);
+    assert.equal((await fetch(`${base}/api/municipio/1/sp/99999`)).status, 404);
+    assert.equal((await fetch(`${base}/api/municipio/1/zz/71072`)).status, 404);
+    assert.equal((await fetch(`${base}/api/municipio/6/sp/71072`)).status, 404, 'deputado não tem resultado por município');
+
     const proj = await (await fetch(`${base}/api/projecao/estratificado/1/sp`)).json();
     assert.equal(proj.disponivel, true);
     assert.equal(proj.municipios.comVotos, 1);

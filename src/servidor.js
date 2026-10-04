@@ -5,6 +5,7 @@
 //   GET /api/resultado/:cargo/:uf      resultado completo de um arquivo
 //   GET /api/historico/:cargo/:uf?modelo=  evolução gravada: % de cada candidato e projeção ao longo da apuração
 //   GET /api/municipios/:cargo/:uf     líder e apuração de cada município de uma UF
+//   GET /api/municipio/:cargo/:uf/:cod resultado completo de um município (candidatos, seções, votos), do que já foi carregado
 //   GET /api/projecao/:modelo/:cargo/:uf   estimativa do resultado final (não é dado do TSE)
 //   GET /api/busca?q=&cargo=&uf=       candidatos (do cargo e UF abertos e de todo o resto) e municípios
 //   GET /events                        SSE: um evento "ciclo" a cada rodada de consultas
@@ -267,6 +268,19 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
         return enviarJson(res, 404, { erro: 'Resultados por município só existem para presidente, governador e senador, em uma UF.' });
       }
       return enviarJson(res, 200, resultadosMunicipios(item));
+    }
+
+    // Resultado completo de um município já carregado (o painel da direita ao clicar numa cidade do mapa).
+    const mu1 = /^\/api\/municipio\/(\d+)\/([a-z]{2})\/(\d+)$/.exec(pathname);
+    if (mu1) {
+      const item = apuracao.estado.get(`${Number(mu1[1])}:${mu1[2]}`);
+      if (!item || !municipios || ![1, 3, 5].includes(item.alvo.cargo) || item.alvo.uf === 'br') {
+        return enviarJson(res, 404, { erro: 'Resultados por município só existem para presidente, governador e senador, em uma UF.' });
+      }
+      const { cargo, uf, eleicao } = item.alvo;
+      const dados = municipios.consultar({ eleicao, cargo, uf }).dados.find((d) => d.codigoMunicipio === mu1[3]) ?? null;
+      if (!dados) return enviarJson(res, 404, { erro: 'Município ainda não carregado ou sem arquivo.' });
+      return enviarJson(res, 200, { dados });
     }
 
     const p = /^\/api\/projecao\/([a-z]+)\/(\d+)\/([a-z]{2})$/.exec(pathname);
