@@ -5,14 +5,14 @@
 import { GRUPOS, grupoDoPartido, grupoPorId } from './ideologia.js';
 import { ordemSerpentina, posicoesHemiciclo } from './cadeiras.js';
 
-// Cargos da aba. `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
+// Cargos da aba, na mesma ordem do menu principal (governador, senador, deputados). `chave` é a do arquivo dados-historicos/eleitos.json; `anos`, as eleições com bancada conhecida (no
 // Senado, a bancada de um ano soma os eleitos dele e os de quatro anos antes, então 2014 fica de fora).
 export const CARGOS_PARTIDOS = [
+  { codigo: 3, chave: 'governador', nome: 'Governadores', total: 27, anos: [2014, 2018, 2022], mapa: true },
   { codigo: 5, chave: 'senador', nome: 'Senado', total: 81, anos: [2018, 2022], mapa: false },
   { codigo: 6, chave: 'deputadoFederal', nome: 'Câmara', total: 513, anos: [2014, 2018, 2022], mapa: false },
   // Deputado estadual só existe no painel para SP e RJ (CARGOS[7] em src/tse.js); `ufs` dá as cadeiras de cada Assembleia.
   { codigo: 7, chave: 'deputadoEstadual', nome: 'Dep. estadual', total: null, anos: [2014, 2018, 2022], mapa: false, ufs: { sp: 94, rj: 70 } },
-  { codigo: 3, chave: 'governador', nome: 'Governadores', total: 27, anos: [2014, 2018, 2022], mapa: true },
 ];
 export const cargoPartidos = (codigo) => CARGOS_PARTIDOS.find((c) => c.codigo === Number(codigo));
 // Presidente também mora na aba Análises, mas com a visão Comparativo (comparativo-eleicoes.js) em vez de bancadas.

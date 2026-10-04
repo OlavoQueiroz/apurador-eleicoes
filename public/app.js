@@ -1222,7 +1222,8 @@ function renderDetalhe() {
 // ---------- aba Análises (partidos e ideologia) ----------
 
 // Cargos da aba que o servidor está acompanhando (governador, senador e deputado federal).
-const cargosDePartidos = () => [...(cargoMeta(PRESIDENTE.codigo) ? [PRESIDENTE] : []), ...CARGOS_PARTIDOS.filter((c) => cargoMeta(c.codigo))];
+// Na mesma ordem do menu principal (a de estado.meta.cargos): Presidente, Governador, Senador, deputados.
+const cargosDePartidos = () => estado.meta.cargos.map((c) => (c.codigo === PRESIDENTE.codigo ? PRESIDENTE : cargoPartidos(c.codigo))).filter(Boolean);
 
 // Eleitos de 2014, 2018 e 2022 por partido; não mudam durante a apuração, então carrega uma vez.
 async function carregarHistoricoPartidos() {
