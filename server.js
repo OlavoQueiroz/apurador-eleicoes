@@ -61,6 +61,8 @@ const municipios = new Municipios({
   cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'municipios')),
   // Municípios: ~8 req/s (--municipios-ritmo-ms) e sempre atrás do dado por UF (5,7 mil arquivos levam uns 15 min na primeira vez).
   limitador,
+  concorrencia: cfg.municipiosConcorrencia,
+  revalidarMs: cfg.municipiosRevalidarS * 1000,
   validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
 });
 
@@ -114,6 +116,8 @@ apuracao.on('ciclo', (c) => {
   );
 });
 apuracao.on('erro', (erro) => log('erro no ciclo:', erro.message));
+// Rede de segurança: uma falha solta (ex.: 429 do TSE num pedido sem tratamento) é registrada, e o painel segue no ar.
+process.on('unhandledRejection', (erro) => log('erro não tratado:', erro?.message ?? erro));
 // A cada minuto, uma linha com o volume de pedidos ao TSE, só se houver 429 ou com --verboso.
 let limitadasAntes = 0;
 setInterval(() => {
