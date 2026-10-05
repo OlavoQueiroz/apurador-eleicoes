@@ -7,8 +7,9 @@ import { pedeCalma, recuoDoErro } from './limitador.js';
 import { melhorNacional } from './nacional.js';
 
 export class Apuracao extends EventEmitter {
-  constructor({ alvos, fonte, intervaloMs = 60_000, concorrencia = 6, limitador = null, agora = Date.now }) {
+  constructor({ alvos, fonte, intervaloMs = 60_000, concorrencia = 6, limitador = null, cache = null, agora = Date.now }) {
     super();
+    this.cache = cache; // último dado de cada arquivo em disco: a tela não fica vazia se o TSE negar a partida (429)
     this.limitador = limitador; // ritmo compartilhado com a carga dos municípios; o dado por UF tem prioridade
     this.fonte = fonte;
     this.intervaloMs = intervaloMs;
@@ -23,6 +24,29 @@ export class Apuracao extends EventEmitter {
         { alvo, status: 'aguardando', etag: null, dados: null, resumo: null, verificadoEm: null, alteradoEm: null, erro: null },
       ]),
     );
+  }
+
+  #chaveCache(item) {
+    return `${item.alvo.eleicao ?? 'x'}_${item.alvo.chave}`;
+  }
+
+  // Na partida, antes do primeiro ciclo: repõe o último dado gravado de cada arquivo (e o ETag, para o TSE poder
+  // responder 304). Um dado novo do TSE substitui o do cache normalmente.
+  async carregarCache() {
+    if (!this.cache) return 0;
+    let carregados = 0;
+    await Promise.all([...this.estado.values()].map(async (item) => {
+      const guardado = await this.cache.ler(this.#chaveCache(item));
+      if (!guardado?.dados) return;
+      item.dados = guardado.dados;
+      item.dadosTse = guardado.dados;
+      item.etag = guardado.etag ?? null;
+      item.resumo = resumir(guardado.dados);
+      item.status = 'ok';
+      item.doCache = true;
+      carregados += 1;
+    }));
+    return carregados;
   }
 
   // Devolve true se o dado do alvo mudou.
@@ -40,6 +64,7 @@ export class Apuracao extends EventEmitter {
 
     if (r.status === 'inalterado') {
       item.status = 'ok';
+      item.doCache = false;
       return false;
     }
 
@@ -61,9 +86,11 @@ export class Apuracao extends EventEmitter {
     const mudou = !item.dados || item.dados.geracao !== r.dados.geracao || item.etag !== (r.etag ?? null);
     item.dados = r.dados;
     item.dadosTse = r.dados;
+    this.cache?.gravar(this.#chaveCache(item), { dados: r.dados, etag: r.etag ?? null });
     item.resumo = resumir(r.dados);
     item.etag = r.etag ?? null;
     item.status = 'ok';
+    item.doCache = false;
     if (mudou) item.alteradoEm = item.verificadoEm;
     return mudou;
   }

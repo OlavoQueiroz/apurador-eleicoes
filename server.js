@@ -7,7 +7,7 @@ import { lerConfig, SAIDA_PORTA_OCUPADA } from './src/config.js';
 import { CARGOS, criarFonteTse, criarFonteMunicipiosTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
 import { criarFonteDemo } from './src/demo.js';
 import { Apuracao } from './src/apuracao.js';
-import { Limitador } from './src/limitador.js';
+import { Limitador, comRecuo } from './src/limitador.js';
 import { Municipios } from './src/municipios.js';
 import { criarCacheDisco } from './src/cache-disco.js';
 import { Historico, registrarCiclo } from './src/historico.js';
@@ -29,7 +29,7 @@ try {
 
 let eleicoes;
 try {
-  eleicoes = await descobrirEleicoes(cfg.ano);
+  eleicoes = await comRecuo(() => descobrirEleicoes(cfg.ano), { aviso: (m) => console.error(m) });
 } catch (erro) {
   console.error(`Não consegui ler o índice de eleições do TSE: ${erro.message}`);
   console.error('Verifique a conexão com a internet e tente de novo.');
@@ -48,9 +48,13 @@ const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos,
 // Ritmo único para tudo que vai ao TSE: o dado por UF (ciclo principal) tem prioridade sobre os municípios, e um
 // 429 de qualquer lado faz os dois recuarem. Na demonstração nada de município vai ao TSE.
 const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: cfg.municipiosRitmoMs });
-const apuracao = new Apuracao({ alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador });
-const fonteMunicipiosTse = criarFonteMunicipiosTse();
 const raiz = path.dirname(fileURLToPath(import.meta.url));
+// Último dado de cada arquivo em disco (.cache/apuracao): se o TSE negar a partida (429), a tela mostra o que já se sabia.
+const apuracao = new Apuracao({
+  alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador,
+  cache: cfg.demo ? null : criarCacheDisco(path.join(raiz, '.cache', 'apuracao')),
+});
+const fonteMunicipiosTse = criarFonteMunicipiosTse();
 const municipios = new Municipios({
   fonte: cfg.demo ? fonte.municipios(fonteMunicipiosTse) : fonteMunicipiosTse,
   ciclo: eleicoes.ciclo,
@@ -146,11 +150,13 @@ servidor.on('error', (erro) => {
   process.exit(1);
 });
 
-servidor.listen(cfg.porta, cfg.host, () => {
+servidor.listen(cfg.porta, cfg.host, async () => {
   const url = `http://${cfg.host === '0.0.0.0' ? 'localhost' : cfg.host}:${cfg.porta}`;
   log(`Painel em ${url}`);
   log(`${cfg.ano} · ${cfg.turno}º turno · ${alvos.length} arquivos · consulta a cada ${cfg.intervalo}s`);
   if (cfg.demo) log('MODO DEMONSTRAÇÃO: os votos são fictícios (simulação de ~' + cfg.demoMinutos + ' min).');
+  const doCache = await apuracao.carregarCache();
+  if (doCache) log(`Cache: ${doCache} arquivos repostos do disco (valem até o TSE responder).`);
   const primeiroCiclo = apuracao.iniciar();
   // Município em segundo plano: começa só depois do primeiro ciclo das UFs, para não competir com ele.
   const eleicaoPresidente = eleicoes.eleicoes[CARGOS[1].pleito]?.[cfg.turno];
