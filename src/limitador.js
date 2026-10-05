@@ -7,12 +7,16 @@
 
 // Sem unref: quem chama está ESPERANDO por esta pausa, então ela precisa manter o processo vivo (com unref, um
 // processo sem mais nada pendente termina no meio da espera, o que derrubava os testes no CI).
+const RECUPERA_APOS_MS = 60_000;
 const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class Limitador {
   constructor({ altaMs = 50, baixaMs = 200, agora = Date.now } = {}) {
     this.altaMs = altaMs;
     this.baixaMs = baixaMs;
+    this.altaBase = altaMs; // o ritmo configurado: a recuperação nunca passa dele
+    this.baixaBase = baixaMs;
+    this.ultimoRecuo = 0;
     this.agora = agora;
     this.proximaAlta = 0;
     this.proximaBaixa = 0;
@@ -24,6 +28,7 @@ export class Limitador {
 
   // Espera a vez e devolve quando pode disparar a requisição.
   async vez(prioridade) {
+    this.#recuperar();
     if (prioridade === 'alta') {
       this.altasEsperando += 1;
       try {
@@ -55,9 +60,21 @@ export class Limitador {
   // Chamado quando o TSE responde 429/503: pausa tudo e desacelera, mais o município que a UF.
   recuar(ms) {
     this.contagem.limitadas += 1;
+    this.ultimoRecuo = this.agora();
     this.pausaAte = Math.max(this.pausaAte, this.agora() + ms);
     this.altaMs = Math.min(1000, Math.ceil(this.altaMs * 1.5));
     this.baixaMs = Math.min(2000, Math.ceil(this.baixaMs * 2));
+  }
+
+  // Depois de um minuto sem nenhum 429/503, volta a acelerar aos poucos (-20% do intervalo por minuto) até o ritmo
+  // configurado. Sem isso, uma rajada de 429 deixava o painel lento até alguém reiniciar o servidor.
+  #recuperar() {
+    const t = this.agora();
+    if (t - this.ultimoRecuo < RECUPERA_APOS_MS) return;
+    if (this.altaMs <= this.altaBase && this.baixaMs <= this.baixaBase) return;
+    this.altaMs = Math.max(this.altaBase, Math.floor(this.altaMs * 0.8));
+    this.baixaMs = Math.max(this.baixaBase, Math.floor(this.baixaMs * 0.8));
+    this.ultimoRecuo = t; // o próximo passo só depois de mais um minuto calmo
   }
 
   porMinuto() {
@@ -73,3 +90,18 @@ export class Limitador {
 // Ao falhar com 429/503, quanto esperar: o que o TSE pediu, ou um recuo que cresce a cada tentativa.
 export const recuoDoErro = (erro, tentativa) => erro.esperarMs ?? Math.min(30_000, 2000 * 2 ** tentativa);
 export const pedeCalma = (erro) => erro?.status === 429 || erro?.status === 503;
+
+// Roda `fn` e, se o TSE pedir calma (429/503), espera e tenta de novo, poucas vezes. Para pedidos únicos que não passam
+// pelo ritmo do limitador, como o índice de eleições na partida: um 429 ali encerrava o painel.
+export async function comRecuo(fn, { tentativas = 6, aviso = () => {}, dormirMs = dormir } = {}) {
+  for (let tentativa = 0; ; tentativa += 1) {
+    try {
+      return await fn();
+    } catch (erro) {
+      if (!pedeCalma(erro) || tentativa >= tentativas) throw erro;
+      const espera = recuoDoErro(erro, tentativa);
+      aviso(`o TSE pediu calma (HTTP ${erro.status}); nova tentativa em ${Math.round(espera / 1000)} s…`);
+      await dormirMs(espera);
+    }
+  }
+}

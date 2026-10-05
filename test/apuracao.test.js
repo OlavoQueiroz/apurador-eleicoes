@@ -160,3 +160,36 @@ test('iniciar() repete os ciclos e parar() encerra', async () => {
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(rodadas, total, 'não roda depois de parar');
 });
+
+test('cache em disco: grava o dado novo, repõe na partida e o TSE seguinte substitui', async () => {
+  const guardado = new Map();
+  const cache = {
+    async ler(chave) { return guardado.get(chave) ?? null; },
+    async gravar(chave, valor) { guardado.set(chave, valor); },
+  };
+  const alvosC = [{ chave: '1:br', cargo: 1, uf: 'br', eleicao: 6257 }];
+
+  // 1ª execução: baixa e grava.
+  const a1 = new Apuracao({ alvos: alvosC, cache, fonte: fonteRoteirizada({ '1:br': [{ status: 'novo', dados: comGeracao('g1'), etag: 'e1' }] }) });
+  await a1.ciclo();
+  assert.equal(guardado.get('6257_1:br').dados.geracao, 'g1');
+  assert.equal(guardado.get('6257_1:br').etag, 'e1');
+
+  // 2ª execução: o TSE nega (erro), mas o dado do cache aparece.
+  const a2 = new Apuracao({ alvos: alvosC, cache, fonte: fonteRoteirizada({ '1:br': [new Error('HTTP 429')] }) });
+  assert.equal(await a2.carregarCache(), 1);
+  const item = a2.estado.get('1:br');
+  assert.equal(item.dados.geracao, 'g1');
+  assert.equal(item.status, 'ok');
+  assert.equal(item.doCache, true);
+  await a2.ciclo();
+  assert.equal(item.status, 'erro'); // sinaliza o erro, mas segue exibindo o último dado
+  assert.equal(item.dados.geracao, 'g1');
+
+  // 3ª execução: o TSE responde e o dado novo substitui o do cache.
+  const a3 = new Apuracao({ alvos: alvosC, cache, fonte: fonteRoteirizada({ '1:br': [{ status: 'novo', dados: comGeracao('g2'), etag: 'e2' }] }) });
+  await a3.carregarCache();
+  await a3.ciclo();
+  assert.equal(a3.estado.get('1:br').dados.geracao, 'g2');
+  assert.equal(a3.estado.get('1:br').doCache, false);
+});

@@ -156,3 +156,14 @@ test('comPrazo aborta uma requisição que não recebe resposta', async () => {
     servidor.close();
   }
 });
+
+test('descobrirEleicoes: o erro de um 429 traz status e o Retry-After, para quem quiser tentar de novo', async () => {
+  const { descobrirEleicoes } = await import('../src/tse.js');
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response('', { status: 429, headers: { 'retry-after': '7' } });
+  try {
+    await assert.rejects(descobrirEleicoes(2026), (erro) => erro.status === 429 && erro.esperarMs === 7000 && /HTTP 429/.test(erro.message));
+  } finally {
+    globalThis.fetch = original;
+  }
+});

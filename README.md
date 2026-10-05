@@ -254,7 +254,7 @@ transferência de votos**: com dados por UF não dá para saber de quem veio cad
 O painel só guarda o último estado de cada arquivo, então **grava** cada atualização de presidente, governador e senador
 em `dados/historico/ele2026-t1.jsonl` (uma linha JSON por arquivo novo do TSE: o % de cada candidato e a projeção de
 cada modelo calculada naquele instante). Alimenta o gráfico de evolução e permite comparar os modelos com o resultado
-final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos municípios) ficam fora do git.
+final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos municípios e dos arquivos principais) ficam fora do git.
 
 ## Na noite da apuração
 
@@ -306,7 +306,7 @@ src/tse.js           URLs, descoberta das eleições, fontes reais (GET condicio
 src/normalize.js     JSON bruto do TSE → formato interno
 src/apuracao.js      ciclo principal (arquivos por UF)
 src/municipios.js    camada de municípios (seleção dos grandes, acompanhamento, cache)
-src/cache-disco.js   cache dos municípios em .cache/
+src/cache-disco.js   cache em disco (.cache/municipios e .cache/apuracao)
 src/limitador.js     ritmo único ao TSE: prioridade da UF, recuo em 429, contadores
 src/projecao.js      extrapolação simples, estratificação por município, soma do Brasil
 src/swing.js         swing histórico (2022)
@@ -323,7 +323,7 @@ src/parar.js         npm run stop: acha e encerra só o painel deste projeto
 public/              interface (HTML, CSS e JS sem build); mapa-brasil.js e municipios/ são gerados
 dados-historicos/    2022 e 2018 por município, mapeamentos de herança, eleitos de 2014 a 2022 e sucessão de partidos (versionados)
 dados/               histórico da apuração gravado (fora do git)
-.cache/              cache dos municípios (fora do git)
+.cache/              cache dos municípios e dos arquivos principais (fora do git)
 scripts/             geradores (gerar-mapa, gerar-municipios, gerar-senado, gerar-eleitos, gerar-historico-2022 e -2018), dev e stop
 docs/                arquitetura.md e modelos-simulacao.md
 test/                testes e fixtures
