@@ -85,9 +85,7 @@ Ctrl+C continua valendo.
 | `--ano A` (`ANO`) | 2026 | Ciclo eleitoral. |
 | `--sem-municipios` (`MUNICIPIOS=0`) | carga ligada | Desliga a carga, em segundo plano, dos municípios da presidência (usada na projeção do Brasil). Os municípios de uma UF ainda carregam sob demanda. |
 | `--municipios-minimo N` (`MUNICIPIOS_MINIMO`) | 30000 | Só municípios com pelo menos N eleitores (mais o maior de cada UF) têm o arquivo baixado; o resto da UF vem do arquivo da UF. |
-| `--municipios-revalidar-s N` (`MUNICIPIOS_REVALIDAR_S`) | 600 | Segundos entre as passadas completas de cada UF (pedido condicional em todos os municípios ainda abertos, para pegar arquivos republicados sem o acompanhamento avisar). Entre 30 e 3600. Com `120`, uma cidade defasada se corrige em até 2 minutos. |
-| `--municipios-concorrencia N` (`MUNICIPIOS_CONCORRENCIA`) | 2 | Pedidos de município simultâneos (1 a 32). O teto real é N ÷ tempo de resposta do TSE: para 100 por segundo, use `--municipios-ritmo-ms 10 --municipios-concorrencia 12`. |
-| `--municipios-ritmo-ms N` (`MUNICIPIOS_RITMO_MS`) | 120 | Milissegundos entre dois pedidos de município ao TSE (120 ≈ 8 por segundo; 200 era o ritmo anterior, ≈ 5 por segundo). Entre 10 e 2000 (abaixo de ~50 exige subir também `--municipios-concorrencia`). Se o TSE responder 429, o painel dobra o intervalo sozinho; se acontecer, volte a `200`. |
+| `--municipios-ritmo-ms N` (`MUNICIPIOS_RITMO_MS`) | 120 | Milissegundos entre dois pedidos de município ao TSE (120 ≈ 8 por segundo; 200 era o ritmo anterior, ≈ 5 por segundo). Entre 50 e 2000. Se o TSE responder 429, o painel dobra o intervalo sozinho; se acontecer, volte a `200`. |
 | `--municipios-todos` | desligado | Baixa todos os municípios (~5,7 mil arquivos), em vez de só os grandes. |
 
 ## Como funciona

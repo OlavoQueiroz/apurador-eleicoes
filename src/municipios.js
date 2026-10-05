@@ -19,7 +19,6 @@
 
 import { Limitador, pedeCalma, recuoDoErro } from './limitador.js';
 
-const TENTATIVAS_LISTA = 5; // 2 s, 4 s, 8 s, 16 s e 30 s de espera (o TSE pode pedir mais, em Retry-After)
 const cederVez = () => new Promise((resolve) => setImmediate(resolve));
 // Sem unref: quem chama está ESPERANDO por esta pausa, então ela precisa manter o processo vivo (com unref, um
 // processo sem mais nada pendente termina no meio da espera, o que derrubava os testes no CI).
@@ -47,23 +46,9 @@ export class Municipios {
     this.acompanhamentos = new Map(); // eleição:uf → { etag, mapa, em } (vale para todos os cargos)
   }
 
-  // A lista de municípios é pedida na partida, junto com a rajada inicial. Se o TSE responder 429/503, espera e tenta
-  // de novo (poucas vezes) em vez de deixar o erro subir: ele derrubava o painel inteiro.
-  async #listarComTentativas(eleicao) {
-    for (let tentativa = 0; ; tentativa += 1) {
-      try {
-        await this.limitador.vez('alta');
-        return await this.fonte.listar(this.ciclo, eleicao);
-      } catch (erro) {
-        if (!pedeCalma(erro) || tentativa >= TENTATIVAS_LISTA) throw erro;
-        await dormir(recuoDoErro(erro, tentativa));
-      }
-    }
-  }
-
   listar(eleicao) {
     if (!this.listas.has(eleicao)) {
-      const promessa = this.#listarComTentativas(eleicao);
+      const promessa = this.fonte.listar(this.ciclo, eleicao);
       // Falha não pode ficar guardada: a próxima consulta tenta de novo.
       promessa.catch(() => this.listas.delete(eleicao));
       this.listas.set(eleicao, promessa);
