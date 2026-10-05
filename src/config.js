@@ -1,6 +1,6 @@
 // Opções de linha de comando e variáveis de ambiente.
 //   node server.js [--demo [--demo-minutos 8]] [--turno 2] [--porta 3000] [--intervalo 60] [--cargos 1,3,5,6,7]
-//                  [--municipios-concorrencia N] [--municipios-revalidar-s N] [--sem-abrir] [--navegador Safari] [--verboso]
+//                  [--sem-abrir] [--navegador Safari] [--verboso]
 // Equivalentes por ambiente: DEMO=1 TURNO PORT HOST INTERVALO CARGOS ANO DEMO_MINUTOS ABRIR NAVEGADOR
 
 import { CARGOS, CARGOS_PADRAO } from './tse.js';
@@ -39,13 +39,6 @@ export function lerConfig(
     // pedidos por segundo: no auge da apuração a recarga dos 150 municípios grandes de SP leva uns 20 s em vez de uns 30 s.
     // Se o TSE responder 429, o limitador dobra o intervalo sozinho.
     municipiosRitmoMs: env.MUNICIPIOS_RITMO_MS ? Number(env.MUNICIPIOS_RITMO_MS) : 120,
-    // Pedidos de município em andamento ao mesmo tempo. Com ritmo abaixo de ~50 ms, suba junto: o teto real é
-    // concorrência ÷ tempo de resposta do TSE (2 simultâneos ≈ 20 por segundo).
-    municipiosConcorrencia: env.MUNICIPIOS_CONCORRENCIA ? Number(env.MUNICIPIOS_CONCORRENCIA) : 2,
-    // De quanto em quanto tempo, em segundos, cada UF refaz a passada completa (GET condicional em todos os municípios
-    // ainda abertos), para pegar arquivos que o TSE republica sem o acompanhamento da UF avisar. Entre as passadas, só
-    // se baixam os municípios cujo nº de seções mudou.
-    municipiosRevalidarS: env.MUNICIPIOS_REVALIDAR_S ? Number(env.MUNICIPIOS_REVALIDAR_S) : 600,
     verboso: env.VERBOSO === '1', // loga todo ciclo de consultas, mesmo sem novidade
     // Abre o navegador ao iniciar. Por padrão só num terminal interativo: execuções automatizadas
     // (testes, servidores de preview, scripts) não devem fazer janelas aparecerem sozinhas.
@@ -73,8 +66,6 @@ export function lerConfig(
     else if (arg === '--municipios-minimo') cfg.municipiosMinimo = Number(valor());
     else if (arg === '--municipios-todos') cfg.municipiosMinimo = null;
     else if (arg === '--municipios-ritmo-ms') cfg.municipiosRitmoMs = Number(valor());
-    else if (arg === '--municipios-concorrencia') cfg.municipiosConcorrencia = Number(valor());
-    else if (arg === '--municipios-revalidar-s') cfg.municipiosRevalidarS = Number(valor());
     else if (arg === '--demo-minutos') cfg.demoMinutos = Number(valor());
     else if (arg === '--abrir') cfg.abrir = true;
     else if (arg === '--sem-abrir') cfg.abrir = false;
@@ -83,9 +74,7 @@ export function lerConfig(
   }
 
   if (cfg.municipiosMinimo !== null && !(cfg.municipiosMinimo >= 0)) throw new Error('--municipios-minimo precisa ser um número.');
-  if (!(cfg.municipiosRitmoMs >= 10 && cfg.municipiosRitmoMs <= 2000)) throw new Error('--municipios-ritmo-ms precisa ficar entre 10 e 2000 (milissegundos entre pedidos).');
-  if (!(Number.isInteger(cfg.municipiosConcorrencia) && cfg.municipiosConcorrencia >= 1 && cfg.municipiosConcorrencia <= 32)) throw new Error('--municipios-concorrencia precisa ser um inteiro entre 1 e 32.');
-  if (!(cfg.municipiosRevalidarS >= 30 && cfg.municipiosRevalidarS <= 3600)) throw new Error('--municipios-revalidar-s precisa ficar entre 30 e 3600 (segundos).');
+  if (!(cfg.municipiosRitmoMs >= 50 && cfg.municipiosRitmoMs <= 2000)) throw new Error('--municipios-ritmo-ms precisa ficar entre 50 e 2000 (milissegundos entre pedidos).');
   if (![1, 2].includes(cfg.turno)) throw new Error('O turno deve ser 1 ou 2.');
   if (!Number.isInteger(cfg.porta) || cfg.porta < 1 || cfg.porta > 65535) throw new Error('Porta inválida.');
 

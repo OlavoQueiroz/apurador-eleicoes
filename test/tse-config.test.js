@@ -135,13 +135,7 @@ test('acompanhamento: detalhes de tamanho e seções por município, e opções 
   assert.equal(lerConfig([], {}).municipiosRitmoMs, 120);
   assert.equal(lerConfig(['--municipios-ritmo-ms', '200'], {}).municipiosRitmoMs, 200);
   assert.equal(lerConfig([], { MUNICIPIOS_RITMO_MS: '150' }).municipiosRitmoMs, 150);
-  for (const ruim of ['5', '5000', 'x']) assert.throws(() => lerConfig(['--municipios-ritmo-ms', ruim], {}), /municipios-ritmo-ms/);
-  assert.equal(lerConfig([], {}).municipiosRevalidarS, 600);
-  assert.equal(lerConfig(['--municipios-revalidar-s', '120'], {}).municipiosRevalidarS, 120);
-  for (const ruim of ['10', '5000', 'x']) assert.throws(() => lerConfig(['--municipios-revalidar-s', ruim], {}), /municipios-revalidar-s/);
-  assert.equal(lerConfig([], {}).municipiosConcorrencia, 2);
-  assert.equal(lerConfig(['--municipios-concorrencia', '12'], {}).municipiosConcorrencia, 12);
-  for (const ruim of ['0', '33', 'x']) assert.throws(() => lerConfig(['--municipios-concorrencia', ruim], {}), /municipios-concorrencia/);
+  for (const ruim of ['10', '5000', 'x']) assert.throws(() => lerConfig(['--municipios-ritmo-ms', ruim], {}), /municipios-ritmo-ms/);
   assert.throws(() => lerConfig(['--municipios-minimo', 'x'], {}), /municipios-minimo/);
 });
 

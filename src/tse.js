@@ -43,13 +43,7 @@ export const urlResultado = (ciclo, eleicao, abrangencia, cargo) =>
 
 async function getJson(url, { signal } = {}) {
   const res = await fetch(url, { headers: { 'user-agent': USER_AGENT, accept: 'application/json' }, signal: comPrazo(signal) });
-  if (!res.ok) {
-    const erro = new Error(`HTTP ${res.status} em ${url}`);
-    erro.status = res.status;
-    const espera = Number(res.headers.get('retry-after'));
-    erro.esperarMs = espera > 0 ? espera * 1000 : null; // o TSE pode pedir calma (429/503)
-    throw erro;
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status} em ${url}`);
   return res.json();
 }
 

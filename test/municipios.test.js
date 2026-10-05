@@ -288,38 +288,3 @@ test('sem acompanhamento não dá para escolher os grandes: não baixa a UF inte
   assert.deepEqual(fonte.municipais, []);
   assert.match(m.consultar(consulta).erro, /acompanhamento indisponível/);
 });
-
-test('listar tenta de novo quando o TSE responde 429 e não derruba quem espera', async () => {
-  let chamadas = 0;
-  const calmo = Object.assign(new Error('HTTP 429'), { status: 429, esperarMs: 1 });
-  const fonte = {
-    async listar() {
-      chamadas += 1;
-      if (chamadas <= 2) throw calmo;
-      return new Map([['sp', [{ codigo: '1', nome: 'UM' }]]]);
-    },
-  };
-  const { m } = novo(fonte);
-  const lista = await m.listar(1);
-  assert.equal(chamadas, 3);
-  assert.deepEqual([...lista.keys()], ['sp']);
-});
-
-test('listar desiste depois de várias tentativas e deixa a próxima consulta tentar de novo', async () => {
-  let chamadas = 0;
-  const calmo = Object.assign(new Error('HTTP 503'), { status: 503, esperarMs: 1 });
-  const fonte = { async listar() { chamadas += 1; throw calmo; } };
-  const { m } = novo(fonte);
-  await assert.rejects(m.listar(1), /HTTP 503/);
-  assert.equal(chamadas, 6); // a primeira + 5 tentativas
-  await assert.rejects(m.listar(1), /HTTP 503/); // não ficou guardada a falha
-  assert.equal(chamadas, 12);
-});
-
-test('listar não repete erros que não são pedido de calma', async () => {
-  let chamadas = 0;
-  const fonte = { async listar() { chamadas += 1; throw Object.assign(new Error('HTTP 500'), { status: 500 }); } };
-  const { m } = novo(fonte);
-  await assert.rejects(m.listar(1), /HTTP 500/);
-  assert.equal(chamadas, 1);
-});
