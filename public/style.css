@@ -495,3 +495,19 @@ h3.secao { font-size: 12.5px; margin: 24px 0 10px; color: var(--muted); text-tra
 .sec-rec-titulo { cursor: pointer; user-select: none; }
 .sec-rec-titulo:hover { color: var(--text); }
 .sec-rec-titulo .sec-seta { display: inline-block; width: 1.1em; color: var(--accent); }
+
+/* 2º turno: duelo e editor de premissas de transferência */
+.duelo { padding: 14px 16px; background: var(--surface-2); border-radius: 12px; }
+.duelo-placar { display: flex; justify-content: space-between; gap: 16px; }
+.duelo-lado { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.duelo-lado.direita { text-align: right; align-items: flex-end; }
+.duelo-pct { font-size: 32px; line-height: 1.05; letter-spacing: -0.02em; color: var(--cor); }
+.duelo-barra { position: relative; display: flex; height: 14px; margin: 10px 0; border-radius: 7px; overflow: hidden; background: var(--surface); }
+.duelo-barra i { display: block; height: 100%; }
+.duelo-meio { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--text, #222); opacity: .55; }
+.duelo-margem { margin: 4px 0 6px; }
+.editor-transf { margin: 14px 0; padding: 10px 14px; background: var(--surface-2); border-radius: 12px; }
+.editor-transf summary { cursor: pointer; font-weight: 600; }
+.tabela-transf input { width: 64px; padding: 4px 6px; text-align: right; font: inherit; }
+.transf-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.aviso-inline { color: var(--warn, #b45309); }

@@ -296,7 +296,8 @@ test/                        testes e fixtures
   precisa do campo de votos por lista preenchido) e a situação de cada governador no mapa (clara se lidera com mais de 50%
   dos válidos, listrada com 50% ou menos ou com 2º turno marcado). Ambas são estimativas e mudam até o fim. A visão foi
   desenhada para o 1º turno; no 2º (`--turno 2`) valem só presidente e governador, e o mapa de governadores compara 2022 com o
-  turno em curso sem tratamento próprio.
+  turno em curso sem tratamento próprio. O que o 2º turno muda na presidência (duelo, swing sobre o 1º turno de 2026, premissas de
+  transferência e comparativos) está descrito no README, seção "2º turno".
 - Conselheiro Distrital (Fernando de Noronha) não é acompanhado; deputado estadual só é acompanhado em SP e RJ (sem projeção) e é
   volumoso e menos testado; a classificação ideológica do mapa de cadeiras é editorial e aproximada.
 

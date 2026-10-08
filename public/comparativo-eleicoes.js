@@ -29,6 +29,7 @@ export const ESCALA_SALDO = 8; // saldo (p.p.) mínimo que pinta a cor cheia no 
 // `pt` e `pl` são os dois campos (as cores são as do PT e do PL em todo o painel); `numero` é o do período ATUAL, o
 // mesmo em 2022 e 2026; `nomeBase` é quem concorreu na eleição base (a ligação de números vem de dados-historicos/).
 export const PADRAO = '2026x2022';
+export const PADRAO_SEGUNDO_TURNO = '2026t2x2026t1';
 // Terceiros candidatos que o painel sabe mostrar nas barras. `numeroBase`/`numeroAtual` = número na eleição base e na atual
 // (ausente = não concorreu). Os de 2026 vêm da urna: Cury (Avante, 70) e Renan Santos (Missão, 14).
 const CIRO = { id: 'ciro', nome: 'Ciro Gomes', partido: 'PDT', numeroBase: '12', numeroAtual: '12' };
@@ -37,7 +38,26 @@ const TEBET = { id: 'tebet', nome: 'Simone Tebet', partido: 'MDB', numeroBase: '
 const TEBET_ATUAL = { ...TEBET, numeroBase: undefined, numeroAtual: '15' };
 const CURY = { id: 'cury', nome: 'Augusto Cury', partido: 'AVANTE', numeroAtual: '70', padrao: true };
 const RENAN = { id: 'renan', nome: 'Renan Santos', partido: 'MISSÃO', numeroAtual: '14', padrao: true };
+const CAIADO = { id: 'caiado', nome: 'Ronaldo Caiado', partido: 'PSD', numeroBase: '55', padrao: true }; // só no 1º turno de 2026
+const ZEMA = { id: 'zema', nome: 'Romeu Zema', partido: 'NOVO', numeroBase: '30' };
+const CURY_T1 = { id: 'cury', nome: 'Augusto Cury', partido: 'AVANTE', numeroBase: '70', padrao: true };
+const RENAN_T1 = { id: 'renan', nome: 'Renan Santos', partido: 'MISSÃO', numeroBase: '14', padrao: true };
 export const PERIODOS = {
+  // 2º turno (só aparecem quando o painel acompanha o 2º turno): o duelo de 2026 contra o 1º turno do mesmo ano e contra o 2º de 2022.
+  '2026t2x2026t1': {
+    id: '2026t2x2026t1', rotulo: '2º turno × 1º turno', turno2: true, anoAtual: '2º turno de 2026', anoBase: '1º turno de 2026', vivo: true,
+    pt: { numero: '13', nome: 'Lula', titulo: 'Lula', nomeBase: 'Lula', partido: 'PT' },
+    pl: { numero: '22', nome: 'Flávio Bolsonaro', curto: 'Flávio', titulo: 'Flávio Bolsonaro', nomeBase: 'Flávio Bolsonaro', partido: 'PL' },
+    nota: 'Os mesmos dois candidatos nas duas votações. A variação de cada um inclui os votos que vieram dos candidatos eliminados, e com dados por UF não dá para saber de quem veio cada voto.',
+    outros: [CURY_T1, RENAN_T1, CAIADO, ZEMA], // eliminados no 1º turno: só existem na base
+  },
+  '2026t2x2022t2': {
+    id: '2026t2x2022t2', rotulo: '2º turno 2026 × 2022', turno2: true, anoAtual: '2º turno de 2026', anoBase: '2º turno de 2022', vivo: true,
+    pt: { numero: '13', nome: 'Lula', titulo: 'Lula', nomeBase: 'Lula', partido: 'PT' },
+    pl: { numero: '22', nome: 'Flávio Bolsonaro', curto: 'Flávio', titulo: 'Flávio Bolsonaro (Bolsonaro em 2022)', nomeBase: 'Bolsonaro', partido: 'PL' },
+    nota: 'Em 2022 o 2º turno foi Lula contra Bolsonaro (PL, número 22, o mesmo partido e número de Flávio em 2026).',
+    outros: [],
+  },
   '2026x2022': {
     id: '2026x2022', rotulo: '2026 × 2022', anoAtual: 2026, anoBase: 2022, vivo: true,
     pt: { numero: '13', nome: 'Lula', nomeBase: 'Lula', partido: 'PT' },
@@ -231,7 +251,7 @@ function brasilHtml(modelo, ui, ajuda) {
     : '';
   const aviso = ajuda.demo && p.vivo ? '<p class="aviso-bloco">Modo demonstração: os candidatos são fictícios e não têm relação com a eleição real; o comparativo não faz sentido aqui.</p>' : '';
   const frase = (c) => (c.titulo ? esc(c.titulo) : `${esc(c.nome)} contra ${esc(c.nomeBase)} ${p.anoBase}`);
-  const subtitulo = `1º turno, % dos votos válidos · ${frase(p.pt)} · ${frase(p.pl)}`;
+  const subtitulo = `${p.turno2 ? '' : '1º turno, '}% dos votos válidos · ${frase(p.pt)} · ${frase(p.pl)}`;
   const margem = t.impacto == null ? '' : ` ${t.prontas} de ${t.total} UFs com apuração suficiente, ${pc(t.cobertura)} dos votos válidos de ${p.anoBase}. ${t.impacto >= 0 ? `Impacto positivo: a margem foi para ${esc(curto(p.pt))}.` : `Impacto negativo: a margem foi para ${esc(curto(p.pl))}.`}`;
 
   return `${cabecalho(modelo, ajuda, subtitulo)}
@@ -249,7 +269,7 @@ function ufHtml(modelo, ui, ajuda) {
   const { esc, fmtInt, corPartido, nomeUf } = ajuda;
   const p = modelo.periodo;
   const u = modelo.ufs.find((x) => x.uf === ui.uf);
-  const cab = cabecalho(modelo, ajuda, `${esc(nomeUf(ui.uf))} · 1º turno, % dos votos válidos · peso no Brasil: ${u ? pc(u.peso) : '—'}`);
+  const cab = cabecalho(modelo, ajuda, `${esc(nomeUf(ui.uf))} · ${p.turno2 ? '' : '1º turno, '}% dos votos válidos · peso no Brasil: ${u ? pc(u.peso) : '—'}`);
   if (!u) return `${cab}<p class="vazio-msg">Sem base de ${p.anoBase} para esta unidade.</p>`;
 
   const card = (c) => {
@@ -266,7 +286,7 @@ function ufHtml(modelo, ui, ajuda) {
   const situacao = u.pronto
     ? `<p class="comp-resumo-uf"><span>Saldo na UF <b>${sinal(u.saldo, 1)} p.p.</b></span><span>Impacto no Brasil <b>${sinal(u.impacto)} p.p.</b></span></p>`
     : `<p class="aviso-bloco espera">${u.temNumeros ? `Apuração em ${fmt(u.fracao, 0)}%: abaixo de ${modelo.fracaoMinima}%, esta UF ainda não entra no comparativo, porque o resultado parcial engana.` : `Ainda sem votos de ${p.anoAtual} para comparar.`}</p>`;
-  const validosLinha = `<p class="comp-resumo-uf comp-validos"><span>Votos válidos no 1º turno de ${p.anoBase} <b>${fmtInt(Math.round(u.validosBase))}</b></span><span>de ${p.anoAtual} <b>${u.validosAtual ? fmtInt(Math.round(u.validosAtual)) : '—'}</b>${p.vivo && u.validosAtual && u.fracao < 100 ? ' <small>parcial</small>' : ''}</span></p>`;
+  const validosLinha = `<p class="comp-resumo-uf comp-validos"><span>Votos válidos ${p.turno2 ? 'no' : 'no 1º turno de'} ${p.anoBase} <b>${fmtInt(Math.round(u.validosBase))}</b></span><span>de ${p.anoAtual} <b>${u.validosAtual ? fmtInt(Math.round(u.validosAtual)) : '—'}</b>${p.vivo && u.validosAtual && u.fracao < 100 ? ' <small>parcial</small>' : ''}</span></p>`;
   return `${cab}${apuracao}<div class="comp-cards">${candidatosDe(p).map(card).join('')}</div>
     ${validosLinha}${situacao}
     <p class="muted pequeno comp-nota">${esc(p.nota)} A variação mostra o que mudou, não de onde vieram os votos.</p>`;

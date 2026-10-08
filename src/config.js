@@ -39,6 +39,12 @@ export function lerConfig(
     // pedidos por segundo: no auge da apuração a recarga dos 150 municípios grandes de SP leva uns 20 s em vez de uns 30 s.
     // Se o TSE responder 429, o limitador dobra o intervalo sozinho.
     municipiosRitmoMs: env.MUNICIPIOS_RITMO_MS ? Number(env.MUNICIPIOS_RITMO_MS) : 120,
+    // Intervalo, em ms, entre dois pedidos de arquivo de UF. null = espalhado pelo ciclo (ver `espacamentoUfMs` em server.js);
+    // 50 = o ritmo antigo, que dispara todos de uma vez no início de cada ciclo.
+    ritmoUfMs: env.RITMO_UF_MS ? Number(env.RITMO_UF_MS) : null,
+    // Ritmo adaptativo dos municípios: com minutos sem 429, sonda um intervalo menor que o configurado (até a metade), lembrando o
+    // último que deu 429. `--sem-ritmo-adaptativo` mantém sempre o configurado.
+    ritmoAdaptativo: env.RITMO_ADAPTATIVO !== '0',
     verboso: env.VERBOSO === '1', // loga todo ciclo de consultas, mesmo sem novidade
     // Abre o navegador ao iniciar. Por padrão só num terminal interativo: execuções automatizadas
     // (testes, servidores de preview, scripts) não devem fazer janelas aparecerem sozinhas.
@@ -66,6 +72,8 @@ export function lerConfig(
     else if (arg === '--municipios-minimo') cfg.municipiosMinimo = Number(valor());
     else if (arg === '--municipios-todos') cfg.municipiosMinimo = null;
     else if (arg === '--municipios-ritmo-ms') cfg.municipiosRitmoMs = Number(valor());
+    else if (arg === '--ritmo-uf-ms') cfg.ritmoUfMs = Number(valor());
+    else if (arg === '--sem-ritmo-adaptativo') cfg.ritmoAdaptativo = false;
     else if (arg === '--demo-minutos') cfg.demoMinutos = Number(valor());
     else if (arg === '--abrir') cfg.abrir = true;
     else if (arg === '--sem-abrir') cfg.abrir = false;
@@ -75,6 +83,7 @@ export function lerConfig(
 
   if (cfg.municipiosMinimo !== null && !(cfg.municipiosMinimo >= 0)) throw new Error('--municipios-minimo precisa ser um número.');
   if (!(cfg.municipiosRitmoMs >= 50 && cfg.municipiosRitmoMs <= 2000)) throw new Error('--municipios-ritmo-ms precisa ficar entre 50 e 2000 (milissegundos entre pedidos).');
+  if (cfg.ritmoUfMs !== null && !(cfg.ritmoUfMs >= 20 && cfg.ritmoUfMs <= 2000)) throw new Error('--ritmo-uf-ms precisa ficar entre 20 e 2000 (milissegundos entre pedidos).');
   if (![1, 2].includes(cfg.turno)) throw new Error('O turno deve ser 1 ou 2.');
   if (!Number.isInteger(cfg.porta) || cfg.porta < 1 || cfg.porta > 65535) throw new Error('Porta inválida.');
 

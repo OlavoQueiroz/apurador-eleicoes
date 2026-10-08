@@ -4,8 +4,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lerConfig, SAIDA_PORTA_OCUPADA } from './src/config.js';
-import { CARGOS, criarFonteTse, criarFonteMunicipiosTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
-import { criarFonteDemo } from './src/demo.js';
+import { CARGOS, urlResultado, criarFonteTse, criarFonteMunicipiosTse, descobrirEleicoes, montarAlvos } from './src/tse.js';
+import { adaptarParaSegundoTurno, criarFonteDemo } from './src/demo.js';
 import { Apuracao } from './src/apuracao.js';
 import { Limitador, comRecuo } from './src/limitador.js';
 import { Municipios } from './src/municipios.js';
@@ -15,6 +15,7 @@ import { carregarAnterior } from './src/anterior.js';
 import { carregarPartidos } from './src/partidos.js';
 import { criarServidor } from './src/servidor.js';
 import { abrirNoNavegador } from './src/abrir.js';
+import { criarRegistroRequisicoes, gravarRitmoAprendido, lerRitmoAprendido, linhaDoEvento, linhaDoMinuto } from './src/metricas.js';
 
 const hora = () => new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const log = (...partes) => console.log(`[${hora()}]`, ...partes);
@@ -44,11 +45,40 @@ if (!alvos.length) {
 }
 
 const fonteTse = criarFonteTse();
-const fonte = cfg.demo ? criarFonteDemo(fonteTse, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
+// Ensaio do 2º turno (--demo --turno 2): enquanto o TSE não publica os arquivos do 2º turno, usa a estrutura do 1º.
+const eleicaoDoPrimeiro = (e) => {
+  for (const p of Object.values(eleicoes.eleicoes)) if (p[2] === e && p[1]) return p[1];
+  return e;
+};
+const baseDemo = cfg.demo && cfg.turno === 2
+  ? adaptarParaSegundoTurno(fonteTse, {
+    urlDoPrimeiroTurno: (a) => urlResultado(eleicoes.ciclo, eleicaoDoPrimeiro(a.eleicao), a.uf, a.cargo),
+    eleicaoDoPrimeiroTurno: eleicaoDoPrimeiro,
+  })
+  : fonteTse;
+const fonte = cfg.demo ? criarFonteDemo(baseDemo, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
 // Ritmo único para tudo que vai ao TSE: o dado por UF (ciclo principal) tem prioridade sobre os municípios, e um
 // 429 de qualquer lado faz os dois recuarem. Na demonstração nada de município vai ao TSE.
-const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: cfg.municipiosRitmoMs });
 const raiz = path.dirname(fileURLToPath(import.meta.url));
+// Registro do ritmo de pedidos (uma linha por minuto e uma por 429/503) e o piso aprendido do ritmo adaptativo, em dados/ (fora do git).
+const arquivoRitmo = path.join(raiz, 'dados', 'requisicoes', `${eleicoes.ciclo}-t${cfg.turno}.jsonl`);
+const arquivoPiso = path.join(raiz, 'dados', 'requisicoes', 'piso-municipio.json');
+const registroRequisicoes = cfg.demo ? null : criarRegistroRequisicoes(arquivoRitmo);
+// Arquivos de UF espalhados pelo ciclo (e não todos de uma vez no início): ~metade do intervalo dividida pelos arquivos, entre 50 e 400 ms.
+const espacamentoUfMs = cfg.ritmoUfMs ?? Math.min(400, Math.max(50, Math.floor((0.5 * cfg.intervalo * 1000) / alvos.length)));
+const limitador = cfg.demo
+  ? new Limitador({ altaMs: 0, baixaMs: 0 })
+  : new Limitador({
+    altaMs: espacamentoUfMs,
+    baixaMs: cfg.municipiosRitmoMs,
+    jitter: 0.25,
+    baixaMinMs: cfg.ritmoAdaptativo ? Math.max(50, Math.floor(cfg.municipiosRitmoMs / 2)) : null,
+    baixaPisoInicial: cfg.ritmoAdaptativo ? await lerRitmoAprendido(arquivoPiso) : 0,
+    aoEvento: (evento) => {
+      registroRequisicoes.gravar(linhaDoEvento(evento));
+      if (cfg.ritmoAdaptativo) gravarRitmoAprendido(arquivoPiso, evento.baixaPiso);
+    },
+  });
 // Último dado de cada arquivo em disco (.cache/apuracao): se o TSE negar a partida (429), a tela mostra o que já se sabia.
 const apuracao = new Apuracao({
   alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador,
@@ -56,7 +86,7 @@ const apuracao = new Apuracao({
 });
 const fonteMunicipiosTse = criarFonteMunicipiosTse();
 const municipios = new Municipios({
-  fonte: cfg.demo ? fonte.municipios(fonteMunicipiosTse) : fonteMunicipiosTse,
+  fonte: cfg.demo ? fonte.municipios(baseDemo.municipios ? baseDemo.municipios(fonteMunicipiosTse) : fonteMunicipiosTse) : fonteMunicipiosTse,
   ciclo: eleicoes.ciclo,
   // Só os municípios grandes têm arquivo baixado; o resto da UF sai do arquivo da UF. Na demonstração, todos (locais).
   minimoEleitores: cfg.demo ? null : cfg.municipiosMinimo,
@@ -68,11 +98,18 @@ const municipios = new Municipios({
   validadeMs: cfg.demo ? cfg.intervalo * 1000 : Math.max(cfg.intervalo, 120) * 1000,
 });
 
-// Resultado de 2022 por município, para o modelo de swing (opcional: sem os arquivos o modelo fica indisponível).
+// Base do modelo de swing (opcional: sem os arquivos o modelo fica indisponível). No 1º turno é o resultado de 2022 por
+// município; no 2º turno, o do 1º turno de 2026, com as premissas de transferência dos eliminados.
 let prior2022 = null;
+let baseSwing = null;
 try {
-  prior2022 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2022-t1.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente.json'));
-  for (const aviso of prior2022.avisos) console.warn(`Mapeamento de 2022: ${aviso}`);
+  if (cfg.turno === 2) {
+    baseSwing = { ano: 2026, turno: 1, rotulo: '1º turno de 2026', curto: '1º turno', arquivo: 'scripts/gerar-historico-2026-t1.js' };
+    prior2022 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2026-t1.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente-t2.json'));
+  } else {
+    prior2022 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2022-t1.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente.json'));
+  }
+  for (const aviso of prior2022.avisos) console.warn(`Mapeamento da base do swing: ${aviso}`);
 } catch (erro) {
   console.warn(`Swing histórico desligado: ${erro.message}`);
 }
@@ -84,6 +121,16 @@ try {
   for (const aviso of prior2018.avisos) console.warn(`Mapeamento de 2018: ${aviso}`);
 } catch (erro) {
   console.warn(`Comparativo com 2018 desligado: ${erro.message}`);
+}
+
+// 2º turno de 2022 por município, para o comparativo do 2º turno de 2026 (opcional).
+let prior2022t2 = null;
+if (cfg.turno === 2) {
+  try {
+    prior2022t2 = carregarAnterior(path.join(raiz, 'dados-historicos', 'presidente-2022-t2.json'), path.join(raiz, 'dados-historicos', 'mapeamento-presidente-2022-t2.json'));
+  } catch (erro) {
+    console.warn(`Comparativo com o 2º turno de 2022 desligado (rode scripts/gerar-historico-2022.js --turno 2): ${erro.message}`);
+  }
 }
 
 // Eleitos de 2014, 2018 e 2022 por partido, para a aba de partidos (opcional: sem o arquivo a aba some).
@@ -122,6 +169,7 @@ apuracao.on('erro', (erro) => log('erro no ciclo:', erro.message));
 let limitadasAntes = 0;
 setInterval(() => {
   const e = limitador.estatisticas();
+  registroRequisicoes?.gravar(linhaDoMinuto(e));
   if (cfg.verboso || e.limitadas !== limitadasAntes) {
     log(`pedidos ao TSE: ${e.porMinuto}/min (UF ${e.alta}, município ${e.baixa}) · ${e.limitadas} limitados (429/503)`);
   }
@@ -134,7 +182,8 @@ const servidor = criarServidor({
   historico,
   limitador,
   anterior: prior2022,
-  historicos: prior2018 ? { 2018: prior2018 } : {},
+  baseSwing,
+  historicos: { ...(prior2018 ? { 2018: prior2018 } : {}), ...(prior2022t2 ? { '2022t2': prior2022t2 } : {}) },
   partidos,
   meta: { ano: cfg.ano, turno: cfg.turno, demo: cfg.demo, intervalo: cfg.intervalo, cargos: cfg.cargos },
   diretorioPublico: path.resolve(raiz, 'public'),
@@ -154,6 +203,7 @@ servidor.listen(cfg.porta, cfg.host, async () => {
   const url = `http://${cfg.host === '0.0.0.0' ? 'localhost' : cfg.host}:${cfg.porta}`;
   log(`Painel em ${url}`);
   log(`${cfg.ano} · ${cfg.turno}º turno · ${alvos.length} arquivos · consulta a cada ${cfg.intervalo}s`);
+  if (!cfg.demo) log(`Ritmo: UF a cada ~${espacamentoUfMs} ms, município ${cfg.municipiosRitmoMs} ms${cfg.ritmoAdaptativo ? ` (adaptativo, até ${limitador.baixaMinMs} ms; piso aprendido ${limitador.baixaPiso} ms)` : ''}; registro em ${path.relative(raiz, arquivoRitmo)}.`);
   if (cfg.demo) log('MODO DEMONSTRAÇÃO: os votos são fictícios (simulação de ~' + cfg.demoMinutos + ' min).');
   const doCache = await apuracao.carregarCache();
   if (doCache) log(`Cache: ${doCache} arquivos repostos do disco (valem até o TSE responder).`);
@@ -161,7 +211,18 @@ servidor.listen(cfg.porta, cfg.host, async () => {
   // Município em segundo plano: começa só depois do primeiro ciclo das UFs, para não competir com ele.
   const eleicaoPresidente = eleicoes.eleicoes[CARGOS[1].pleito]?.[cfg.turno];
   if (cfg.municipios && cfg.cargos.includes(1) && eleicaoPresidente) {
-    primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1 }))
+    let avisouLista = false;
+    municipios.avisoLista = (erro) => {
+      if (!avisouLista) log(`lista de municípios ainda indisponível (${erro.message}); tentando de novo a cada minuto.`);
+      avisouLista = true;
+    };
+    // As UFs que mais têm a apurar (eleitorado × fração que falta) são atualizadas primeiro; as já fechadas, por último.
+    const faltaApurar = (uf) => {
+      const d = apuracao.estado.get(`1:${uf}`)?.dados;
+      return d ? (d.eleitorado?.total ?? 0) * (d.totalizacaoFinal ? 0 : 1 - (d.secoes?.pctTotalizadas ?? 0) / 100) : 0;
+    };
+    const ordenarUfs = (ufs) => [...ufs].sort((a, b) => faltaApurar(b) - faltaApurar(a));
+    primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1, ordenarUfs }))
       .catch((erro) => log('erro ao carregar municípios:', erro.message));
     log('Carregando em segundo plano os municípios da presidência (use --sem-municipios para desligar).');
   }

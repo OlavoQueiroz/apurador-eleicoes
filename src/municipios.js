@@ -27,7 +27,7 @@ const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export class Municipios {
   constructor({
     fonte, ciclo, cache = null, limitador = null, minimoEleitores = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
-    revalidarMs = 600_000, pausaUfMs = 500, agora = Date.now,
+    revalidarMs = 600_000, pausaUfMs = 500, novaTentativaListaMs = 60_000, novaTentativaMs = 15_000, agora = Date.now,
   }) {
     this.fonte = fonte;
     this.ciclo = ciclo;
@@ -37,6 +37,8 @@ export class Municipios {
     this.minimoEleitores = minimoEleitores;
     this.revalidarMs = revalidarMs;
     this.pausaUfMs = pausaUfMs;
+    this.novaTentativaMs = novaTentativaMs; // UF com falha: tenta de novo depois disto (dobra a cada falha seguida, até a validade)
+    this.novaTentativaListaMs = novaTentativaListaMs; // lista de municípios ainda não publicada (404): tenta de novo depois disso
     // Ritmo das requisições (baixa prioridade). Compartilhado com o ciclo principal quando recebe o mesmo limitador.
     this.limitador = limitador ?? new Limitador({ altaMs: 0, baixaMs: espacamentoMs, agora });
     this.agora = agora;
@@ -62,7 +64,7 @@ export class Municipios {
       this.entradas.set(chave, {
         chave, itens: new Map(), total: 0, feitos: 0, carregando: false, doDisco: false,
         atualizadoEm: null, validadoEm: 0, erro: null, promessa: null, buscas: 0,
-        selecionados: null, detalhes: null, alvos: 0,
+        selecionados: null, detalhes: null, alvos: 0, falhasSeguidas: 0, aviso: null,
       });
     }
     return this.entradas.get(chave);
@@ -77,6 +79,7 @@ export class Municipios {
       detalhes: entrada.detalhes, // município → { aptos, secoes } de TODOS os municípios da UF, ou null
       atualizadoEm: entrada.atualizadoEm,
       erro: entrada.erro,
+      proximaTentativaEm: entrada.erro && entrada.atualizadoEm !== null ? entrada.atualizadoEm + this.#esperaDaUf(entrada) : null, // quando a UF tenta de novo, se está com falha
       total: entrada.total,
       dados: [...entrada.itens]
         .filter(([codigo, i]) => i.dados && (!entrada.selecionados || entrada.selecionados.has(codigo)))
@@ -89,17 +92,32 @@ export class Municipios {
     return this.#instantaneo(this.#entrada(consulta));
   }
 
+  // Quanto esperar antes de consultar a UF de novo: a validade, ou, com falha, um prazo curto que dobra a cada falha seguida.
+  #esperaDaUf(entrada) {
+    if (!entrada.erro) return this.validadeMs;
+    return Math.min(this.validadeMs, this.novaTentativaMs * 2 ** Math.min(Math.max(entrada.falhasSeguidas - 1, 0), 4));
+  }
+
   consultar(consulta) {
     const entrada = this.#entrada(consulta);
-    const velha = entrada.atualizadoEm === null || this.agora() - entrada.atualizadoEm >= this.validadeMs;
+    const velha = entrada.atualizadoEm === null || this.agora() - entrada.atualizadoEm >= this.#esperaDaUf(entrada);
     if (!entrada.carregando && velha) entrada.promessa = this.#carregar(entrada, consulta);
     return this.#instantaneo(entrada);
   }
 
   // Passada completa por todas as UFs de um cargo, uma de cada vez, repetida a cada validade.
-  async manter({ eleicao, cargo }) {
+  async manter({ eleicao, cargo, ordenarUfs = null }) {
     while (!this.parado) {
-      const ufs = [...(await this.listar(eleicao)).keys()];
+      let ufs;
+      try {
+        ufs = [...(await this.listar(eleicao)).keys()];
+        if (ordenarUfs) ufs = ordenarUfs(ufs); // a ordem é recalculada a cada passada
+      } catch (erro) {
+        // Típico do 2º turno: o TSE só publica a lista de municípios perto da votação. Em vez de desistir, tenta de novo.
+        this.avisoLista?.(erro);
+        await dormir(this.novaTentativaListaMs);
+        continue;
+      }
       for (const uf of ufs) {
         if (this.parado) return;
         const entrada = this.#entrada({ eleicao, cargo, uf });
@@ -107,7 +125,9 @@ export class Municipios {
         await this.consultar({ eleicao, cargo, uf }).pendente;
         if (entrada.buscas !== buscasAntes) await dormir(this.pausaUfMs); // UF sem novidade não gasta pausa
       }
-      await dormir(this.validadeMs);
+      // Com alguma UF em falha, volta logo (cada UF respeita o próprio prazo em `consultar`); senão, na validade.
+      const comFalha = ufs.some((uf) => this.#entrada({ eleicao, cargo, uf }).erro);
+      await dormir(comFalha ? Math.min(this.validadeMs, this.novaTentativaMs) : this.validadeMs);
     }
   }
 
@@ -131,7 +151,7 @@ export class Municipios {
 
   // Marca (seções totalizadas:comparecimento) e detalhes (tamanho, seções) de cada município da UF, ou null se não der para saber
   // (fonte sem acompanhamento, arquivo indisponível ou falha). Vale para todos os cargos da mesma eleição.
-  async #acompanhamento(eleicao, uf) {
+  async #acompanhamento(eleicao, uf, entrada = null) {
     if (!this.fonte.acompanhar) return null;
     const chave = `${eleicao}:${uf}`;
     const anterior = this.acompanhamentos.get(chave);
@@ -147,8 +167,10 @@ export class Municipios {
         anterior.em = this.agora();
         return anterior;
       }
-    } catch {
-      // sem acompanhamento nesta passada
+      if (entrada) entrada.aviso = r.status === 'indisponivel' ? 'o TSE ainda não publicou o arquivo de acompanhamento' : null;
+    } catch (erro) {
+      // sem acompanhamento nesta passada; o motivo vai para a tela
+      if (entrada) entrada.aviso = erro.message;
     }
     return null;
   }
@@ -164,7 +186,8 @@ export class Municipios {
 
       const completa = this.agora() - entrada.validadoEm >= this.revalidarMs;
       const comAcompanhamento = Boolean(this.fonte.acompanhar);
-      const acompanhamento = await this.#acompanhamento(eleicao, uf);
+      entrada.aviso = null;
+      const acompanhamento = await this.#acompanhamento(eleicao, uf, entrada);
       const mapa = acompanhamento?.mapa ?? null;
       if (acompanhamento?.detalhes) entrada.detalhes = acompanhamento.detalhes;
       const municipios = this.#escolher(entrada, todos);
@@ -173,7 +196,13 @@ export class Municipios {
       // como saber, então espera a próxima passada completa em vez de varrer tudo.
       const guiada = comAcompanhamento && !completa;
 
-      const fila = [...municipios];
+      // Quem tem mais a apurar vem primeiro (eleitores × fração de seções que falta): com o ritmo limitado, é o que mais mexe no total.
+      const faltaApurar = (m) => {
+        const d = entrada.detalhes?.get(m.codigo);
+        if (!d) return 0;
+        return d.aptos * (d.secoes.total > 0 ? 1 - d.secoes.totalizadas / d.secoes.total : 1);
+      };
+      const fila = [...municipios].sort((a, b) => faltaApurar(b) - faltaApurar(a));
       let falhas = 0;
       let primeiroErro = '';
       const trabalhador = async () => {
@@ -206,17 +235,24 @@ export class Municipios {
       };
       await Promise.all(Array.from({ length: Math.min(this.concorrencia, fila.length) }, trabalhador));
       if (falhas) entrada.erro = `${falhas} município(s) não puderam ser atualizados (${primeiroErro})`;
+      // Sem o acompanhamento a UF segue com o que tem, mas não sabe o que mudou: conta como falha para tentar de novo logo.
+      else if (comAcompanhamento && !acompanhamento && entrada.aviso) entrada.erro = `acompanhamento da UF indisponível (${entrada.aviso}); usando o que já foi carregado`;
       // Mesmo com falhas: quem falhou continua sem dado/marca e é retomado na próxima passada guiada.
       if (completa) entrada.validadoEm = this.agora();
       if (this.cache) {
         await this.cache.gravar(entrada.chave, {
           validadoEm: entrada.validadoEm,
+          // Tamanho de cada município e quais são os grandes: sem isto, depois de um reinício a UF não sabe o que usar enquanto o
+          // acompanhamento não responder.
+          detalhes: entrada.detalhes ? [...entrada.detalhes] : null,
+          selecionados: entrada.selecionados ? [...entrada.selecionados] : null,
           itens: [...entrada.itens].map(([codigo, i]) => [codigo, { dados: i.dados, etag: i.etag, marca: i.marca }]),
         });
       }
     } catch (erro) {
       entrada.erro = erro.message;
     } finally {
+      entrada.falhasSeguidas = entrada.erro ? entrada.falhasSeguidas + 1 : 0;
       entrada.atualizadoEm = this.agora();
       entrada.carregando = false;
     }
@@ -228,7 +264,7 @@ export class Municipios {
     if (this.minimoEleitores === null) return todos;
     if (!entrada.detalhes) {
       if (entrada.selecionados) return todos.filter((m) => entrada.selecionados.has(m.codigo));
-      throw new Error('arquivo de acompanhamento indisponível: não deu para escolher os municípios grandes');
+      throw new Error(`arquivo de acompanhamento indisponível${entrada.aviso ? ` (${entrada.aviso})` : ''}: não deu para escolher os municípios grandes`);
     }
     const tamanho = (m) => entrada.detalhes.get(m.codigo)?.aptos ?? 0;
     const ordenados = [...todos].sort((a, b) => tamanho(b) - tamanho(a));
@@ -242,6 +278,8 @@ export class Municipios {
     for (const [codigo, item] of salvo?.itens ?? []) {
       entrada.itens.set(codigo, { dados: item.dados ?? null, etag: item.etag ?? null, marca: item.marca ?? null });
     }
+    if (salvo?.detalhes && !entrada.detalhes) entrada.detalhes = new Map(salvo.detalhes);
+    if (salvo?.selecionados && !entrada.selecionados) entrada.selecionados = new Set(salvo.selecionados);
     entrada.validadoEm = salvo?.validadoEm ?? 0;
     entrada.doDisco = entrada.itens.size > 0;
   }

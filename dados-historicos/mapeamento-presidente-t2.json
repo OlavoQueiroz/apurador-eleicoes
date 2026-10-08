@@ -1,0 +1,5 @@
+{
+  "_leia": "Premissas do 2º turno de 2026 (modelo de swing). Para cada finalista (número do 2º turno), de quais candidatos do 1º turno ele herda votos e que fração (peso, de 0 a 1) dos votos de cada um. Por padrão cada finalista herda só os próprios votos do 1º turno (13 = Lula, 22 = Flávio Bolsonaro); os votos dos eliminados (70 Cury, 14 Renan Santos, 55 Caiado, 30 Zema e os demais) não são atribuídos a ninguém e o modelo os redistribui pela variação medida nos lugares já apurados (swing). Para supor, por exemplo, que 30% dos votos de Caiado vão para Flávio e 10% para Lula, acrescente em \"22\" {\"de\": \"55\", \"peso\": 0.3} e em \"13\" {\"de\": \"55\", \"peso\": 0.1}; os 60% restantes não são atribuídos a ninguém e o swing os absorve. A soma dos pesos de um mesmo candidato do 1º turno não pode passar de 1. O painel também tem um editor dessas premissas na aba Projeção (valem só na sua tela). Reinicie o painel depois de editar este arquivo.",
+  "13": [{ "de": "13", "peso": 1 }],
+  "22": [{ "de": "22", "peso": 1 }]
+}

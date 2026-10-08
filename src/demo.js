@@ -256,3 +256,30 @@ export function criarFonteDemo(fonteBase, { duracaoMin = 8, semente = 2026, agor
     },
   };
 }
+
+// Ensaio do 2º turno antes de o TSE publicar os arquivos dele: o esqueleto de cada disputa vem do 1º turno (que existe e tem a
+// estrutura real), reduzido aos dois mais votados, e o arquivo é marcado como 2º turno. Governador só nas UFs em que o líder
+// do 1º turno não passou de 50% dos válidos (as mesmas que, de fato, vão ao 2º turno). Os votos continuam inventados pela simulação.
+//   `urlDoPrimeiroTurno(alvo)` devolve o endereço do arquivo do 1º turno equivalente; `eleicaoDoPrimeiroTurno(eleicao)`, o código da
+//   eleição do 1º turno que corresponde ao do 2º (e a própria, se não houver).
+export function adaptarParaSegundoTurno(fonteBase, { urlDoPrimeiroTurno, eleicaoDoPrimeiroTurno }) {
+  return {
+    ...fonteBase,
+    async obter(alvo, anterior) {
+      const r = await fonteBase.obter({ ...alvo, url: urlDoPrimeiroTurno(alvo) }, anterior);
+      if (r.status !== 'novo') return r;
+      const dados = structuredClone(r.dados);
+      const comVotos = dados.candidatos.filter((c) => c.votos > 0);
+      if (alvo.cargo === 3 && (comVotos[0]?.pct ?? 0) > 50) return { status: 'indisponivel' };
+      if (comVotos.length < 2) return { status: 'indisponivel' };
+      dados.candidatos = comVotos.slice(0, 2);
+      dados.turno = 2;
+      dados.eleicao = String(alvo.eleicao);
+      return { status: 'novo', dados, etag: null };
+    },
+    municipios: (fonteMunicipios) => ({
+      ...fonteMunicipios,
+      listar: (ciclo, eleicao) => fonteMunicipios.listar(ciclo, eleicaoDoPrimeiroTurno(eleicao)),
+    }),
+  };
+}

@@ -4,11 +4,12 @@ import { MAPA } from './mapa-brasil.js';
 import { carregarHistorico, montarGrafico } from './grafico.js';
 import { PARTIDO_PADRAO } from './partido-foco.js';
 import { avaliarChances, elegiveisPelaConta, flagsEleitoPelaConta, quantosClassificam, segundoTurnoDoGovernador } from './chances.js';
-import { ESCALA_SALDO, PADRAO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
+import { ESCALA_SALDO, PADRAO, PADRAO_SEGUNDO_TURNO, PERIODOS, calcular, comparativoHtml, corDoMapa, itemDoAtual, ligarComparativo, periodoPorId, regiaoDaUf, sinal, tituloDe } from './comparativo-eleicoes.js';
 import { iniciarBusca } from './busca.js';
 import { carregarComparacao, comparacaoHtml } from './comparacao.js';
 import { cadeirasHtml, ligarCadeiras } from './cadeiras.js';
 import { abasDoCargo, cargoPartidos, criarModelo, hashAntigoParaNovo, hashPartidos, ligarHover, partidosHtml } from './partidos.js';
+import { dueloHtml, editorTransfHtml, gravarTransf, lerTransf, ligarEditorTransf, sufixoTransf } from './segundo-turno.js';
 import { geometriaUf, resultadosMunicipios, mapaMunicipiosHtml, dicaMunicipioHtml } from './municipios.js';
 
 const UF_NOME = {
@@ -69,7 +70,8 @@ const estado = {
   uf: 'br',
   detalhe: undefined, // undefined = carregando; null = sem dado
   visao: 'apuracao', // 'apuracao' (dados do TSE), 'projecao' (estimativa do painel) ou 'analise' (bancadas por bloco/partido; na presidência, o comparativo entre eleições)
-  comparativo: { periodo: PADRAO, bases: {}, regiao: null, terceiros: null }, // período, base de cada período (carregada uma vez), região aberta e terceiros nas barras (null = os padrão do período)
+  comparativo: { periodo: PADRAO, // no 2º turno, iniciar() troca pelo período do 2º turno
+    bases: {}, regiao: null, terceiros: null }, // período, base de cada período (carregada uma vez), região aberta e terceiros nas barras (null = os padrão do período)
   modelo: 'estratificado',
   projecao: undefined, // mesmo contrato de `detalhe`
   comparacao: undefined, // projeção de cada modelo disponível, para comparar: [[id, resposta]]
@@ -90,6 +92,7 @@ const estado = {
   eleitos: null, // nomes dos eleitos do cargo aberto no Brasil (hover do mapa de cadeiras): Map partido → [{ nome, uf }]
   senadoOcupadas: null, // 27 cadeiras do Senado fora de disputa em 2026 (public/senado-ocupadas.json)
   partidos: { aba: 'placar', agrupar: 'ideologia', foco: PARTIDO_PADRAO, detalhes: undefined, chaveFoco: '', historico: undefined }, // visão Análise (#/cargo/uf/analise/aba/partido); historico: undefined = carregando, null = indisponível
+  transf: lerTransf(), // 2º turno: premissas de transferência de votos dos eliminados (só no navegador)
   conexao: 'conectando',
   ultimoCicloEm: null,
 };
@@ -138,6 +141,10 @@ const hashPara = (cargo, uf, visao = estado.visao, modelo = estado.modelo, perio
   return `#/${cargo}/${uf}`;
 };
 
+// Endereço da projeção. No 2º turno o swing leva as premissas de transferência escolhidas na tela.
+const urlProjecao = (modelo, cargo, uf) =>
+  `/api/projecao/${modelo}/${cargo}/${uf}${modelo === 'swing' && cargo === 1 && estado.meta?.baseSwing ? sufixoTransf(estado.transf) : ''}`;
+
 async function getJson(url) {
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
@@ -182,7 +189,7 @@ async function carregarDetalhe() {
   const chave = `${chaveAtual()}:${estado.visao}:${estado.modelo}`;
   const atual = () => chave === `${chaveAtual()}:${estado.visao}:${estado.modelo}`;
   const url = estado.visao === 'projecao'
-    ? `/api/projecao/${estado.modelo}/${estado.cargo}/${estado.uf}`
+    ? urlProjecao(estado.modelo, estado.cargo, estado.uf)
     : `/api/resultado/${estado.cargo}/${estado.uf}`;
   const campo = estado.visao === 'projecao' ? 'projecao' : 'detalhe';
   try {
@@ -191,11 +198,14 @@ async function carregarDetalhe() {
   } catch {
     if (atual()) estado[campo] = null;
   }
-  if (estado.visao === 'projecao' && atual()) estado.comparacao = await carregarComparacao(estado.meta.modelos, estado.cargo, estado.uf, getJson);
+  if (estado.visao === 'projecao' && atual()) estado.comparacao = await carregarComparacao(estado.meta.modelos, estado.cargo, estado.uf, getJson, urlProjecao);
   // Projeção por município: a primeira carga leva alguns segundos, então pergunta de novo até terminar.
   clearTimeout(recarga);
   if (estado.visao === 'projecao' && estado.projecao?.carregando && !estado.projecao.disponivel) {
     recarga = setTimeout(atualizar, 1500);
+  } else if (estado.visao === 'projecao' && estado.projecao && !estado.projecao.disponivel && estado.projecao.proximaTentativaEm) {
+    // O servidor está com falha nesta UF e vai tentar de novo: pergunta de novo logo depois, em vez de esperar o próximo ciclo do TSE.
+    recarga = setTimeout(atualizar, Math.max(2000, estado.projecao.proximaTentativaEm - Date.now() + 1500));
   }
 }
 let recarga = null;
@@ -222,7 +232,7 @@ async function carregarMapaProjecao() {
   let pendente = false;
   await Promise.all(ufs.map(async (uf) => {
     try {
-      const p = await getJson(`/api/projecao/${estado.modelo}/${estado.cargo}/${uf}`);
+      const p = await getJson(urlProjecao(estado.modelo, estado.cargo, uf));
       if (p.carregando && !p.disponivel) pendente = true;
       if (!p.disponivel || !p.candidatos?.length) return;
       const [a, b] = [...p.candidatos].sort((x, y) => y.pctProjetado - x.pctProjetado);
@@ -333,6 +343,12 @@ async function carregarMunicipios() {
         await carregarMunicipios();
         renderGrade();
       }, 1500);
+    } else if (resultados?.erro && resultados.proximaTentativaEm) {
+      // Falha na carga: o servidor tenta de novo sozinho; o mapa pergunta de novo quando chegar a hora.
+      recargaMunicipios = setTimeout(async () => {
+        await carregarMunicipios();
+        renderGrade();
+      }, Math.max(2000, resultados.proximaTentativaEm - Date.now() + 1500));
     }
   } catch {
     if (chave === chaveAtual()) estado.mun = undefined;
@@ -407,9 +423,13 @@ function ufPadrao(cargo) {
   return meta.abrangencias.length === 1 || cargo === 7 ? meta.abrangencias[0] : 'br';
 }
 
+// No 2º turno só valem os períodos do 2º turno; no 1º, só os de sempre.
+const emSegundoTurno = () => estado.meta?.turno === 2;
+const periodoPadrao = () => (emSegundoTurno() ? PADRAO_SEGUNDO_TURNO : PADRAO);
+
 function lerHash() {
   let hash = location.hash;
-  const novo = hashAntigoParaNovo(hash, PADRAO);
+  const novo = hashAntigoParaNovo(hash, periodoPadrao());
   if (novo) { history.replaceState(null, '', novo); hash = novo; }
   const an = /^#\/(\d+)\/([a-z]{2})\/analise((?:\/[a-z0-9-]+)*)$/.exec(hash);
   const m = an ? [hash, an[1], an[2], 'analise'] : /^#\/(\d+)\/([a-z]{2})(?:\/(projecao)(?:\/([a-z0-9]+))?)?(?:\/([cm])\/(\w+))?$/.exec(hash);
@@ -421,7 +441,7 @@ function lerHash() {
   if (emAnalise()) {
     // Depois de "analise" vêm, em qualquer ordem: o período (presidência), a análise (placar ou serie) e o agrupamento (partido).
     const extras = (an?.[3] ?? '').split('/').filter(Boolean);
-    estado.comparativo.periodo = extras.find((t) => PERIODOS[t]) ?? PADRAO;
+    estado.comparativo.periodo = extras.find((t) => PERIODOS[t] && Boolean(PERIODOS[t].turno2) === emSegundoTurno()) ?? periodoPadrao();
     estado.partidos.aba = abasDoCargo(meta.codigo).find((a) => extras.includes(a.id))?.id ?? 'placar';
     estado.partidos.foco = extras.find((t) => /^p-[a-z0-9]+$/.test(t))?.slice(2) ?? PARTIDO_PADRAO; // aba "Um partido": partido analisado
     estado.partidos.agrupar = extras.includes('partido') ? 'partido' : 'ideologia';
@@ -555,7 +575,8 @@ function conteudoTile(item) {
   return {
     sub: comLider ? esc(lider.partido) : '',
     sub2: comLider ? fmtPct(lider.pct, 0) : fmtPct(item.secoes.pctTotalizadas, 0),
-    pct: item.secoes.pctTotalizadas,
+    // 2º turno: a cor é a do líder e a força é a margem sobre o outro finalista (e não o quanto já foi apurado).
+    pct: comLider && item.turno === 2 && item.segundo ? forcaMargem(lider.pct - item.segundo.pct) : item.secoes.pctTotalizadas,
     cor: comLider ? corPartido(lider.partido) : null,
     vazio: false,
   };
@@ -691,6 +712,14 @@ function rotulosMapaHtml(ativas, eleitas = new Set()) {
 function legendaHtml({ unidade = 'UF' } = {}) {
   if (ehComparativo()) return legendaComparativoHtml();
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
+  // 2º turno (apuração): cor do líder de cada UF, mais forte quanto maior a margem sobre o outro finalista.
+  if (estado.meta.turno === 2 && ehMajoritario(estado.cargo) && unidade === 'UF' && estado.visao === 'apuracao') {
+    const lideres = [...new Set([...estado.resumo.values()].filter((i) => i.cargo === estado.cargo && i.turno === 2 && i.lider).map((i) => i.lider.partido))].sort();
+    const itens = lideres.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    return `<div class="leg-linha"><span class="leg-titulo">Na frente</span>${itens || '<span class="muted">aguardando votos</span>'}</div>
+      <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>
+      <p class="muted pequeno leg-nota">Com pouca apuração a margem de uma UF engana: as regiões chegam em ordens diferentes.</p>`;
+  }
   // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
   const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
   // Fora da projeção não há chave de cores dos partidos: o painel ao lado já mostra a etiqueta colorida de cada um.
@@ -751,8 +780,9 @@ function mapaMunicipalHtml() {
   const { geo, resultados } = estado.mun;
   const total = Object.keys(geo.municipios).length;
   const progresso = resultados.carregando ? ` · carregando ${fmtInt(resultados.progresso.feitos)} de ${fmtInt(resultados.progresso.total)}` : '';
+  const falha = resultados.erro && !resultados.carregando ? ` · <span class="aviso-inline" title="${esc(resultados.erro)}">falha ao atualizar, tentando de novo</span>` : '';
   return `${mapaMunicipiosHtml(geo, resultados, corMunicipio)}
-    <div class="mun-titulo"><b>${esc(nomeUf(estado.uf))}</b><span>${fmtInt(total)} municípios${progresso}</span></div>`;
+    <div class="mun-titulo"><b>${esc(nomeUf(estado.uf))}</b><span>${fmtInt(total)} municípios${progresso}${falha}</span></div>`;
 }
 
 // O TSE escreve os nomes em maiúsculas.
@@ -969,7 +999,9 @@ function detalheArquivoHtml() {
 
   const candidatos = d.candidatos;
   let topo = '';
-  if (ehMajoritario(d.cargo.codigo) && candidatos.length > 1 && candidatos[0].votos > 0) {
+  if (d.turno === 2 && ehMajoritario(d.cargo.codigo) && candidatos.length > 1 && candidatos[0].votos > 0) {
+    topo = dueloHtml(d, { esc, fmtInt, fmtPct, corPartido });
+  } else if (ehMajoritario(d.cargo.codigo) && candidatos.length > 1 && candidatos[0].votos > 0) {
     const [a, b] = candidatos;
     topo = `<p class="aviso-bloco"><b>${esc(a.nomeUrna)}</b> está ${fmtInt(a.votos - b.votos)} votos (${fmtPct(a.pct - b.pct)} pontos) à frente de <b>${esc(b.nomeUrna)}</b>.</p>`;
   }
@@ -1017,7 +1049,7 @@ function detalheArquivoHtml() {
     const semChanceTotal = chances.filter(Boolean).length;
     lista = `<ol class="candidatos">${visiveisMaj.map(({ c, i }) => candidatoHtml(c, i + 1, c.pct, semVotos, chances[i], eleitosPelaConta[i])).join('')}</ol>
       ${semChanceTotal ? `<button class="botao" id="mostrar-sem-chance">${escondidos ? `Mostrar também os ${fmtInt(escondidos)} sem chance` : 'Esconder os sem chance'}</button>
-      <p class="muted pequeno">Sem chance de ${d.cargo.codigo === 5 ? 'ser eleito' : 'chegar ao 2º turno'}: estão fora mesmo que todos os votos que faltam (pela abstenção, brancos e nulos já medidos, com margem) fossem deles. É uma conta, não o resultado do TSE.</p>` : ''}`;
+      <p class="muted pequeno">Sem chance de ${d.cargo.codigo === 5 ? 'ser eleito' : d.turno === 2 ? 'vencer' : 'chegar ao 2º turno'}: estão fora mesmo que todos os votos que faltam (pela abstenção, brancos e nulos já medidos, com margem) fossem deles. É uma conta, não o resultado do TSE.</p>` : ''}`;
   }
 
   const vagas = d.cargo.vagas > 1 ? ` · ${d.cargo.vagas} vagas` : '';
@@ -1314,12 +1346,14 @@ function municipiosHtml(p) {
 
   // Swing histórico: quanto cada candidato está acima ou abaixo do que o campo dele teve em 2022 nos lugares já apurados.
   const swingHtml = p.swing?.length
-    ? `<h3 class="secao">Variação em relação a 2022</h3>
+    ? `<h3 class="secao">Variação em relação ao ${esc(estado.meta.baseSwing?.rotulo ?? '2022')}</h3>
        <div class="tabela-rolagem"><table class="tabela">
          <thead><tr><th>Candidato</th><th class="num">Pontos percentuais</th></tr></thead>
          <tbody>${p.swing.slice(0, 8).map((x) => `<tr><td><b>${esc(x.nomeUrna)}</b> <span class="partido" style="--cor:${corPartido(x.partido)}">${esc(x.partido)}</span></td>
            <td class="num">${x.pontos > 0 ? '+' : ''}${fmtPct(x.pontos, 1)}</td></tr>`).join('')}</tbody></table></div>
-       <p class="muted pequeno">Medido onde a apuração já passa de 50% e somado ao resultado de 2022 de cada lugar. Votos de 2022 sem herdeiro (ex.: candidatos de partidos que não concorrem) entram pela própria variação.</p>`
+       <p class="muted pequeno">${estado.meta.baseSwing
+        ? 'Medido onde a apuração já passa de 50% e somado ao resultado do 1º turno de cada lugar. Votos de candidatos eliminados sem destino nas premissas entram pela própria variação.'
+        : 'Medido onde a apuração já passa de 50% e somado ao resultado de 2022 de cada lugar. Votos de 2022 sem herdeiro (ex.: candidatos de partidos que não concorrem) entram pela própria variação.'}</p>`
     : '';
 
   const m = p.municipios;
@@ -1348,6 +1382,21 @@ function municipiosHtml(p) {
     ${swingHtml}`;
 }
 
+// 2º turno, presidente, modelo de swing: editor das premissas de transferência (candidatos do 1º turno × finalistas).
+function editorTransfHtml2(p) {
+  if (!estado.meta.baseSwing || estado.cargo !== 1 || estado.modelo !== 'swing') return '';
+  const candidatos1T = estado.meta.modelos.find((m) => m.id === 'swing')?.transferencias?.candidatos;
+  if (!candidatos1T) return '';
+  return editorTransfHtml({ candidatos1T, finalistas: p.candidatos.slice(0, 2), transf: estado.transf, esc, corPartido });
+}
+
+// "Tentando de novo em N s": o servidor está com falha numa carga e já agendou outra tentativa.
+function esperaHtml(proximaTentativaEm) {
+  if (!proximaTentativaEm) return '';
+  const s = Math.max(0, Math.round((proximaTentativaEm - Date.now()) / 1000));
+  return `<span class="muted pequeno">Não foi possível carregar agora; o painel tenta de novo ${s > 0 ? `em cerca de ${s} s` : 'em instantes'}.</span>`;
+}
+
 function detalheProjecaoHtml() {
   const titulo = `${cargoMeta().nome} · ${nomeUf(estado.uf)}`;
   const topo = `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
@@ -1367,6 +1416,7 @@ function detalheProjecaoHtml() {
     return `${topo}<div class="vazio-proj"><div class="ic" aria-hidden="true">◷</div>
       <b>${p?.carregando ? 'Calculando a projeção…' : 'Aguardando os primeiros votos'}</b>
       <span class="muted pequeno">${esc(p?.motivo ?? 'Projeção indisponível.')}${andamento}</span>
+      ${esperaHtml(p?.proximaTentativaEm)}
       ${p?.carregando ? '' : `<div class="trilho"><i style="width:${frac}%"></i></div>
       <span class="muted pequeno">${fmtPct(frac, 0)} das seções totalizadas</span>`}</div>${comoCalcula}`;
   }
@@ -1400,6 +1450,7 @@ function detalheProjecaoHtml() {
       <div class="numero"><b>${fmtInt(p.votosFaltantes)}</b><span>Votos válidos ainda a apurar</span></div>
     </div>
     ${comoCalcula}
+    ${editorTransfHtml2(p)}
     ${municipiosHtml(p)}
     ${comparacaoHtml(p, estado.comparacao, { modelos: estado.meta.modelos, modelo: estado.modelo, esc, fmtPct })}`;
 }
@@ -1435,6 +1486,16 @@ function renderDetalhe() {
     if (selos) acoes.append(selos);
     topoDetalhe.append(acoes);
   }
+  ligarEditorTransf(raiz, {
+    aoAplicar: (transf) => {
+      estado.transf = transf;
+      gravarTransf(transf);
+      estado.projecao = undefined;
+      estado.mapaProj = undefined;
+      renderDetalhe();
+      atualizar();
+    },
+  });
   if (ehComparativo()) ligarComparativo(raiz, estado.comparativo, () => { renderGrade(); renderDetalhe(); });
   raiz.querySelectorAll('.sec-rec-titulo').forEach((titulo) => {
     const alternar = () => {
@@ -1559,7 +1620,7 @@ function renderTopoAnalises() {
   $('#principal').classList.toggle('analises-comparativo', ativo);
   raiz.hidden = !ativo;
   if (!ativo) { raiz.innerHTML = ''; return; }
-  const periodos = Object.values(PERIODOS).map((p) =>
+  const periodos = Object.values(PERIODOS).filter((p) => Boolean(p.turno2) === emSegundoTurno()).map((p) =>
     `<a class="aba" href="${hashPara(1, estado.uf, 'analise', undefined, p.id)}" ${p.id === estado.comparativo.periodo ? 'aria-current="page"' : ''}>${esc(p.rotulo)}</a>`).join('');
   raiz.innerHTML = `<div class="seg seg-modelo" role="group" aria-label="Período comparado">${periodos}</div>`;
 }
@@ -1662,8 +1723,8 @@ async function iniciar() {
     return;
   }
   const { meta } = estado;
-  document.title = `${meta.demo ? '[DEMO] ' : ''}Apuração ${meta.ano}`;
-  $('#ano').textContent = meta.ano;
+  document.title = `${meta.demo ? '[DEMO] ' : ''}Apuração ${meta.ano}${meta.turno === 2 ? ' · 2º turno' : ''}`;
+  $('#ano').textContent = meta.turno === 2 ? `${meta.ano} · 2º turno` : meta.ano;
   $('#banner-demo').hidden = !meta.demo;
 
   fetch('/senado-ocupadas.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null))

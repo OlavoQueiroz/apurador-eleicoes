@@ -4,8 +4,32 @@
     {
       "name": "apurador-demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js", "--demo", "--demo-minutos", "1", "--sem-abrir", "--porta", "3100"],
+      "runtimeArgs": [
+        "server.js",
+        "--demo",
+        "--demo-minutos",
+        "1",
+        "--sem-abrir",
+        "--porta",
+        "3100"
+      ],
       "port": 3100
+    },
+    {
+      "name": "apurador-demo-2turno",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "server.js",
+        "--demo",
+        "--turno",
+        "2",
+        "--demo-minutos",
+        "3",
+        "--sem-abrir",
+        "--porta",
+        "3101"
+      ],
+      "port": 3101
     }
   ]
 }

@@ -58,6 +58,12 @@ export function criarAnterior(historico, mapeamento) {
       return brutoCache;
     },
     candidatos22: historico.candidatos,
+    // Mesma base com premissas de transferência acrescentadas ao mapeamento: { "55": { "13": 0.2, "22": 0.5 } } = 20% dos votos
+    // do candidato 55 do turno anterior vão para o 13 e 50% para o 22 (o resto some: abstenção, branco ou nulo). É a
+    // premissa editável do 2º turno.
+    comTransferencias(transf) {
+      return criarAnterior(historico, aplicarTransferencias(mapeamento, transf));
+    },
     ano: historico.ano,
     turno: historico.turno,
     // Votos de 2022 do município traduzidos: { herdados: Map(numero 2026 → votos), validos: total de válidos em 2022 }.
@@ -76,6 +82,24 @@ export function criarAnterior(historico, mapeamento) {
       return resultado;
     },
   };
+}
+
+// Junta ao mapeamento as transferências { origem: { destino: fração } }. Valores inválidos são ignorados; as frações de uma origem
+// são limitadas a 100% no total (a mais, o `criarAnterior` já avisa).
+export function aplicarTransferencias(mapeamento, transf) {
+  const saida = {};
+  for (const [k, v] of Object.entries(mapeamento)) saida[k] = Array.isArray(v) ? v.map((f) => ({ ...f })) : v;
+  for (const [origem, destinos] of Object.entries(transf ?? {})) {
+    for (const [destino, peso] of Object.entries(destinos ?? {})) {
+      const w = Number(peso);
+      if (!(w > 0) || !(w <= 1)) continue;
+      const lista = (saida[destino] ??= []);
+      const existente = lista.find((f) => f.de === origem);
+      if (existente) existente.peso = w;
+      else lista.push({ de: origem, peso: w });
+    }
+  }
+  return saida;
 }
 
 export function carregarAnterior(arquivoHistorico, arquivoMapeamento) {

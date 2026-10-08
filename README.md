@@ -74,7 +74,7 @@ Ctrl+C continua valendo.
 | --- | --- | --- |
 | `--porta N` (`PORT`) | 3000 | Porta do painel. |
 | `--intervalo S` (`INTERVALO`) | 60 | Segundos entre consultas ao TSE. Mínimo de 30, para não sobrecarregar o servidor. |
-| `--turno N` (`TURNO`) | 1 | `2` acompanha o 2º turno (só presidente e governador). |
+| `--turno N` (`TURNO`) | 1 | `2` acompanha o 2º turno (só presidente e governador); ver [2º turno](#2º-turno). |
 | `--cargos LISTA` (`CARGOS`) | `1,3,5,6,7` | Códigos: 1 presidente, 3 governador, 5 senador, 6 dep. federal, 7 dep. estadual (só SP e RJ), 8 dep. distrital. Use `1,3,5,6,7,8` para incluir também o distrital. |
 | `--demo` (`DEMO=1`) | desligado | Modo demonstração (dados fictícios). |
 | `--demo-minutos N` | 8 | Duração da simulação. |
@@ -86,6 +86,8 @@ Ctrl+C continua valendo.
 | `--sem-municipios` (`MUNICIPIOS=0`) | carga ligada | Desliga a carga, em segundo plano, dos municípios da presidência (usada na projeção do Brasil). Os municípios de uma UF ainda carregam sob demanda. |
 | `--municipios-minimo N` (`MUNICIPIOS_MINIMO`) | 30000 | Só municípios com pelo menos N eleitores (mais o maior de cada UF) têm o arquivo baixado; o resto da UF vem do arquivo da UF. |
 | `--municipios-ritmo-ms N` (`MUNICIPIOS_RITMO_MS`) | 120 | Milissegundos entre dois pedidos de município ao TSE (120 ≈ 8 por segundo; 200 era o ritmo anterior, ≈ 5 por segundo). Entre 50 e 2000. Se o TSE responder 429, o painel dobra o intervalo sozinho; se acontecer, volte a `200`. |
+| `--ritmo-uf-ms N` (`RITMO_UF_MS`) | espalhado | Milissegundos entre dois pedidos de arquivo de UF. Por padrão o painel espalha os pedidos pelo ciclo (metade do intervalo ÷ nº de arquivos, entre 50 e 400 ms, com variação aleatória de ±25%), em vez de disparar todos no início do minuto. `50` volta ao ritmo antigo. Entre 20 e 2000. |
+| `--sem-ritmo-adaptativo` (`RITMO_ADAPTATIVO=0`) | desligado | Por padrão, depois de minutos sem 429 e com tráfego de município, o intervalo dos municípios desce até a metade do configurado (−10% por minuto), parando no último intervalo que já levou 429 (mais 25% de folga). Essa sondagem é a que mais pode provocar 429; com esta opção o ritmo fica sempre no configurado. |
 | `--municipios-todos` | desligado | Baixa todos os municípios (~5,7 mil arquivos), em vez de só os grandes. |
 
 ## Como funciona
@@ -256,6 +258,35 @@ em `dados/historico/ele2026-t1.jsonl` (uma linha JSON por arquivo novo do TSE: o
 cada modelo calculada naquele instante). Alimenta o gráfico de evolução e permite comparar os modelos com o resultado
 final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos municípios e dos arquivos principais) ficam fora do git.
 
+## 2º turno
+
+`node server.js --turno 2` (ou `npm start -- --turno 2`) acompanha o duelo de presidente e os governadores que foram ao 2º turno. O painel muda
+para a disputa de dois candidatos:
+
+- **Presidente em primeiro plano.** Só presidente e governador aparecem; Senado, deputados e a Análise de bancadas somem. Os governadores
+  seguem o mesmo ritmo e a mesma carga de antes (municípios só os grandes); o esforço extra vai para a presidência.
+- **Duelo** (visão Apuração): placar, barra de 50%, margem em votos e em pontos, e, durante a apuração, uma conta do painel: quantos votos
+  válidos faltam (pela proporção de seções) e que fração deles o segundo colocado precisaria para empatar. É uma conta, não dado do TSE.
+- **Projeção por swing sobre o 1º turno de 2026** (no lugar de 2022): mede quanto cada finalista está acima ou abaixo do que o campo dele teve
+  no 1º turno, município por município, e aplica ao que falta. A base é `dados-historicos/presidente-2026-t1.json`
+  (`node scripts/gerar-historico-2026-t1.js`, uns 15 min, já gerado). A estratificação por município continua disponível.
+- **Premissas de transferência editáveis.** Na aba Projeção, o editor "Premissas de transferência de votos" deixa dizer quanto dos votos de cada
+  eliminado (Cury, Renan Santos, Caiado, Zema...) vai para cada finalista. Vale só na tela de quem editou (fica no navegador) e só no swing; o
+  que não for atribuído a ninguém é absorvido pela variação que o modelo mede. O padrão (`dados-historicos/mapeamento-presidente-t2.json`) não
+  atribui nada. Na API: `?transf={"55":{"13":0.2,"22":0.5}}` em `/api/projecao/swing/1/{uf}`.
+- **Comparativo** (Análise de presidente): **2º turno × 1º turno** e **2º turno 2026 × 2022** (`node scripts/gerar-historico-2022.js --turno 2`).
+- **Mapa pelo líder.** No 2º turno o mapa pinta cada UF com a cor de quem está na frente, mais forte quanto maior a margem (no 1º turno a força é o quanto já foi apurado).
+- **Falhas na carga dos municípios.** Se o arquivo de acompanhamento de uma UF falhar, o painel tenta de novo em 15 s (dobra a cada falha seguida, até 2 min) e a tela mostra o motivo e quando tenta de novo, em vez de um spinner. Os tamanhos e a lista dos municípios grandes ficam no cache em disco, então depois de um reinício a UF volta com os dados guardados mesmo com o acompanhamento fora do ar.
+- **Lista de municípios ainda não publicada.** O TSE só publica a lista de municípios do 2º turno perto da votação. O painel avisa uma vez e tenta de novo a cada minuto; não precisa reiniciar.
+- **Conferência no TSE:** `node scripts/verificar-segundo-turno.js` diz o que já foi publicado e se o formato bate (2 candidatos, números 13 e 22, mapeamento, lista de municípios). Rode quando os arquivos aparecerem.
+- **Governadores** continuam só com a estratificação por município, baixando só os municípios grandes.
+- **Ensaio.** Antes de o TSE publicar os arquivos do 2º turno, `node server.js --demo --turno 2` simula a disputa (dados fictícios) com a
+  estrutura do 1º turno reduzida aos dois mais votados; governador só nas UFs em que o líder não passou de 50%.
+- **Teste com votos reais:** `node scripts/ensaio-segundo-turno.js` prevê o 2º turno de 2022 a partir do 1º (município por município, só a
+  ordem de chegada é simulada). Resultado: o swing erra a diferença Lula − Bolsonaro em ~0,6 pp com 2% apurado e ~0,1 pp com 20%, contra
+  ~12 pp e ~5 pp da extrapolação simples. Premissas de transferência "razoáveis" chutadas à mão **pioraram** o resultado no começo da
+  apuração; o padrão sem premissas é o mais seguro, e o editor serve para testar hipóteses. Com a apuração começando pelos grandes (`--ordem grandes`) ou em ordem aleatória, o swing também fica dentro de ~0,6 pp com 2% apurado e ~0,1 pp dali em diante.
+
 ## Na noite da apuração
 
 - Rode com **`npm start`**, não `npm run dev`: o `dev` reinicia o servidor a cada arquivo salvo.
@@ -263,6 +294,17 @@ final depois da eleição. A pasta `dados/` (e `.cache/`, o cache dos município
 - Ligue **antes** de a apuração começar: a carga inicial dos municípios leva alguns minutos e é melhor em horário morto.
 - Se o TSE responder 429, o painel recua sozinho; acompanhe `requisicoes.limitadas` em `/api/meta`. Não tente contornar o
   limite com várias máquinas ou IPs: o caminho é pedir menos.
+
+## Ritmo de pedidos e registro
+
+Tudo o que sai para o TSE passa por um limitador (`src/limitador.js`). Para pedir melhor, e não mais:
+
+- **Espalhado:** os arquivos de UF saem espaçados pelo ciclo (com variação aleatória), e o município só dá passagem à UF que está para sair, para um não travar o outro.
+- **Prioridade:** no ciclo, presidente antes dos outros cargos e as UFs de maior eleitorado primeiro; nos municípios, as UFs e as cidades com mais a apurar (eleitores × fração de seções que falta) vêm primeiro.
+- **Adaptativo:** ver `--sem-ritmo-adaptativo`. O piso aprendido fica em `dados/requisicoes/piso-municipio.json` e vale na execução seguinte.
+- **Registro:** `dados/requisicoes/ele2026-tN.jsonl` ganha uma linha por minuto e uma por 429/503, com os pedidos dos últimos 1, 10 e 60 s naquele instante. Depois de uma apuração, as linhas `"tipo":"limitado"` mostram em que ritmo o TSE começou a recusar: é o dado para decidir qualquer aumento de ritmo.
+
+O painel **não** usa várias máquinas, IPs ou proxies. Só vale reavaliar isso com o registro acima em mãos (se mostrar que o limite é por IP e o atraso dos municípios ainda atrapalha), e como decisão explícita.
 
 ## Limitações conhecidas
 
