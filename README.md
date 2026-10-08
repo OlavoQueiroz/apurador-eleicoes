@@ -273,12 +273,16 @@ para a disputa de dois candidatos:
   que não for atribuído a ninguém é absorvido pela variação que o modelo mede. O padrão (`dados-historicos/mapeamento-presidente-t2.json`) não
   atribui nada. Na API: `?transf={"55":{"13":0.2,"22":0.5}}` em `/api/projecao/swing/1/{uf}`.
 - **Comparativo** (Análise de presidente): **2º turno × 1º turno** e **2º turno 2026 × 2022** (`node scripts/gerar-historico-2022.js --turno 2`).
+- **Mapa pelo líder.** No 2º turno o mapa pinta cada UF com a cor de quem está na frente, mais forte quanto maior a margem (no 1º turno a força é o quanto já foi apurado).
+- **Lista de municípios ainda não publicada.** O TSE só publica a lista de municípios do 2º turno perto da votação. O painel avisa uma vez e tenta de novo a cada minuto; não precisa reiniciar.
+- **Conferência no TSE:** `node scripts/verificar-segundo-turno.js` diz o que já foi publicado e se o formato bate (2 candidatos, números 13 e 22, mapeamento, lista de municípios). Rode quando os arquivos aparecerem.
+- **Governadores** continuam só com a estratificação por município, baixando só os municípios grandes.
 - **Ensaio.** Antes de o TSE publicar os arquivos do 2º turno, `node server.js --demo --turno 2` simula a disputa (dados fictícios) com a
   estrutura do 1º turno reduzida aos dois mais votados; governador só nas UFs em que o líder não passou de 50%.
 - **Teste com votos reais:** `node scripts/ensaio-segundo-turno.js` prevê o 2º turno de 2022 a partir do 1º (município por município, só a
   ordem de chegada é simulada). Resultado: o swing erra a diferença Lula − Bolsonaro em ~0,6 pp com 2% apurado e ~0,1 pp com 20%, contra
   ~12 pp e ~5 pp da extrapolação simples. Premissas de transferência "razoáveis" chutadas à mão **pioraram** o resultado no começo da
-  apuração; o padrão sem premissas é o mais seguro, e o editor serve para testar hipóteses.
+  apuração; o padrão sem premissas é o mais seguro, e o editor serve para testar hipóteses. Com a apuração começando pelos grandes (`--ordem grandes`) ou em ordem aleatória, o swing também fica dentro de ~0,6 pp com 2% apurado e ~0,1 pp dali em diante.
 
 ## Na noite da apuração
 

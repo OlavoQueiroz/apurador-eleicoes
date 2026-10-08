@@ -566,7 +566,8 @@ function conteudoTile(item) {
   return {
     sub: comLider ? esc(lider.partido) : '',
     sub2: comLider ? fmtPct(lider.pct, 0) : fmtPct(item.secoes.pctTotalizadas, 0),
-    pct: item.secoes.pctTotalizadas,
+    // 2º turno: a cor é a do líder e a força é a margem sobre o outro finalista (e não o quanto já foi apurado).
+    pct: comLider && item.turno === 2 && item.segundo ? forcaMargem(lider.pct - item.segundo.pct) : item.secoes.pctTotalizadas,
     cor: comLider ? corPartido(lider.partido) : null,
     vazio: false,
   };
@@ -702,6 +703,14 @@ function rotulosMapaHtml(ativas, eleitas = new Set()) {
 function legendaHtml({ unidade = 'UF' } = {}) {
   if (ehComparativo()) return legendaComparativoHtml();
   const gradiente = (cor) => `<span class="leg-grad" style="--cor:${cor}"></span>`;
+  // 2º turno (apuração): cor do líder de cada UF, mais forte quanto maior a margem sobre o outro finalista.
+  if (estado.meta.turno === 2 && ehMajoritario(estado.cargo) && unidade === 'UF' && estado.visao === 'apuracao') {
+    const lideres = [...new Set([...estado.resumo.values()].filter((i) => i.cargo === estado.cargo && i.turno === 2 && i.lider).map((i) => i.lider.partido))].sort();
+    const itens = lideres.map((p) => `<span class="leg-item"><i style="background:${corPartido(p)}"></i>${esc(p)}</span>`).join('');
+    return `<div class="leg-linha"><span class="leg-titulo">Na frente</span>${itens || '<span class="muted">aguardando votos</span>'}</div>
+      <div class="leg-linha"><span class="leg-titulo">Margem</span><span class="muted">estreita</span>${gradiente('var(--text)')}<span class="muted">ampla</span></div>
+      <p class="muted pequeno leg-nota">Com pouca apuração a margem de uma UF engana: as regiões chegam em ordens diferentes.</p>`;
+  }
   // Mesma linha em todos os cargos: o gradiente mostra a fatia das seções já totalizadas.
   const totalizadas = `<div class="leg-linha"><span class="leg-titulo">Seções totalizadas</span><span class="muted">0%</span>${gradiente('var(--accent)')}<span class="muted">100%</span></div>`;
   // Fora da projeção não há chave de cores dos partidos: o painel ao lado já mostra a etiqueta colorida de cada um.

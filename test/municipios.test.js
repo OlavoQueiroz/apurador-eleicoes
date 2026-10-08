@@ -237,6 +237,29 @@ test('manter percorre as UFs pedindo o acompanhamento de cada uma', async () => 
   assert.deepEqual([...new Set(fonte.pedidos)].sort(), ['mg', 'sp']);
 });
 
+test('manter tenta de novo quando a lista de municípios ainda não foi publicada (2º turno)', async () => {
+  let tentativas = 0;
+  const fonte = {
+    pedidos: [],
+    async listar() {
+      tentativas += 1;
+      if (tentativas < 3) throw new Error('HTTP 404');
+      return new Map([['sp', [{ codigo: '1', nome: 'UM' }]]]);
+    },
+    async acompanhar({ uf }) { this.pedidos.push(uf); return { status: 'novo', mapa: new Map(), etag: null }; },
+    async obter() { return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  const { m } = novo(fonte, { validadeMs: 5, novaTentativaListaMs: 5 });
+  const avisos = [];
+  m.avisoLista = (e) => avisos.push(e.message);
+  const rodando = m.manter({ eleicao: 1, cargo: 1 });
+  await new Promise((r) => setTimeout(r, 80));
+  m.parar();
+  await rodando;
+  assert.equal(avisos.length, 2);
+  assert.ok(fonte.pedidos.includes('sp'), 'depois que a lista saiu, carregou os municípios');
+});
+
 // ---------- só os municípios grandes ----------
 
 test('só baixa os municípios grandes (e o maior de cada UF), escolhidos pelo tamanho do acompanhamento', async () => {

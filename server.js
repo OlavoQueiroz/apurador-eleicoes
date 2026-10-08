@@ -190,6 +190,11 @@ servidor.listen(cfg.porta, cfg.host, async () => {
   // Município em segundo plano: começa só depois do primeiro ciclo das UFs, para não competir com ele.
   const eleicaoPresidente = eleicoes.eleicoes[CARGOS[1].pleito]?.[cfg.turno];
   if (cfg.municipios && cfg.cargos.includes(1) && eleicaoPresidente) {
+    let avisouLista = false;
+    municipios.avisoLista = (erro) => {
+      if (!avisouLista) log(`lista de municípios ainda indisponível (${erro.message}); tentando de novo a cada minuto.`);
+      avisouLista = true;
+    };
     primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1 }))
       .catch((erro) => log('erro ao carregar municípios:', erro.message));
     log('Carregando em segundo plano os municípios da presidência (use --sem-municipios para desligar).');

@@ -159,7 +159,12 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     if (uf === 'br') {
       if (cargo !== 1) return indisponivel('Escolha uma UF: o modelo trabalha com os municípios de uma UF por vez.');
-      const ufs = [...(await municipios.listar(eleicao)).keys()];
+      let ufs;
+      try {
+        ufs = [...(await municipios.listar(eleicao)).keys()];
+      } catch (erro) {
+        return indisponivel(`Aguardando o TSE publicar a lista de municípios (${erro.message}).`, { carregando: true });
+      }
       const fotos = ufs.map((u) => ({ uf: u, foto: municipios.espiar({ eleicao, cargo, uf: u }), ufDados: apuracao.estado.get(`${cargo}:${u}`)?.dados ?? null }));
       const prontas = fotos.filter(({ foto }) => !foto.primeiraCarga).length;
       if (prontas === 0) {

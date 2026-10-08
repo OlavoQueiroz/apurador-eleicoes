@@ -27,7 +27,7 @@ const dormir = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export class Municipios {
   constructor({
     fonte, ciclo, cache = null, limitador = null, minimoEleitores = null, concorrencia = 2, espacamentoMs = 200, validadeMs = 120_000,
-    revalidarMs = 600_000, pausaUfMs = 500, agora = Date.now,
+    revalidarMs = 600_000, pausaUfMs = 500, novaTentativaListaMs = 60_000, agora = Date.now,
   }) {
     this.fonte = fonte;
     this.ciclo = ciclo;
@@ -37,6 +37,7 @@ export class Municipios {
     this.minimoEleitores = minimoEleitores;
     this.revalidarMs = revalidarMs;
     this.pausaUfMs = pausaUfMs;
+    this.novaTentativaListaMs = novaTentativaListaMs; // lista de municípios ainda não publicada (404): tenta de novo depois disso
     // Ritmo das requisições (baixa prioridade). Compartilhado com o ciclo principal quando recebe o mesmo limitador.
     this.limitador = limitador ?? new Limitador({ altaMs: 0, baixaMs: espacamentoMs, agora });
     this.agora = agora;
@@ -99,7 +100,15 @@ export class Municipios {
   // Passada completa por todas as UFs de um cargo, uma de cada vez, repetida a cada validade.
   async manter({ eleicao, cargo }) {
     while (!this.parado) {
-      const ufs = [...(await this.listar(eleicao)).keys()];
+      let ufs;
+      try {
+        ufs = [...(await this.listar(eleicao)).keys()];
+      } catch (erro) {
+        // Típico do 2º turno: o TSE só publica a lista de municípios perto da votação. Em vez de desistir, tenta de novo.
+        this.avisoLista?.(erro);
+        await dormir(this.novaTentativaListaMs);
+        continue;
+      }
       for (const uf of ufs) {
         if (this.parado) return;
         const entrada = this.#entrada({ eleicao, cargo, uf });
