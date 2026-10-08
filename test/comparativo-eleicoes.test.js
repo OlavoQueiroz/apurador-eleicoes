@@ -72,8 +72,9 @@ test('corDoMapa: cor do PT quando o saldo vai para o PT, do campo de Bolsonaro n
   assert.equal(corDoMapa({ pronto: true, saldo: 20 }).forca, 100);
 });
 
-test('períodos: três, com a eleição base e os nomes certos de cada candidatura', () => {
-  assert.deepEqual(Object.keys(PERIODOS), ['2026x2022', '2026x2018', '2022x2018']);
+test('períodos: três do 1º turno e dois do 2º, com a eleição base e os nomes certos de cada candidatura', () => {
+  assert.deepEqual(Object.values(PERIODOS).filter((p) => !p.turno2).map((p) => p.id), ['2026x2022', '2026x2018', '2022x2018']);
+  assert.deepEqual(Object.values(PERIODOS).filter((p) => p.turno2).map((p) => p.id), ['2026t2x2026t1', '2026t2x2022t2']);
   assert.equal(PERIODOS['2026x2018'].pt.nomeBase, 'Haddad');
   assert.equal(PERIODOS['2022x2018'].vivo, false);
   assert.equal(PERIODOS['2026x2022'].vivo, true);

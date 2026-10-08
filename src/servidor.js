@@ -36,18 +36,57 @@ const PERIODOS_COMPARATIVO = {
   '2026x2022': { anoAtual: 2026, anoBase: 2022 },
   '2026x2018': { anoAtual: 2026, anoBase: 2018 },
   '2022x2018': { anoAtual: 2022, anoBase: 2018 },
+  // 2º turno de 2026 (ao vivo) contra o 1º turno do mesmo ano e contra o 2º turno de 2022. A base é guardada em `basesHistoricas`.
+  '2026t2x2026t1': { anoAtual: 2026, anoBase: '2026t1', segundoTurno: true },
+  '2026t2x2022t2': { anoAtual: 2026, anoBase: '2022t2', segundoTurno: true },
 };
 
 const LIMITE_BUFFER_SSE = 256 * 1024; // acima disso o cliente SSE não está lendo e é desconectado
 const MANTER_PROJECAO_MS = 3 * 60_000; // por quanto tempo vale a última projeção boa se a UF sai de sincronia
 
 // `anterior` = 2022 (swing e comparativo); `historicos` = outras eleições já encerradas, por ano ({ 2018: anterior2018 }).
-export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, historicos = {}, partidos = null }) {
-  const basesHistoricas = { ...(anterior ? { 2022: anterior } : {}), ...historicos };
-  // O swing precisa dos dados de 2022; sem eles o modelo aparece como indisponível.
-  const modelos = MODELOS.map((m) => (m.id === 'swing' && !anterior
-    ? { ...m, disponivel: false, motivo: 'Dados de 2022 não carregados (rode scripts/gerar-historico-2022.js).' }
-    : m));
+// Candidatos da base com o total de votos de cada um (o editor de premissas ordena pelos maiores).
+function votosDoPrimeiroTurno(anterior) {
+  const totais = {};
+  for (const u of Object.values(anterior.brutoPorUf())) for (const [n, v] of Object.entries(u.votos)) totais[n] = (totais[n] ?? 0) + v;
+  return Object.fromEntries(Object.entries(anterior.candidatos22).map(([n, c]) => [n, { ...c, votos: totais[n] ?? 0 }]));
+}
+
+// `baseSwing` descreve a base do swing quando não é 2022 (no 2º turno, o 1º turno de 2026): { rotulo, curto, arquivo }.
+export function criarServidor({ apuracao, meta, diretorioPublico, municipios = null, historico = null, limitador = null, anterior = null, baseSwing = null, historicos = {}, partidos = null }) {
+  const basesHistoricas = { ...(anterior && !baseSwing ? { 2022: anterior } : {}), ...(anterior && baseSwing ? { '2026t1': anterior } : {}), ...historicos };
+  // O swing precisa dos dados da base (2022, ou o 1º turno no 2º turno); sem eles o modelo aparece como indisponível.
+  const base = baseSwing ?? { rotulo: '2022', curto: '2022', arquivo: 'scripts/gerar-historico-2022.js' };
+  const modelos = MODELOS.map((m) => {
+    if (m.id !== 'swing') return m;
+    if (!anterior) return { ...m, disponivel: false, motivo: `Dados de ${base.rotulo} não carregados (rode ${base.arquivo}).` };
+    if (!baseSwing) return m;
+    return {
+      ...m,
+      nome: `Swing sobre o ${base.rotulo}`,
+      curto: `Swing ${base.curto}`,
+      resumo: `Compara cada finalista com o que o campo dele teve no ${base.rotulo} onde já apurou e aplica a diferença ao que falta.`,
+      descricao: `Mede quanto cada finalista está acima ou abaixo do que o campo dele teve no ${base.rotulo}, nos lugares já apurados, e aplica essa variação ao que falta, lugar por lugar. `
+        + 'Os votos dos candidatos eliminados podem ser atribuídos aos finalistas nas premissas de transferência (editor na aba Projeção ou dados-historicos/mapeamento-presidente-t2.json); o que não for atribuído é absorvido pela variação medida.',
+      base: { ano: base.ano, turno: base.turno, rotulo: base.rotulo },
+      transferencias: Object.keys(anterior.candidatos22 ?? {}).length ? { candidatos: votosDoPrimeiroTurno(anterior) } : null,
+    };
+  });
+  // Premissas de transferência do pedido (?transf={"55":{"13":0.2,"22":0.5}}): uma base própria, guardada por chave (poucas).
+  const variantes = new Map();
+  const anteriorDoPedido = (url) => {
+    const bruto = new URL(url, 'http://localhost').searchParams.get('transf');
+    if (!anterior || !bruto || !baseSwing) return { anterior, chave: '' };
+    if (!variantes.has(bruto)) {
+      let transf = null;
+      try { transf = JSON.parse(bruto); } catch { /* premissa ilegível: usa a padrão */ }
+      if (!transf || typeof transf !== 'object') return { anterior, chave: '' };
+      if (variantes.size >= 20) variantes.delete(variantes.keys().next().value);
+      variantes.set(bruto, anterior.comTransferencias(transf));
+    }
+    return { anterior: variantes.get(bruto), chave: bruto };
+  };
+  const anteriorPadrao = anterior;
   const modeloPorIdAtivo = (id) => modelos.find((m) => m.id === id);
   const clientes = new Set();
   const ultimaBoaPorUf = new Map();
@@ -68,6 +107,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     return {
       ano: meta.ano,
       turno: meta.turno,
+      baseSwing: baseSwing ? { rotulo: baseSwing.rotulo, curto: baseSwing.curto, ano: baseSwing.ano, turno: baseSwing.turno } : null,
       demo: meta.demo,
       intervaloSegundos: meta.intervalo,
       cargos,
@@ -92,7 +132,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
   // Modelo 2: precisa dos municípios (ver municipios.js). Uma UF por vez, ou o Brasil na presidência,
   // que soma as 27 UFs e o exterior depois que a carga em segundo plano termina.
-  const projecaoPorMunicipios = async (item, modeloId) => {
+  const projecaoPorMunicipios = async (item, modeloId, { anterior, chave: chaveBase } = { anterior: anteriorPadrao, chave: '' }) => {
     const { cargo, uf, eleicao } = item.alvo;
     const indisponivel = (motivo, extra = {}) => ({ modelo: modeloId, disponivel: false, motivo, ...extra });
     if (modeloId === 'swing' && cargo !== 1) return indisponivel('O swing histórico, por enquanto, só existe para presidente.');
@@ -103,7 +143,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
     // alguns minutos em vez de cair na extrapolação simples e voltar no ciclo seguinte (a tela oscilaria).
     const projetarDaUf = (ufDaFoto, foto, ufDados, limite) => {
       const r = calcularUf(foto, ufDados, limite);
-      const chave = `${modeloId}:${cargo}:${ufDaFoto}:${limite ?? 'tudo'}`;
+      const chave = `${modeloId}:${cargo}:${ufDaFoto}:${limite ?? 'tudo'}:${chaveBase}`;
       if (r.disponivel && r.plano !== 'extrapolacao') {
         ultimaBoaPorUf.set(chave, { r, em: Date.now() });
         return r;
@@ -209,7 +249,12 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       const periodo = new URL(req.url, 'http://localhost').searchParams.get('periodo') ?? '2026x2022';
       const def = PERIODOS_COMPARATIVO[periodo];
       if (!def) return enviarJson(res, 400, { disponivel: false, periodo, motivo: `Período desconhecido: ${periodo}.` });
-      const naoCarregado = (ano) => ({ disponivel: false, periodo, motivo: `Dados de ${ano} não carregados (rode scripts/gerar-historico-${ano}.js).` });
+      // Os períodos do 2º turno só valem acompanhando o 2º turno, e os de sempre só no 1º.
+      if (Boolean(def.segundoTurno) !== (meta.turno === 2)) {
+        return enviarJson(res, 200, { disponivel: false, periodo, motivo: def.segundoTurno ? 'Este período só existe quando o painel acompanha o 2º turno (--turno 2).' : 'Este período é do 1º turno; com o painel no 2º turno, use os períodos do 2º turno.' });
+      }
+      const arquivoDe = (ano) => (ano === '2026t1' ? 'gerar-historico-2026-t1.js' : ano === '2022t2' ? 'gerar-historico-2022.js --turno 2' : `gerar-historico-${ano}.js`);
+      const naoCarregado = (ano) => ({ disponivel: false, periodo, motivo: `Dados de ${ano} não carregados (rode scripts/${arquivoDe(ano)}).` });
       const base = basesHistoricas[def.anoBase];
       if (!base) return enviarJson(res, 200, naoCarregado(def.anoBase));
       const vivo = def.anoAtual === meta.ano;
@@ -289,7 +334,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       const item = apuracao.estado.get(`${Number(p[2])}:${p[3]}`);
       if (!modelo || !item) return enviarJson(res, 404, { erro: 'Modelo, cargo ou abrangência desconhecidos.' });
       if (!modelo.disponivel) return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: modelo.motivo });
-      if (modelo.id === 'estratificado' || modelo.id === 'swing') return enviarJson(res, 200, await projecaoPorMunicipios(item, modelo.id));
+      if (modelo.id === 'estratificado' || modelo.id === 'swing') return enviarJson(res, 200, await projecaoPorMunicipios(item, modelo.id, anteriorDoPedido(req.url)));
       return enviarJson(res, 200, { modelo: modelo.id, disponivel: false, motivo: modelo.motivo ?? 'Modelo sem cálculo nesta versão.' });
     }
 

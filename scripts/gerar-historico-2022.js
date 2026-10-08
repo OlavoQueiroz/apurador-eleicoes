@@ -3,6 +3,7 @@
 // município, a partir dos dados abertos do TSE. Usado pelo modelo de swing histórico.
 //   node scripts/gerar-historico-2022.js              baixa só o arquivo da presidência (~2 MB) de dentro do zip
 //   node scripts/gerar-historico-2022.js --csv arq    usa um CSV já baixado
+//   node scripts/gerar-historico-2022.js --turno 2    gera presidente-2022-t2.json (2º turno), base do comparativo do 2º turno de 2026
 // O zip completo tem 642 MB; este script lê só a entrada `..._BR.csv` por requisições de faixa (Range).
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -12,7 +13,8 @@ import { inflateRawSync } from 'node:zlib';
 
 const ZIP = 'https://cdn.tse.jus.br/estatistica/sead/odsele/votacao_candidato_munzona/votacao_candidato_munzona_2022.zip';
 const ENTRADA = 'votacao_candidato_munzona_2022_BR.csv';
-const saida = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dados-historicos/presidente-2022-t1.json');
+const TURNO = process.argv.includes('--turno') ? process.argv[process.argv.indexOf('--turno') + 1] : '1'; // `--turno 2` gera o 2º turno
+const saida = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../dados-historicos/presidente-2022-t${TURNO}.json`);
 const UA = 'apurador-local/0.1 (painel pessoal; leitura de uma entrada do zip)';
 
 async function faixa(inicio, fim) {
@@ -75,7 +77,7 @@ const col = Object.fromEntries(cab.map((c, k) => [c, k]));
 const candidatos = {};
 const municipios = {};
 for (const c of it) {
-  if (c[col.NR_TURNO] !== '1' || c[col.NM_TIPO_DESTINACAO_VOTOS] !== 'Válido') continue;
+  if (c[col.NR_TURNO] !== TURNO || c[col.NM_TIPO_DESTINACAO_VOTOS] !== 'Válido') continue;
   const codigo = c[col.CD_MUNICIPIO].padStart(5, '0');
   const numero = c[col.NR_CANDIDATO];
   candidatos[numero] ??= { nomeUrna: c[col.NM_URNA_CANDIDATO], partido: c[col.SG_PARTIDO] };
@@ -87,8 +89,8 @@ const total = {};
 for (const m of Object.values(municipios)) for (const [n, v] of Object.entries(m.votos)) total[n] = (total[n] ?? 0) + v;
 await mkdir(path.dirname(saida), { recursive: true });
 await writeFile(saida, JSON.stringify({
-  fonte: 'TSE, dados abertos: votacao_candidato_munzona_2022 (entrada _BR.csv), 1º turno, votos nominais válidos',
-  ano: 2022, turno: 1, cargo: 1, candidatos, municipios,
+  fonte: `TSE, dados abertos: votacao_candidato_munzona_2022 (entrada _BR.csv), ${TURNO}º turno, votos nominais válidos`,
+  ano: 2022, turno: Number(TURNO), cargo: 1, candidatos, municipios,
 }));
 console.log(`${Object.keys(municipios).length} municípios, ${Object.keys(candidatos).length} candidatos → ${path.relative(process.cwd(), saida)}`);
 console.log('Totais:', Object.entries(total).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, v]) => `${candidatos[n].nomeUrna} ${v.toLocaleString('pt-BR')}`).join(' · '));

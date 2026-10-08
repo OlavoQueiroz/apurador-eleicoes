@@ -3,9 +3,9 @@
 // de incerteza do painel. Sem dependência do restante do app (recebe tudo por parâmetro) para poder ser testado.
 
 // Busca a projeção de cada modelo disponível: [[id, resposta | null], ...]. `getJson` é o do app.
-export function carregarComparacao(modelos, cargo, uf, getJson) {
+export function carregarComparacao(modelos, cargo, uf, getJson, urlDe = (id, c, u) => `/api/projecao/${id}/${c}/${u}`) {
   const ids = modelos.filter((m) => m.disponivel).map((m) => m.id);
-  return Promise.all(ids.map((id) => getJson(`/api/projecao/${id}/${cargo}/${uf}`).then((r) => [id, r]).catch(() => [id, null])));
+  return Promise.all(ids.map((id) => getJson(urlDe(id, cargo, uf)).then((r) => [id, r]).catch(() => [id, null])));
 }
 
 // Linhas e dispersão (em pontos percentuais) da diferença entre o 1º e o 2º da projeção atual `p`.
