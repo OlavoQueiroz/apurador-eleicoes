@@ -86,6 +86,8 @@ Ctrl+C continua valendo.
 | `--sem-municipios` (`MUNICIPIOS=0`) | carga ligada | Desliga a carga, em segundo plano, dos municípios da presidência (usada na projeção do Brasil). Os municípios de uma UF ainda carregam sob demanda. |
 | `--municipios-minimo N` (`MUNICIPIOS_MINIMO`) | 30000 | Só municípios com pelo menos N eleitores (mais o maior de cada UF) têm o arquivo baixado; o resto da UF vem do arquivo da UF. |
 | `--municipios-ritmo-ms N` (`MUNICIPIOS_RITMO_MS`) | 120 | Milissegundos entre dois pedidos de município ao TSE (120 ≈ 8 por segundo; 200 era o ritmo anterior, ≈ 5 por segundo). Entre 50 e 2000. Se o TSE responder 429, o painel dobra o intervalo sozinho; se acontecer, volte a `200`. |
+| `--ritmo-uf-ms N` (`RITMO_UF_MS`) | espalhado | Milissegundos entre dois pedidos de arquivo de UF. Por padrão o painel espalha os pedidos pelo ciclo (metade do intervalo ÷ nº de arquivos, entre 50 e 400 ms, com variação aleatória de ±25%), em vez de disparar todos no início do minuto. `50` volta ao ritmo antigo. Entre 20 e 2000. |
+| `--sem-ritmo-adaptativo` (`RITMO_ADAPTATIVO=0`) | desligado | Por padrão, depois de minutos sem 429 e com tráfego de município, o intervalo dos municípios desce até a metade do configurado (−10% por minuto), parando no último intervalo que já levou 429 (mais 25% de folga). Essa sondagem é a que mais pode provocar 429; com esta opção o ritmo fica sempre no configurado. |
 | `--municipios-todos` | desligado | Baixa todos os municípios (~5,7 mil arquivos), em vez de só os grandes. |
 
 ## Como funciona
@@ -292,6 +294,17 @@ para a disputa de dois candidatos:
 - Ligue **antes** de a apuração começar: a carga inicial dos municípios leva alguns minutos e é melhor em horário morto.
 - Se o TSE responder 429, o painel recua sozinho; acompanhe `requisicoes.limitadas` em `/api/meta`. Não tente contornar o
   limite com várias máquinas ou IPs: o caminho é pedir menos.
+
+## Ritmo de pedidos e registro
+
+Tudo o que sai para o TSE passa por um limitador (`src/limitador.js`). Para pedir melhor, e não mais:
+
+- **Espalhado:** os arquivos de UF saem espaçados pelo ciclo (com variação aleatória), e o município só dá passagem à UF que está para sair, para um não travar o outro.
+- **Prioridade:** no ciclo, presidente antes dos outros cargos e as UFs de maior eleitorado primeiro; nos municípios, as UFs e as cidades com mais a apurar (eleitores × fração de seções que falta) vêm primeiro.
+- **Adaptativo:** ver `--sem-ritmo-adaptativo`. O piso aprendido fica em `dados/requisicoes/piso-municipio.json` e vale na execução seguinte.
+- **Registro:** `dados/requisicoes/ele2026-tN.jsonl` ganha uma linha por minuto e uma por 429/503, com os pedidos dos últimos 1, 10 e 60 s naquele instante. Depois de uma apuração, as linhas `"tipo":"limitado"` mostram em que ritmo o TSE começou a recusar: é o dado para decidir qualquer aumento de ritmo.
+
+O painel **não** usa várias máquinas, IPs ou proxies. Só vale reavaliar isso com o registro acima em mãos (se mostrar que o limite é por IP e o atraso dos municípios ainda atrapalha), e como decisão explícita.
 
 ## Limitações conhecidas
 

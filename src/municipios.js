@@ -106,11 +106,12 @@ export class Municipios {
   }
 
   // Passada completa por todas as UFs de um cargo, uma de cada vez, repetida a cada validade.
-  async manter({ eleicao, cargo }) {
+  async manter({ eleicao, cargo, ordenarUfs = null }) {
     while (!this.parado) {
       let ufs;
       try {
         ufs = [...(await this.listar(eleicao)).keys()];
+        if (ordenarUfs) ufs = ordenarUfs(ufs); // a ordem é recalculada a cada passada
       } catch (erro) {
         // Típico do 2º turno: o TSE só publica a lista de municípios perto da votação. Em vez de desistir, tenta de novo.
         this.avisoLista?.(erro);
@@ -195,7 +196,13 @@ export class Municipios {
       // como saber, então espera a próxima passada completa em vez de varrer tudo.
       const guiada = comAcompanhamento && !completa;
 
-      const fila = [...municipios];
+      // Quem tem mais a apurar vem primeiro (eleitores × fração de seções que falta): com o ritmo limitado, é o que mais mexe no total.
+      const faltaApurar = (m) => {
+        const d = entrada.detalhes?.get(m.codigo);
+        if (!d) return 0;
+        return d.aptos * (d.secoes.total > 0 ? 1 - d.secoes.totalizadas / d.secoes.total : 1);
+      };
+      const fila = [...municipios].sort((a, b) => faltaApurar(b) - faltaApurar(a));
       let falhas = 0;
       let primeiroErro = '';
       const trabalhador = async () => {

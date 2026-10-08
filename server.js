@@ -15,6 +15,7 @@ import { carregarAnterior } from './src/anterior.js';
 import { carregarPartidos } from './src/partidos.js';
 import { criarServidor } from './src/servidor.js';
 import { abrirNoNavegador } from './src/abrir.js';
+import { criarRegistroRequisicoes, gravarRitmoAprendido, lerRitmoAprendido, linhaDoEvento, linhaDoMinuto } from './src/metricas.js';
 
 const hora = () => new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const log = (...partes) => console.log(`[${hora()}]`, ...partes);
@@ -58,8 +59,26 @@ const baseDemo = cfg.demo && cfg.turno === 2
 const fonte = cfg.demo ? criarFonteDemo(baseDemo, { duracaoMin: cfg.demoMinutos, semente: Math.floor(Math.random() * 2 ** 31) }) : fonteTse;
 // Ritmo único para tudo que vai ao TSE: o dado por UF (ciclo principal) tem prioridade sobre os municípios, e um
 // 429 de qualquer lado faz os dois recuarem. Na demonstração nada de município vai ao TSE.
-const limitador = cfg.demo ? new Limitador({ altaMs: 0, baixaMs: 0 }) : new Limitador({ altaMs: 50, baixaMs: cfg.municipiosRitmoMs });
 const raiz = path.dirname(fileURLToPath(import.meta.url));
+// Registro do ritmo de pedidos (uma linha por minuto e uma por 429/503) e o piso aprendido do ritmo adaptativo, em dados/ (fora do git).
+const arquivoRitmo = path.join(raiz, 'dados', 'requisicoes', `${eleicoes.ciclo}-t${cfg.turno}.jsonl`);
+const arquivoPiso = path.join(raiz, 'dados', 'requisicoes', 'piso-municipio.json');
+const registroRequisicoes = cfg.demo ? null : criarRegistroRequisicoes(arquivoRitmo);
+// Arquivos de UF espalhados pelo ciclo (e não todos de uma vez no início): ~metade do intervalo dividida pelos arquivos, entre 50 e 400 ms.
+const espacamentoUfMs = cfg.ritmoUfMs ?? Math.min(400, Math.max(50, Math.floor((0.5 * cfg.intervalo * 1000) / alvos.length)));
+const limitador = cfg.demo
+  ? new Limitador({ altaMs: 0, baixaMs: 0 })
+  : new Limitador({
+    altaMs: espacamentoUfMs,
+    baixaMs: cfg.municipiosRitmoMs,
+    jitter: 0.25,
+    baixaMinMs: cfg.ritmoAdaptativo ? Math.max(50, Math.floor(cfg.municipiosRitmoMs / 2)) : null,
+    baixaPisoInicial: cfg.ritmoAdaptativo ? await lerRitmoAprendido(arquivoPiso) : 0,
+    aoEvento: (evento) => {
+      registroRequisicoes.gravar(linhaDoEvento(evento));
+      if (cfg.ritmoAdaptativo) gravarRitmoAprendido(arquivoPiso, evento.baixaPiso);
+    },
+  });
 // Último dado de cada arquivo em disco (.cache/apuracao): se o TSE negar a partida (429), a tela mostra o que já se sabia.
 const apuracao = new Apuracao({
   alvos, fonte, intervaloMs: cfg.intervalo * 1000, limitador,
@@ -150,6 +169,7 @@ apuracao.on('erro', (erro) => log('erro no ciclo:', erro.message));
 let limitadasAntes = 0;
 setInterval(() => {
   const e = limitador.estatisticas();
+  registroRequisicoes?.gravar(linhaDoMinuto(e));
   if (cfg.verboso || e.limitadas !== limitadasAntes) {
     log(`pedidos ao TSE: ${e.porMinuto}/min (UF ${e.alta}, município ${e.baixa}) · ${e.limitadas} limitados (429/503)`);
   }
@@ -183,6 +203,7 @@ servidor.listen(cfg.porta, cfg.host, async () => {
   const url = `http://${cfg.host === '0.0.0.0' ? 'localhost' : cfg.host}:${cfg.porta}`;
   log(`Painel em ${url}`);
   log(`${cfg.ano} · ${cfg.turno}º turno · ${alvos.length} arquivos · consulta a cada ${cfg.intervalo}s`);
+  if (!cfg.demo) log(`Ritmo: UF a cada ~${espacamentoUfMs} ms, município ${cfg.municipiosRitmoMs} ms${cfg.ritmoAdaptativo ? ` (adaptativo, até ${limitador.baixaMinMs} ms; piso aprendido ${limitador.baixaPiso} ms)` : ''}; registro em ${path.relative(raiz, arquivoRitmo)}.`);
   if (cfg.demo) log('MODO DEMONSTRAÇÃO: os votos são fictícios (simulação de ~' + cfg.demoMinutos + ' min).');
   const doCache = await apuracao.carregarCache();
   if (doCache) log(`Cache: ${doCache} arquivos repostos do disco (valem até o TSE responder).`);
@@ -195,7 +216,13 @@ servidor.listen(cfg.porta, cfg.host, async () => {
       if (!avisouLista) log(`lista de municípios ainda indisponível (${erro.message}); tentando de novo a cada minuto.`);
       avisouLista = true;
     };
-    primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1 }))
+    // As UFs que mais têm a apurar (eleitorado × fração que falta) são atualizadas primeiro; as já fechadas, por último.
+    const faltaApurar = (uf) => {
+      const d = apuracao.estado.get(`1:${uf}`)?.dados;
+      return d ? (d.eleitorado?.total ?? 0) * (d.totalizacaoFinal ? 0 : 1 - (d.secoes?.pctTotalizadas ?? 0) / 100) : 0;
+    };
+    const ordenarUfs = (ufs) => [...ufs].sort((a, b) => faltaApurar(b) - faltaApurar(a));
+    primeiroCiclo.then(() => municipios.manter({ eleicao: eleicaoPresidente, cargo: 1, ordenarUfs }))
       .catch((erro) => log('erro ao carregar municípios:', erro.message));
     log('Carregando em segundo plano os municípios da presidência (use --sem-municipios para desligar).');
   }

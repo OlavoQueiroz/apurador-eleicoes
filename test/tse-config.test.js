@@ -167,3 +167,13 @@ test('descobrirEleicoes: o erro de um 429 traz status e o Retry-After, para quem
     globalThis.fetch = original;
   }
 });
+
+test('ritmo: UF espalhado por padrão (null) e adaptativo ligado; opções e validação', () => {
+  const c = lerConfig([], {});
+  assert.equal(c.ritmoUfMs, null);
+  assert.equal(c.ritmoAdaptativo, true);
+  assert.equal(lerConfig(['--ritmo-uf-ms', '50'], {}).ritmoUfMs, 50);
+  assert.equal(lerConfig(['--sem-ritmo-adaptativo'], {}).ritmoAdaptativo, false);
+  assert.equal(lerConfig([], { RITMO_ADAPTATIVO: '0' }).ritmoAdaptativo, false);
+  assert.throws(() => lerConfig(['--ritmo-uf-ms', '5'], {}), /ritmo-uf-ms/);
+});

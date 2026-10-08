@@ -334,6 +334,40 @@ test('reinício com o acompanhamento fora do ar: usa os grandes e os tamanhos gu
   assert.match(snap.erro, /usando o que já foi carregado/);
 });
 
+// ---------- prioridade: quem tem mais a apurar vem primeiro ----------
+
+test('dentro da UF, baixa primeiro o município com mais a apurar (eleitores × fração que falta)', async () => {
+  const detalhes = new Map([
+    ['1', { aptos: 100_000, secoes: { total: 10, totalizadas: 9 } }], // falta 10 mil
+    ['2', { aptos: 60_000, secoes: { total: 10, totalizadas: 2 } }], // falta 48 mil
+    ['3', { aptos: 80_000, secoes: { total: 10, totalizadas: 5 } }], // falta 40 mil
+  ]);
+  const baixados = [];
+  const fonte = {
+    async listar() { return new Map([['sp', [{ codigo: '1', nome: 'A' }, { codigo: '2', nome: 'B' }, { codigo: '3', nome: 'C' }]]]); },
+    async acompanhar() { return { status: 'novo', mapa: new Map([['1', 'a'], ['2', 'a'], ['3', 'a']]), detalhes, etag: null }; },
+    async obter(alvo) { baixados.push(alvo.municipio); return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  const { m } = novo(fonte, { minimoEleitores: 30_000, concorrencia: 1 });
+  await m.consultar(consulta).pendente;
+  assert.deepEqual(baixados, ['2', '3', '1']);
+});
+
+test('manter percorre as UFs na ordem pedida por ordenarUfs', async () => {
+  const pedidos = [];
+  const fonte = {
+    async listar() { return new Map([['ac', [{ codigo: '1', nome: 'A' }]], ['sp', [{ codigo: '2', nome: 'B' }]], ['mg', [{ codigo: '3', nome: 'C' }]]]); },
+    async acompanhar({ uf }) { pedidos.push(uf); return { status: 'novo', mapa: new Map(), etag: null }; },
+    async obter() { return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  const { m } = novo(fonte, { validadeMs: 5000 });
+  const rodando = m.manter({ eleicao: 1, cargo: 1, ordenarUfs: (ufs) => [...ufs].sort().reverse() });
+  await new Promise((r) => setTimeout(r, 60));
+  m.parar();
+  await rodando;
+  assert.deepEqual(pedidos.slice(0, 3), ['sp', 'mg', 'ac']);
+});
+
 // ---------- só os municípios grandes ----------
 
 test('só baixa os municípios grandes (e o maior de cada UF), escolhidos pelo tamanho do acompanhamento', async () => {

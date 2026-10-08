@@ -97,7 +97,10 @@ export class Apuracao extends EventEmitter {
 
   async ciclo() {
     const iniciadoEm = this.agora();
-    const fila = [...this.estado.values()];
+    // Presidente antes dos demais cargos e, em cada cargo, as UFs de maior eleitorado primeiro (o nacional por último entre as UFs
+    // não importa: sai da soma). Com os pedidos espaçados, o que mais pesa é atualizado antes.
+    const peso = (i) => (i.dados?.eleitorado?.total ?? 0);
+    const fila = [...this.estado.values()].sort((a, b) => a.alvo.cargo - b.alvo.cargo || peso(b) - peso(a));
     const chavesAlteradas = [];
 
     const trabalhador = async () => {

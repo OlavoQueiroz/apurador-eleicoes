@@ -193,3 +193,17 @@ test('cache em disco: grava o dado novo, repõe na partida e o TSE seguinte subs
   assert.equal(a3.estado.get('1:br').dados.geracao, 'g2');
   assert.equal(a3.estado.get('1:br').doCache, false);
 });
+
+test('ciclo: presidente antes dos outros cargos e, em cada cargo, as UFs de maior eleitorado primeiro', async () => {
+  const pedidos = [];
+  const eleitorado = { 'br': 100, 'sp': 30, 'ac': 1, 'mg': 20 };
+  const alvos = [
+    { chave: '3:ac', cargo: 3, uf: 'ac' }, { chave: '1:ac', cargo: 1, uf: 'ac' }, { chave: '1:mg', cargo: 1, uf: 'mg' },
+    { chave: '1:sp', cargo: 1, uf: 'sp' }, { chave: '1:br', cargo: 1, uf: 'br' },
+  ];
+  const fonte = { async obter(alvo) { pedidos.push(alvo.chave); return { status: 'indisponivel' }; } };
+  const a = new Apuracao({ alvos, fonte, concorrencia: 1 });
+  for (const item of a.estado.values()) item.dados = { eleitorado: { total: eleitorado[item.alvo.uf] } };
+  await a.ciclo();
+  assert.deepEqual(pedidos, ['1:br', '1:sp', '1:mg', '1:ac', '3:ac']);
+});
