@@ -185,7 +185,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
 
     const snap = municipios.consultar({ eleicao, cargo, uf });
     if (snap.primeiraCarga) {
-      return indisponivel(snap.erro ?? 'Carregando os resultados dos municípios…', { carregando: snap.carregando, progresso: snap.progresso });
+      return indisponivel(snap.erro ?? 'Carregando os resultados dos municípios…', { carregando: snap.carregando, progresso: snap.progresso, proximaTentativaEm: snap.proximaTentativaEm });
     }
     const r = projetarDaUf(uf, snap, item.dados, 50);
     return {
@@ -194,6 +194,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       progresso: snap.progresso,
       atualizadoEm: snap.atualizadoEm,
       aviso: snap.erro,
+      proximaTentativaEm: snap.proximaTentativaEm,
     };
   };
 
@@ -207,6 +208,7 @@ export function criarServidor({ apuracao, meta, diretorioPublico, municipios = n
       progresso: snap.progresso,
       atualizadoEm: snap.atualizadoEm,
       erro: snap.erro,
+      proximaTentativaEm: snap.proximaTentativaEm,
       total: snap.total,
       municipios: snap.dados.map((d) => {
         const l = d.candidatos[0];

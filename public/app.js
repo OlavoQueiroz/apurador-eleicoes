@@ -203,6 +203,9 @@ async function carregarDetalhe() {
   clearTimeout(recarga);
   if (estado.visao === 'projecao' && estado.projecao?.carregando && !estado.projecao.disponivel) {
     recarga = setTimeout(atualizar, 1500);
+  } else if (estado.visao === 'projecao' && estado.projecao && !estado.projecao.disponivel && estado.projecao.proximaTentativaEm) {
+    // O servidor está com falha nesta UF e vai tentar de novo: pergunta de novo logo depois, em vez de esperar o próximo ciclo do TSE.
+    recarga = setTimeout(atualizar, Math.max(2000, estado.projecao.proximaTentativaEm - Date.now() + 1500));
   }
 }
 let recarga = null;
@@ -340,6 +343,12 @@ async function carregarMunicipios() {
         await carregarMunicipios();
         renderGrade();
       }, 1500);
+    } else if (resultados?.erro && resultados.proximaTentativaEm) {
+      // Falha na carga: o servidor tenta de novo sozinho; o mapa pergunta de novo quando chegar a hora.
+      recargaMunicipios = setTimeout(async () => {
+        await carregarMunicipios();
+        renderGrade();
+      }, Math.max(2000, resultados.proximaTentativaEm - Date.now() + 1500));
     }
   } catch {
     if (chave === chaveAtual()) estado.mun = undefined;
@@ -771,8 +780,9 @@ function mapaMunicipalHtml() {
   const { geo, resultados } = estado.mun;
   const total = Object.keys(geo.municipios).length;
   const progresso = resultados.carregando ? ` · carregando ${fmtInt(resultados.progresso.feitos)} de ${fmtInt(resultados.progresso.total)}` : '';
+  const falha = resultados.erro && !resultados.carregando ? ` · <span class="aviso-inline" title="${esc(resultados.erro)}">falha ao atualizar, tentando de novo</span>` : '';
   return `${mapaMunicipiosHtml(geo, resultados, corMunicipio)}
-    <div class="mun-titulo"><b>${esc(nomeUf(estado.uf))}</b><span>${fmtInt(total)} municípios${progresso}</span></div>`;
+    <div class="mun-titulo"><b>${esc(nomeUf(estado.uf))}</b><span>${fmtInt(total)} municípios${progresso}${falha}</span></div>`;
 }
 
 // O TSE escreve os nomes em maiúsculas.
@@ -1380,6 +1390,13 @@ function editorTransfHtml2(p) {
   return editorTransfHtml({ candidatos1T, finalistas: p.candidatos.slice(0, 2), transf: estado.transf, esc, corPartido });
 }
 
+// "Tentando de novo em N s": o servidor está com falha numa carga e já agendou outra tentativa.
+function esperaHtml(proximaTentativaEm) {
+  if (!proximaTentativaEm) return '';
+  const s = Math.max(0, Math.round((proximaTentativaEm - Date.now()) / 1000));
+  return `<span class="muted pequeno">Não foi possível carregar agora; o painel tenta de novo ${s > 0 ? `em cerca de ${s} s` : 'em instantes'}.</span>`;
+}
+
 function detalheProjecaoHtml() {
   const titulo = `${cargoMeta().nome} · ${nomeUf(estado.uf)}`;
   const topo = `<div class="detalhe-topo"><div><h2>${esc(titulo)}</h2>
@@ -1399,6 +1416,7 @@ function detalheProjecaoHtml() {
     return `${topo}<div class="vazio-proj"><div class="ic" aria-hidden="true">◷</div>
       <b>${p?.carregando ? 'Calculando a projeção…' : 'Aguardando os primeiros votos'}</b>
       <span class="muted pequeno">${esc(p?.motivo ?? 'Projeção indisponível.')}${andamento}</span>
+      ${esperaHtml(p?.proximaTentativaEm)}
       ${p?.carregando ? '' : `<div class="trilho"><i style="width:${frac}%"></i></div>
       <span class="muted pequeno">${fmtPct(frac, 0)} das seções totalizadas</span>`}</div>${comoCalcula}`;
   }

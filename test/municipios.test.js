@@ -260,6 +260,80 @@ test('manter tenta de novo quando a lista de municípios ainda não foi publicad
   assert.ok(fonte.pedidos.includes('sp'), 'depois que a lista saiu, carregou os municípios');
 });
 
+// ---------- falha do acompanhamento: nova tentativa rápida e cache dos tamanhos ----------
+
+const detalhesGrandes = new Map([
+  ['1', { aptos: 90_000, secoes: { total: 10, totalizadas: 5 } }],
+  ['2', { aptos: 500, secoes: { total: 1, totalizadas: 0 } }],
+]);
+function fonteAcompanhamentoQuebravel() {
+  const f = {
+    quebrado: false,
+    async listar() { return new Map([['sp', [{ codigo: '1', nome: 'UM' }, { codigo: '2', nome: 'DOIS' }]]]); },
+    async acompanhar() {
+      if (f.quebrado) throw new Error('HTTP 500');
+      return { status: 'novo', mapa: new Map([['1', '5:5'], ['2', '0:0']]), detalhes: detalhesGrandes, etag: null };
+    },
+    async obter() { return { status: 'novo', dados: { totalizacaoFinal: false }, etag: null }; },
+  };
+  return f;
+}
+const memoria = () => {
+  const guardado = new Map();
+  return { async ler(k) { return guardado.get(k) ?? null; }, async gravar(k, v) { guardado.set(k, JSON.parse(JSON.stringify(v))); } };
+};
+
+test('falha do acompanhamento: tenta de novo em segundos (não na validade) e mostra o motivo', async () => {
+  const fonte = fonteAcompanhamentoQuebravel();
+  fonte.quebrado = true;
+  const { m, relogio } = novo(fonte, { minimoEleitores: 30_000, validadeMs: 120_000, novaTentativaMs: 15_000 });
+  const r1 = m.consultar(consulta);
+  await r1.pendente;
+  const depois = m.espiar(consulta);
+  assert.match(depois.erro, /acompanhamento indisponível/);
+  assert.match(depois.erro, /500/);
+  assert.equal(depois.proximaTentativaEm, relogio.agora + 15_000);
+  // Antes do prazo curto não refaz; depois dele, sim, mesmo muito antes da validade de 120 s.
+  relogio.agora = 10_000;
+  const mesma = m.consultar(consulta).pendente;
+  relogio.agora = 16_000;
+  fonte.quebrado = false;
+  await m.consultar(consulta).pendente;
+  assert.equal(m.espiar(consulta).erro, null);
+  assert.equal(m.espiar(consulta).dados.length, 1, 'só o município grande');
+  assert.equal(m.espiar(consulta).proximaTentativaEm, null);
+  assert.ok(mesma === undefined || mesma === null || typeof mesma.then === 'function');
+});
+
+test('falhas seguidas dobram a espera, até a validade', async () => {
+  const fonte = fonteAcompanhamentoQuebravel();
+  fonte.quebrado = true;
+  const { m, relogio } = novo(fonte, { minimoEleitores: 30_000, validadeMs: 50_000, novaTentativaMs: 10_000 });
+  const esperas = [];
+  for (let i = 0; i < 4; i += 1) {
+    await m.consultar(consulta).pendente;
+    esperas.push(m.espiar(consulta).proximaTentativaEm - relogio.agora);
+    relogio.agora = m.espiar(consulta).proximaTentativaEm;
+  }
+  assert.deepEqual(esperas, [10_000, 20_000, 40_000, 50_000]);
+});
+
+test('reinício com o acompanhamento fora do ar: usa os grandes e os tamanhos guardados em disco', async () => {
+  const cache = memoria();
+  const fonte = fonteAcompanhamentoQuebravel();
+  const a = novo(fonte, { minimoEleitores: 30_000, cache });
+  await a.m.consultar(consulta).pendente;
+  assert.equal(a.m.espiar(consulta).dados.length, 1);
+
+  fonte.quebrado = true; // outro processo, mesmo disco
+  const b = novo(fonte, { minimoEleitores: 30_000, cache });
+  await b.m.consultar(consulta).pendente;
+  const snap = b.m.espiar(consulta);
+  assert.equal(snap.dados.length, 1, 'os dados do grande vieram do disco');
+  assert.equal(snap.detalhes.get('1').aptos, 90_000, 'e o tamanho também');
+  assert.match(snap.erro, /usando o que já foi carregado/);
+});
+
 // ---------- só os municípios grandes ----------
 
 test('só baixa os municípios grandes (e o maior de cada UF), escolhidos pelo tamanho do acompanhamento', async () => {
