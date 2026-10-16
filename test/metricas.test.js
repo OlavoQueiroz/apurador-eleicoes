@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { criarRegistroRequisicoes, gravarRitmoAprendido, lerRitmoAprendido, linhaDoEvento, linhaDoMinuto } from '../src/metricas.js';
@@ -17,7 +17,11 @@ test('registro: uma linha JSON por chamada, criando a pasta', async () => {
 });
 
 test('registro: pasta impossível não lança', async () => {
-  const r = criarRegistroRequisicoes('/proc/nao-existe/x.jsonl');
+  // O "pai" do arquivo é um arquivo comum, então criar a pasta falha em qualquer sistema (ENOTDIR).
+  const dir = await mkdtemp(path.join(tmpdir(), 'metricas-'));
+  const arquivoComum = path.join(dir, 'arquivo');
+  await writeFile(arquivoComum, 'x');
+  const r = criarRegistroRequisicoes(path.join(arquivoComum, 'sub', 'x.jsonl'));
   await r.gravar({ a: 1 });
 });
 
